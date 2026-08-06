@@ -1,0 +1,24 @@
+{
+  "name": "tmux-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ブラウザから tmux のセッション/ウィンドウ/ペインを操作する Web アプリ",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web",
+    "start": "npm run start -w server",
+    "serve": "npm run build && npm run start",
+    "postinstall": "echo '\\n  npm run dev   -> 開発モード (http://localhost:5173)\\n  npm run build && npm start -> 本番モード (http://localhost:7654)\\n'"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
