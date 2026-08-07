@@ -116,6 +116,33 @@ attach したときと同じ挙動）。
 | `TMUX_WEB_SOCKET_PATH` | なし | `tmux -S <path>` 相当 |
 | `TMUX_WEB_TMUX_BIN` | `tmux` | tmux の実行ファイル |
 
+## 自動起動（systemd --user）
+
+ログイン時・再起動時に自動で立ち上げたい場合:
+
+```bash
+./scripts/install-service.sh
+```
+
+やること: フロントエンドをビルド → `~/.config/systemd/user/tmux-web.service` を生成
+→ `enable --now` → linger を有効化（ログアウトしても動き続ける）。
+ポートやトークンは環境変数で渡すとユニットに焼き込まれる:
+
+```bash
+PORT=8080 TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
+```
+
+| したいこと | コマンド |
+| --- | --- |
+| 状態を見る | `systemctl --user status tmux-web` |
+| ログを追う | `journalctl --user -u tmux-web -f` |
+| 止める | `systemctl --user stop tmux-web` |
+| 自動起動をやめる | `systemctl --user disable tmux-web` |
+| 消す | `./scripts/uninstall-service.sh` |
+
+コードを更新したら `./scripts/install-service.sh` をもう一度実行すれば、
+再ビルドしてサービスを再起動する。
+
 ## セキュリティ
 
 **このアプリはシェルへの完全なアクセスを HTTP 越しに提供する。**
