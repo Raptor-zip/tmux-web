@@ -233,6 +233,43 @@ input {
   user-select: none;
 }
 
+/* ---- サイドバーの木への落とし込み ---- */
+/* ドラッグ中は行の中のボタンにポインタを取られないようにする。
+   取られると行の pointermove が飛ばず、落とし先が決まらない */
+.tree.dropping .row * {
+  pointer-events: none;
+}
+.tree.dropping .row {
+  position: relative;
+}
+.session-row.dragging {
+  opacity: 0.45;
+}
+
+/* セッション行に重ねた = そのセッションへ移す／まとめる */
+.row.drop-into {
+  background: var(--accent-dim);
+  outline: 1px solid var(--accent);
+}
+
+/* ウィンドウ行の上半分／下半分 = その位置へ差し込む */
+.row.drop-before::before,
+.row.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 4px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.row.drop-before::before {
+  top: -1px;
+}
+.row.drop-after::after {
+  bottom: -1px;
+}
+
 .drop-preview {
   position: absolute;
   z-index: 10;

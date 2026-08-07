@@ -65,6 +65,7 @@ export type ActionName =
   | 'newSession'
   | 'killSession'
   | 'renameSession'
+  | 'mergeSession'
   | 'newWindow'
   | 'killWindow'
   | 'renameWindow'

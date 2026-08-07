@@ -273,7 +273,43 @@ export const actions = {
   killWindow: ({ target }) => tmux(['kill-window', '-t', target]),
   renameWindow: ({ target, name }) => tmux(['rename-window', '-t', target, name]),
   selectWindow: ({ target }) => tmux(['select-window', '-t', target]),
-  moveWindow: ({ target, index }) => tmux(['move-window', '-s', target, '-t', String(index)]),
+  /**
+   * ウィンドウを動かす。セッション内の並べ替えと別セッションへの移動を同じ口で扱う。
+   *   session だけ渡す      … そのセッションの末尾へ
+   *   anchor + place を渡す … そのウィンドウの前(before)／後ろ(after)へ差し込む
+   * 空き番号でない index を直接指定すると tmux が "index in use" で落ちるので、
+   * 位置を決めたいときは番号ではなく anchor を渡すこと。
+   */
+  moveWindow: ({ target, session, anchor, place }) => {
+    if (!target) throw new TmuxError('moveWindow: target が空');
+    const args = ['move-window'];
+    if (place === 'before') args.push('-b');
+    else if (place === 'after') args.push('-a');
+
+    if (anchor) args.push('-s', target, '-t', anchor);
+    else if (session) args.push('-s', target, '-t', `${session}:`);
+    else throw new TmuxError('moveWindow: session か anchor のどちらかが要る');
+
+    return tmux(args);
+  },
+
+  /**
+   * source のウィンドウを全部 target へ移してひとつにまとめる。
+   * tmux は空になったセッションを自分で消すので、source は移し終えた時点で消える。
+   */
+  mergeSession: async ({ source, target }) => {
+    if (!source || !target) throw new TmuxError('mergeSession: source と target が要る');
+    if (source === target) throw new TmuxError('mergeSession: 同じセッションは指定できない');
+
+    const wins = (await listWindows()).filter((w) => w.sessionId === source);
+    if (wins.length === 0) throw new TmuxError('mergeSession: 移すウィンドウがない');
+
+    // 1 つずつ移す。まとめて渡せる tmux コマンドは無い
+    for (const w of wins) {
+      await tmux(['move-window', '-s', w.id, '-t', `${target}:`]);
+    }
+    return String(wins.length);
+  },
   nextWindow: ({ target }) => tmux(['next-window', '-t', target]),
   previousWindow: ({ target }) => tmux(['previous-window', '-t', target]),
 

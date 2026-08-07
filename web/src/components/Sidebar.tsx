@@ -21,8 +21,16 @@ interface Props {
   onConfirm(message: string, detail: string, run: () => void): void;
   /** 一定距離ドラッグしたら呼ばれる。ここから先はターミナル側が受け取る */
   onStartDrag(payload: DragPayload): void;
+  /** サイドバー内に落とされた。tmux 側の移動はここで起こる */
+  onDropInTree(target: TreeDropTarget, payload: DragPayload): void;
+  drag: DragPayload | null;
   draggingWindowId: string | null;
 }
+
+/** サイドバーの行に落としたときの落とし先 */
+export type TreeDropTarget =
+  | { kind: 'session'; sessionId: string }
+  | { kind: 'window'; windowId: string; sessionId: string; place: 'before' | 'after' };
 
 /** 表示用にパスを縮める。ホーム直下なら `~`、それ以外は末尾のディレクトリ名 */
 function shortPath(path: string, home: string): string {
@@ -49,6 +57,8 @@ export function Sidebar({
   onNewSession,
   onConfirm,
   onStartDrag,
+  onDropInTree,
+  drag,
   draggingWindowId,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -115,6 +125,52 @@ export function Sidebar({
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', cleanup);
     window.addEventListener('pointercancel', cleanup);
+  };
+
+  /**
+   * ドラッグ中に指が乗っている行。ここに落とすと tmux 側が動く。
+   * SplitView のようなオーバーレイは張らない。行が自分でポインタを受けたほうが、
+   * 行の高さがまちまちでもスクロールしても当たり判定がずれない。
+   */
+  const [dropAt, setDropAt] = useState<TreeDropTarget | null>(null);
+
+  /** その組み合わせに意味があるか（自分自身への移動などを弾く） */
+  const canDrop = (t: TreeDropTarget): boolean => {
+    if (!drag) return false;
+    if (drag.kind === 'session') {
+      // セッションはセッションにしか合流できない
+      return t.kind === 'session' && t.sessionId !== drag.sessionId;
+    }
+    if (t.kind === 'session') return t.sessionId !== drag.sessionId;
+    return t.windowId !== drag.windowId;
+  };
+
+  const hoverRow = (e: React.PointerEvent, t: TreeDropTarget) => {
+    if (!drag) return;
+    let next = t;
+    if (t.kind === 'window') {
+      // 行の上半分なら手前、下半分なら後ろに差し込む
+      const r = e.currentTarget.getBoundingClientRect();
+      next = { ...t, place: e.clientY < r.top + r.height / 2 ? 'before' : 'after' };
+    }
+    setDropAt(canDrop(next) ? next : null);
+  };
+
+  const dropRow = (t: TreeDropTarget) => {
+    const at = dropAt ?? t;
+    if (drag && canDrop(at)) onDropInTree(at, drag);
+    setDropAt(null);
+  };
+
+  /** その行がいま落とし先になっているか。CSS の当たり先を決めるためだけに使う */
+  const dropClass = (t: TreeDropTarget): string => {
+    if (!dropAt || dropAt.kind !== t.kind) return '';
+    if (dropAt.kind === 'session') {
+      return dropAt.sessionId === (t as { sessionId: string }).sessionId ? 'drop-into' : '';
+    }
+    const w = t as { windowId: string };
+    if (dropAt.windowId !== w.windowId) return '';
+    return dropAt.place === 'before' ? 'drop-before' : 'drop-after';
   };
 
   const openSet = useMemo(
@@ -209,7 +265,10 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="tree">
+      <nav
+        className={`tree ${drag ? 'dropping' : ''}`}
+        onPointerLeave={() => setDropAt(null)}
+      >
         {visibleSessions.length === 0 && (
           <p className="empty">
             {query ? (
@@ -236,7 +295,27 @@ export function Sidebar({
 
           return (
             <div key={session.id} className={`tree-session ${isActive ? 'active' : ''}`}>
-              <div className="row session-row">
+              <div
+                className={`row session-row ${dropClass({
+                  kind: 'session',
+                  sessionId: session.id,
+                })} ${drag?.kind === 'session' && drag.sessionId === session.id ? 'dragging' : ''}`}
+                onPointerDown={(e) =>
+                  armDrag(e, {
+                    kind: 'session',
+                    sessionId: session.id,
+                    windowId: null,
+                    label: session.name,
+                  })
+                }
+                onPointerMove={(e) => hoverRow(e, { kind: 'session', sessionId: session.id })}
+                onPointerUp={() => dropRow({ kind: 'session', sessionId: session.id })}
+                title={
+                  drag
+                    ? 'ここに落とすとこのセッションへ移ります'
+                    : 'ドラッグして別のセッションに重ねるとひとつにまとまります'
+                }
+              >
                 <button className="twisty" onClick={() => toggle(session.id)}>
                   {isOpen ? '▾' : '▸'}
                 </button>
@@ -297,15 +376,41 @@ export function Sidebar({
                       key={win.id}
                       className={`row window-row ${winActive ? 'active' : ''} ${
                         opened && !winActive ? 'opened' : ''
-                      } ${draggingWindowId === win.id ? 'dragging' : ''}`}
+                      } ${draggingWindowId === win.id ? 'dragging' : ''} ${dropClass({
+                        kind: 'window',
+                        windowId: win.id,
+                        sessionId: win.sessionId,
+                        place: 'before',
+                      })}`}
                       onPointerDown={(e) =>
                         armDrag(e, {
+                          kind: 'window',
                           sessionId: win.sessionId,
                           windowId: win.id,
                           label: d.primary,
                         })
                       }
-                      title="ドラッグして右のターミナルの端に落とすと画面が分割されます"
+                      onPointerMove={(e) =>
+                        hoverRow(e, {
+                          kind: 'window',
+                          windowId: win.id,
+                          sessionId: win.sessionId,
+                          place: 'before',
+                        })
+                      }
+                      onPointerUp={() =>
+                        dropRow({
+                          kind: 'window',
+                          windowId: win.id,
+                          sessionId: win.sessionId,
+                          place: 'before',
+                        })
+                      }
+                      title={
+                        drag
+                          ? 'ここに落とすとこの位置に差し込まれます'
+                          : 'ドラッグ：右の端に落とすと画面分割、別のセッションに落とすと移動'
+                      }
                     >
                       <span className="win-index">{win.index}</span>
 

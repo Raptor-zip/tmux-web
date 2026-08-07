@@ -10,8 +10,10 @@ import {
 import { TerminalView, type TerminalHandle } from './Terminal';
 import type { Pane, Session, TmuxWindow } from '../types';
 
-/** サイドバーからドラッグしてくるウィンドウ */
+/** サイドバーからドラッグしてくるウィンドウ、またはセッションそのもの */
 export interface DragPayload {
+  /** session を掴んだときは windowId が null になり、代表ウィンドウが開かれる */
+  kind: 'window' | 'session';
   sessionId: string;
   windowId: string | null;
   label: string;

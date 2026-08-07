@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, useTmuxState } from './api';
-import { Sidebar } from './components/Sidebar';
+import { Sidebar, type TreeDropTarget } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { PaneMap } from './components/PaneMap';
 import { KeyBar } from './components/KeyBar';
@@ -77,10 +78,28 @@ export default function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
   }, []);
 
-  /** 破壊的な操作の確認。ブラウザ標準の confirm() は使わない */
-  const confirmThen = useCallback((title: string, detail: string, run: () => void) => {
-    setDialog({ kind: 'confirm', title, detail, danger: true, onSubmit: run });
-  }, []);
+  /**
+   * 取り返しのつかない操作の確認。ブラウザ標準の confirm() は使わない。
+   * 既定は削除向けの見た目。まとめる等の非破壊な操作は opts で文言を変える。
+   */
+  const confirmThen = useCallback(
+    (
+      title: string,
+      detail: string,
+      run: () => void,
+      opts?: { confirmLabel?: string; danger?: boolean },
+    ) => {
+      setDialog({
+        kind: 'confirm',
+        title,
+        detail,
+        danger: opts?.danger ?? true,
+        confirmLabel: opts?.confirmLabel,
+        onSubmit: run,
+      });
+    },
+    [],
+  );
 
   const sessions = state?.sessions ?? [];
   const windows = state?.windows ?? [];
@@ -229,12 +248,51 @@ export default function App() {
   );
 
   /**
+   * サイドバーの木に落とされた。ここだけは表示の付け替えではなく tmux 自体を動かす。
+   * セッションをセッションに重ねたときは中身を全部移すので、確認を挟む。
+   */
+  const dropInTree = useCallback(
+    (target: TreeDropTarget, payload: DragPayload) => {
+      if (payload.kind === 'session') {
+        if (target.kind !== 'session') return;
+        const from = sessions.find((s) => s.id === payload.sessionId);
+        const to = sessions.find((s) => s.id === target.sessionId);
+        if (!from || !to) return;
+        confirmThen(
+          `「${from.name}」を「${to.name}」にまとめますか？`,
+          `${from.windows} 個のウィンドウが「${to.name}」へ移り、「${from.name}」は無くなります。` +
+            'プロセスは動いたままです。',
+          () => doAction('mergeSession', { source: from.id, target: to.id }),
+          { confirmLabel: 'まとめる', danger: false },
+        );
+        return;
+      }
+
+      if (!payload.windowId) return;
+      if (target.kind === 'session') {
+        doAction('moveWindow', { target: payload.windowId, session: target.sessionId });
+      } else {
+        doAction('moveWindow', {
+          target: payload.windowId,
+          anchor: target.windowId,
+          place: target.place,
+        });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessions],
+  );
+
+  /**
    * ドラッグ開始。後始末のリスナはこの場で張る。
    * useEffect に任せると、指を離すのが再描画より速かったときに登録が間に合わず、
    * ドラッグ状態が残ったままになる。
    */
   const startDrag = useCallback((payload: DragPayload) => {
-    setDrag(payload);
+    // ここで同期的に描き直しておく。この関数は pointermove の途中で呼ばれるので、
+    // 次に来る pointerup の時点でサイドバーの行が drag を受け取っていないと、
+    // 落としたのに何も起きない、という取りこぼしになる
+    flushSync(() => setDrag(payload));
     const end = () => {
       setDrag(null);
       window.removeEventListener('pointerup', end);
@@ -326,7 +384,9 @@ export default function App() {
         }
         onConfirm={confirmThen}
         onStartDrag={startDrag}
-        draggingWindowId={drag?.windowId ?? null}
+        onDropInTree={dropInTree}
+        drag={drag}
+        draggingWindowId={drag?.kind === 'window' ? drag.windowId : null}
       />
 
       <main className={`main ${drag ? 'dragging' : ''}`}>
