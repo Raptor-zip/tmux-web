@@ -12,6 +12,7 @@ interface Props {
   /** いまタイルに表示されているウィンドウ。分割中の見分け用 */
   openWindowIds: (string | null)[];
   connected: boolean;
+  unauthorized: boolean;
   serverVersion?: string;
   onSelectSession(id: string): void;
   onSelectWindow(win: TmuxWindow): void;
@@ -40,6 +41,7 @@ export function Sidebar({
   activeWindowId,
   openWindowIds,
   connected,
+  unauthorized,
   serverVersion,
   onSelectSession,
   onSelectWindow,
@@ -212,6 +214,12 @@ export function Sidebar({
           <p className="empty">
             {query ? (
               <>「{filter}」に一致するウィンドウはありません。</>
+            ) : unauthorized ? (
+              <>
+                認証されていません（401）。
+                <br />
+                <code>?token=...</code> 付きの URL で開き直してください。
+              </>
             ) : (
               <>
                 セッションがありません。

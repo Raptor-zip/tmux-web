@@ -9,6 +9,8 @@ function withToken(url: string): string {
   return url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN);
 }
 
+export class AuthError extends Error {}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(withToken(url), {
     ...init,
@@ -19,6 +21,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     },
   });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new AuthError('unauthorized');
   if (!res.ok) throw new Error((body as { error?: string }).error || res.statusText);
   return body as T;
 }
@@ -57,6 +60,8 @@ export function wsUrl(path: string, params: Record<string, string | number> = {}
 export function useTmuxState() {
   const [state, setState] = useState<TmuxState | null>(null);
   const [connected, setConnected] = useState(false);
+  /** 401。「セッションが 0 件」と区別が付かないと原因を見失うので分けて持つ */
+  const [unauthorized, setUnauthorized] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -84,7 +89,12 @@ export function useTmuxState() {
     };
 
     connect();
-    fetchState().then(setState).catch(() => {});
+    fetchState()
+      .then((s) => {
+        setState(s);
+        setUnauthorized(false);
+      })
+      .catch((err) => setUnauthorized(err instanceof AuthError));
 
     return () => {
       stopped = true;
@@ -98,5 +108,5 @@ export function useTmuxState() {
       wsRef.current.send(JSON.stringify({ type: 'refresh' }));
   };
 
-  return { state, connected, refresh };
+  return { state, connected, unauthorized, refresh };
 }

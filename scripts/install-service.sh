@@ -16,6 +16,14 @@ UNIT_PATH="$UNIT_DIR/$SERVICE_NAME"
 
 PORT="${PORT:-7654}"
 HOST="${HOST:-127.0.0.1}"
+
+# 再実行でトークンを取りこぼすと認証なしで公開されてしまうので、
+# 明示的に渡されなければ既存ユニットの値を引き継ぐ。
+# 意図的に外したいときは TMUX_WEB_TOKEN= （空）を明示する。
+if [ -z "${TMUX_WEB_TOKEN+x}" ] && [ -f "$UNIT_PATH" ]; then
+  TMUX_WEB_TOKEN="$(sed -n 's/^Environment=TMUX_WEB_TOKEN=//p' "$UNIT_PATH" | tail -1)"
+  [ -n "$TMUX_WEB_TOKEN" ] && echo "既存のトークンを引き継ぎます" >/dev/null
+fi
 TMUX_WEB_TOKEN="${TMUX_WEB_TOKEN:-}"
 
 say() { printf '\033[36m[install]\033[0m %s\n' "$*"; }
@@ -82,6 +90,8 @@ if [ -n "$TMUX_WEB_TOKEN" ]; then
   say "トークン認証を有効にします"
   sed -i "/^Environment=HOST=/a Environment=TMUX_WEB_TOKEN=$TMUX_WEB_TOKEN" "$UNIT_PATH"
   chmod 600 "$UNIT_PATH"
+else
+  say "警告: トークン未設定。tailnet に公開するなら TMUX_WEB_TOKEN を設定すること"
 fi
 
 # --- ログアウト後も動かすための linger -------------------------------------

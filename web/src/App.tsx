@@ -48,7 +48,7 @@ function usePersisted<T>(key: string, initial: T) {
 }
 
 export default function App() {
-  const { state, connected, refresh } = useTmuxState();
+  const { state, connected, unauthorized, refresh } = useTmuxState();
 
   /** タイル id → ターミナル操作ハンドル。ツールバーやキーバーはフォーカス中のタイルに送る */
   const termRefs = useRef(new Map<string, TerminalHandle>());
@@ -304,6 +304,7 @@ export default function App() {
         activeWindowId={focusedLeaf?.windowId ?? null}
         openWindowIds={leaves.map((l) => l.windowId)}
         connected={connected}
+        unauthorized={unauthorized}
         serverVersion={state?.server?.version}
         onSelectSession={(id) => {
           const first =
@@ -410,10 +411,23 @@ export default function App() {
               />
             ) : (
               <div className="placeholder">
-                <p>tmux セッションがありません。</p>
-                <button className="btn primary" onClick={() => doAction('newSession', {})}>
-                  セッションを作る
-                </button>
+                {unauthorized ? (
+                  <>
+                    <p>認証されていません（401）。</p>
+                    <p className="dim">
+                      サーバは TMUX_WEB_TOKEN を要求しています。
+                      <code>?token=...</code> 付きの URL で開き直してください。
+                      セッションが消えたわけではありません。
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>tmux セッションがありません。</p>
+                    <button className="btn primary" onClick={() => doAction('newSession', {})}>
+                      セッションを作る
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
