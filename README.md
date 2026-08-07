@@ -165,6 +165,11 @@ set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; ~/
 （起動時に大量の claude が立ち上がると困るため）。会話を続きから開くには
 `claude-sessions --last --tmux` を使う。
 
+`claude-sessions` はこのリポジトリではなく
+[agent-config](https://github.com/Raptor-zip/agent-config) の `bin/` にある
+（Claude Code の会話を扱うコマンドで、tmux-web が無くても単体で使うため）。
+無くてもフックは黙って先へ進むので、tmux-web 側の動作には影響しない。
+
 ### ミラーセッションを保存から落とす
 
 `scripts/resurrect-strip-mirrors.sh` を post-save フックから呼んでいる。
