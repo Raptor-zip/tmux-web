@@ -49,7 +49,13 @@ app.use('/api', (req, res, next) => {
 app.get('/api/state', async (_req, res) => {
   try {
     const [state, info] = await Promise.all([snapshot(), serverInfo()]);
-    res.json({ ...state, server: info, authRequired: Boolean(TOKEN) });
+    // WS の push と同じくミラーセッションは隠す。ここだけ出すと初回描画で一瞬見える
+    res.json({
+      ...state,
+      sessions: state.sessions.filter((s) => !isMirrorSession(s.name)),
+      server: info,
+      authRequired: Boolean(TOKEN),
+    });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }

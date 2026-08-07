@@ -143,6 +143,27 @@ PORT=8080 TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
 コードを更新したら `./scripts/install-service.sh` をもう一度実行すれば、
 再ビルドしてサービスを再起動する。
 
+## 再起動で消えたセッションを開き直す
+
+tmux はサーバプロセスが死ぬとセッションを失う。再起動をまたいだセッションそのものは
+**復元できない**（tmux-resurrect などを仕込んでいない限り、ディスクに何も残らない）。
+
+ただし「どのディレクトリで作業していたか」は `~/.claude/projects/` の記録から復元できる。
+
+```bash
+node scripts/restore-sessions.mjs                     # 候補を一覧するだけ
+node scripts/restore-sessions.mjs --restore           # 同じ cwd でセッションを作る
+node scripts/restore-sessions.mjs --restore --resume  # claude --resume も走らせる
+node scripts/restore-sessions.mjs --hours=72          # 期間を広げる
+```
+
+既定の対象は「前回の起動から今回の起動まで」で、再起動で失われた分だけを拾う
+（`journalctl --list-boots` から範囲を取る）。作業ディレクトリは記録中の `cwd`
+フィールドを正とする。`~/.claude/projects/` のディレクトリ名（`-home-somak-a-b`）は
+パス区切りと名前中のハイフンを区別できず、当てにならないため。
+
+既に同名のセッションがある場合と、ディレクトリが消えている場合は飛ばす。
+
 ## Tailscale 経由でスマホから使う
 
 `tailscale serve` に TLS を終端させ、tailnet 内の端末にだけ見せる。
