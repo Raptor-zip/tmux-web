@@ -143,6 +143,34 @@ PORT=8080 TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
 コードを更新したら `./scripts/install-service.sh` をもう一度実行すれば、
 再ビルドしてサービスを再起動する。
 
+## Tailscale 経由でスマホから使う
+
+`tailscale serve` に TLS を終端させ、tailnet 内の端末にだけ見せる。
+アプリの bind は `127.0.0.1` のままなので、LAN にもインターネットにも出ない。
+
+```bash
+# トークン付きでサービスを入れ直してから
+TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
+./scripts/tailscale-serve.sh
+```
+
+`https://<マシン名>.<tailnet>.ts.net:8443/?token=...` が表示されるので、
+スマホでこれを開いてホーム画面に追加しておく（トークンは URL のクエリで渡す方式なので、
+ブックマークしておけば毎回貼り直さずに済む）。
+
+| したいこと | コマンド |
+| --- | --- |
+| URL を再表示 | `./scripts/tailscale-serve.sh url` |
+| 公開をやめる | `./scripts/tailscale-serve.sh off` |
+| 公開状況を見る | `tailscale serve status` |
+| ポートを変える | `TS_PORT=10000 ./scripts/tailscale-serve.sh` |
+
+HTTPS で配信されるのは体裁の問題だけではない。ブラウザはクリップボード API などを
+secure context でしか許さず、`http://100.x.y.z` は secure context 扱いにならないため、
+生の Tailscale IP に直接 bind するより `tailscale serve` のほうが素直に動く。
+
+`tailscale funnel` を使えばインターネットにも出せるが、このアプリの性質上やめたほうがいい。
+
 ## セキュリティ
 
 **このアプリはシェルへの完全なアクセスを HTTP 越しに提供する。**
