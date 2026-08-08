@@ -143,8 +143,23 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     const ro = new ResizeObserver(() => safeFitRef.current());
     ro.observe(hostRef.current);
 
+    /**
+     * 右クリックは tmux に渡す（`.tmux.conf` の MouseDown3Pane がメニューを出す）。
+     * ブラウザのメニューも同時に開くと二枚重なって選べないので、tmux がマウスを
+     * 見ているときだけ既定の動作を止める。マウス報告が無い相手のときは邪魔しない。
+     * ブラウザのメニューが要るときは Shift を押しながら右クリック（端末の慣習）。
+     */
+    const onContextMenu = (e: MouseEvent) => {
+      if (e.shiftKey) return;
+      if (term.modes.mouseTrackingMode === 'none') return;
+      e.preventDefault();
+    };
+    const host = hostRef.current;
+    host.addEventListener('contextmenu', onContextMenu);
+
     return () => {
       ro.disconnect();
+      host.removeEventListener('contextmenu', onContextMenu);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
