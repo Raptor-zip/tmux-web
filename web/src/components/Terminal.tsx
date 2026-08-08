@@ -165,14 +165,44 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     const fit = fitRef.current;
     if (!term || !fit || !sessionId) return;
 
-    term.reset();
     onStatus?.({ connected: false, message: '接続中…' });
 
     let disposed = false;
     let ws: WebSocket | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
     const disposables: { dispose(): void }[] = [];
 
+    // 入出力の橋渡しは張り直しても増えないよう、接続の外で一度だけ繋ぐ
+    disposables.push(
+      term.onData((data) => {
+        const s = wsRef.current;
+        if (s?.readyState === WebSocket.OPEN) s.send(JSON.stringify({ type: 'input', data }));
+      }),
+      term.onResize(({ cols: c, rows: r }) => {
+        const s = wsRef.current;
+        if (s?.readyState === WebSocket.OPEN) {
+          s.send(JSON.stringify({ type: 'resize', cols: c, rows: r }));
+        }
+      }),
+    );
+
+    /**
+     * 切れたら黙って張り直す。電車の中やスリープ復帰で WebSocket は普通に落ちるが、
+     * tmux 側のセッションは生きているので、繋ぎ直せば続きから使える。
+     */
+    const scheduleRetry = () => {
+      if (disposed) return;
+      const delay = Math.min(500 * 2 ** attempt, 5000);
+      attempt += 1;
+      onStatus?.({ connected: false, message: '切断されました。再接続しています…' });
+      retry = setTimeout(start, delay);
+    };
+
     const start = () => {
+      if (disposed) return;
+      // 張り直しのたびに tmux が画面全体を描き直すので、二重描画を避けて消しておく
+      term.reset();
       try {
         const dims = fit.proposeDimensions();
         if (dims && dims.cols > 1 && dims.rows > 1) term.resize(dims.cols, dims.rows);
@@ -195,6 +225,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       wsRef.current = ws;
 
       ws.onopen = () => {
+        attempt = 0;
         onStatus?.({ connected: true });
         // 接続直後に、UI が選んでいるウィンドウへ合わせる
         if (windowIndexRef.current != null) {
@@ -219,28 +250,30 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         }
       };
       ws.onclose = () => {
-        if (!disposed) onStatus?.({ connected: false, message: '切断されました' });
+        if (!disposed) scheduleRetry();
       };
-
-      disposables.push(
-        term.onData((data) => {
-          ws?.readyState === WebSocket.OPEN &&
-            ws.send(JSON.stringify({ type: 'input', data }));
-        }),
-      );
-      disposables.push(
-        term.onResize(({ cols: c, rows: r }) => {
-          ws?.readyState === WebSocket.OPEN &&
-            ws.send(JSON.stringify({ type: 'resize', cols: c, rows: r }));
-        }),
-      );
     };
+
+    /** 復帰の合図が来たら、待ち時間を飛ばしてすぐ繋ぎに行く */
+    const wake = () => {
+      if (disposed || document.visibilityState !== 'visible') return;
+      const s = wsRef.current;
+      if (s && (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CONNECTING)) return;
+      clearTimeout(retry);
+      attempt = 0;
+      start();
+    };
+    window.addEventListener('online', wake);
+    document.addEventListener('visibilitychange', wake);
 
     const timer = setTimeout(start, 30);
 
     return () => {
       disposed = true;
       clearTimeout(timer);
+      clearTimeout(retry);
+      window.removeEventListener('online', wake);
+      document.removeEventListener('visibilitychange', wake);
       disposables.forEach((d) => d.dispose());
       ws?.close();
       wsRef.current = null;

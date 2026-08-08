@@ -77,6 +77,10 @@ Environment=TERM=xterm-256color
 Environment=PATH=$NODE_DIR:$HOME/.local/bin:$HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Restart=always
 RestartSec=3
+# KillMode=process は変えないこと。tmux サーバが動いていないときに tmux-web が
+# セッションを作ると、tmux サーバがこのユニットの cgroup の中で起動する。
+# control-group や mixed にすると、再起動のたびにユーザーの tmux セッションが
+# 巻き添えで全部消える。残った tmux client は起動時のミラー掃除で片付く。
 KillMode=process
 StandardOutput=journal
 StandardError=journal
