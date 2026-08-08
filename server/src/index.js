@@ -49,13 +49,8 @@ app.use('/api', (req, res, next) => {
 app.get('/api/state', async (_req, res) => {
   try {
     const [state, info] = await Promise.all([snapshot(), serverInfo()]);
-    // WS の push と同じくミラーセッションは隠す。ここだけ出すと初回描画で一瞬見える
-    res.json({
-      ...state,
-      sessions: state.sessions.filter((s) => !isMirrorSession(s.name)),
-      server: info,
-      authRequired: Boolean(TOKEN),
-    });
+    // WS の push と同じ絞り込みを通す。ここだけ素通しすると初回描画で一瞬だけ違う
+    res.json({ ...visibleState(state), server: info, authRequired: Boolean(TOKEN) });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
@@ -118,16 +113,50 @@ const terminalWss = new WebSocketServer({ noServer: true });
 let lastStateJson = '';
 let pollTimer = null;
 
+// グループを共有するセッションを 1 つにまとめるか。TMUX_WEB_SHOW_GROUP_VIEWS=1 で無効
+const COLLAPSE_GROUPS = process.env.TMUX_WEB_SHOW_GROUP_VIEWS !== '1';
+
+/**
+ * 画面に出す分だけに絞る。
+ *
+ * - ミラー（`webmux-*`）は隠す。tmux-web が attach のために作る内部的なもの。
+ * - グループを共有するセッションは 1 つだけ残す。tmux のグループはウィンドウを
+ *   共有するので、`tmux new-session -t <既存>` で端末ごとに view を作る使い方だと、
+ *   同じウィンドウが view の数だけ並んでしまう。中身が同じものを何度も見せない。
+ *   残すのはいちばん古いもの（＝元のセッション）。
+ *
+ * ウィンドウとペインはセッションごとに重複して返るので、残したセッションの分だけに揃える。
+ */
+function visibleState(state) {
+  let sessions = state.sessions.filter((s) => !isMirrorSession(s.name));
+
+  if (COLLAPSE_GROUPS) {
+    const keep = new Map(); // グループ名 -> 残すセッション
+    for (const s of sessions) {
+      if (!s.group || s.groupSize <= 1) continue;
+      const cur = keep.get(s.group);
+      if (!cur || s.created < cur.created) keep.set(s.group, s);
+    }
+    const kept = new Set([...keep.values()].map((s) => s.id));
+    sessions = sessions.filter((s) => !s.group || s.groupSize <= 1 || kept.has(s.id));
+  }
+
+  const ids = new Set(sessions.map((s) => s.id));
+  const windows = state.windows.filter((w) => ids.has(w.sessionId));
+  const winIds = new Set(windows.map((w) => w.id));
+  return {
+    ...state,
+    sessions,
+    windows,
+    panes: state.panes.filter((p) => winIds.has(p.windowId)),
+  };
+}
+
 async function pollState() {
   if (eventsWss.clients.size === 0) return;
   try {
     const state = await snapshot();
-    // ミラーセッションは UI の一覧から隠す
-    const visible = {
-      ...state,
-      sessions: state.sessions.filter((s) => !isMirrorSession(s.name)),
-    };
-    const json = JSON.stringify({ type: 'state', ...visible });
+    const json = JSON.stringify({ type: 'state', ...visibleState(state) });
     if (json === lastStateJson) return;
     lastStateJson = json;
     for (const ws of eventsWss.clients) {
