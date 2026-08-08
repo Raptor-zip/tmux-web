@@ -126,6 +126,9 @@ export default function App() {
 
   const leaves = useMemo(() => (layout ? allLeaves(layout) : []), [layout]);
 
+  /** これから作られる／作ったばかりで、まだ状態に現れていないウィンドウ */
+  const pendingWindows = useRef<Set<string>>(new Set());
+
   // フォーカスが実在するタイルを指すようにする
   useEffect(() => {
     if (focusedId && leaves.some((l) => l.id === focusedId)) return;
@@ -168,7 +171,13 @@ export default function App() {
   // フォーカス中のタイルのウィンドウが消えたら、同じセッションの別ウィンドウに寄せる
   useEffect(() => {
     if (!layout || !focusedLeaf) return;
-    if (focusedLeaf.windowId && windows.some((w) => w.id === focusedLeaf.windowId)) return;
+    if (focusedLeaf.windowId && windows.some((w) => w.id === focusedLeaf.windowId)) {
+      pendingWindows.current.delete(focusedLeaf.windowId);
+      return;
+    }
+    // 自分で作ったばかりのウィンドウは、まだ状態に載っていないだけ。
+    // ここで「消えた」と誤認して寄せると、新しいタイルが直前のウィンドウを映してしまう
+    if (focusedLeaf.windowId && pendingWindows.current.has(focusedLeaf.windowId)) return;
     const fallback =
       windows.find((w) => w.sessionId === focusedLeaf.sessionId && w.active) ??
       windows.find((w) => w.sessionId === focusedLeaf.sessionId);
@@ -208,6 +217,39 @@ export default function App() {
       }
     },
     [refresh, toast],
+  );
+
+  /**
+   * 「分割」= tmux のペインを増やすのではなく、新しいウィンドウを隣のタイルに開く。
+   * Terminator と同じ考え方で、1 ウィンドウ 1 ペインのまま画面だけを割る。
+   * tmux のペインとして分割したいときはペイン配置図の各マスから。
+   */
+  const splitIntoNewWindow = useCallback(
+    async (side: 'right' | 'bottom') => {
+      const session = focusedLeaf?.sessionId ?? sessions[0]?.id;
+      if (!session) return;
+      try {
+        // 新しい端末は、いま見ているペインと同じディレクトリで開く
+        const { result } = await runAction('newWindow', {
+          target: session,
+          after: true,
+          cwd: activePane?.path,
+        });
+        if (!result) return;
+        pendingWindows.current.add(result);
+        const leaf = makeLeaf(session, result);
+        setLayout((prev) => {
+          if (!prev) return leaf;
+          const anchor = focusedId ?? allLeaves(prev)[0]?.id;
+          return anchor ? splitLeaf(prev, anchor, side, leaf) : leaf;
+        });
+        setFocusedId(leaf.id);
+        refresh();
+      } catch (err) {
+        toast(`newWindow: ${(err as Error).message}`);
+      }
+    },
+    [focusedLeaf, focusedId, sessions, activePane, setLayout, refresh, toast],
   );
 
   /** サイドバーでウィンドウを選ぶ = フォーカス中のタイルの表示を差し替える */
@@ -441,6 +483,7 @@ export default function App() {
           showKeyBar={showKeyBar}
           fontSize={fontSize}
           onAction={doAction}
+          onSplitNewWindow={splitIntoNewWindow}
           onToggle={onToggle}
           onFontSize={(d) => setFontSize((f) => Math.min(28, Math.max(8, f + d)))}
           onCopyPane={copyPane}

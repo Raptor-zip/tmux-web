@@ -11,6 +11,8 @@ interface Props {
   showKeyBar: boolean;
   fontSize: number;
   onAction(action: string, params: Record<string, unknown>): void;
+  /** 新しいウィンドウを作って、その向きに並べる */
+  onSplitNewWindow(side: 'right' | 'bottom'): void;
   onToggle(key: 'mode' | 'showStatusBar' | 'showPaneMap' | 'showKeyBar'): void;
   onFontSize(delta: number): void;
   onCopyPane(): void;
@@ -27,6 +29,7 @@ export function Toolbar({
   showKeyBar,
   fontSize,
   onAction,
+  onSplitNewWindow,
   onToggle,
   onFontSize,
   onCopyPane,
@@ -57,17 +60,17 @@ export function Toolbar({
         </button>
         <button
           className="btn"
-          disabled={disabled}
-          title="ペインを左右に分割"
-          onClick={() => onAction('splitPane', { target: paneTarget, direction: 'horizontal' })}
+          disabled={!win}
+          title="新しいウィンドウを作って右隣に並べる（tmux のペインは増やさない）"
+          onClick={() => onSplitNewWindow('right')}
         >
           ▐ 左右に分割
         </button>
         <button
           className="btn"
-          disabled={disabled}
-          title="ペインを上下に分割"
-          onClick={() => onAction('splitPane', { target: paneTarget, direction: 'vertical' })}
+          disabled={!win}
+          title="新しいウィンドウを作って下に並べる（tmux のペインは増やさない）"
+          onClick={() => onSplitNewWindow('bottom')}
         >
           ▄ 上下に分割
         </button>
