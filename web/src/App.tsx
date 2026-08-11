@@ -58,7 +58,9 @@ export default function App() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [mode, setMode] = usePersisted<'mirror' | 'direct'>('tw.mode', 'mirror');
   const [showStatusBar, setShowStatusBar] = usePersisted('tw.statusBar', false);
-  const [showPaneMap, setShowPaneMap] = usePersisted('tw.paneMap', true);
+  // 配置図は既定で畳んでおく。1 ウィンドウ 1 ペインで使うぶんには出番がない。
+  // 保存キーを変えてあるのは、既に true が保存されている環境にも新しい既定を効かせるため
+  const [showPaneMap, setShowPaneMap] = usePersisted('tw.paneMap2', false);
   const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar', true);
   const [fontSize, setFontSize] = usePersisted('tw.fontSize', 13);
   // 狭い画面ではサイドバーが全面を覆ってしまうので、最初は畳んでおく
@@ -109,12 +111,20 @@ export default function App() {
   // ---------------------------------------------------------------- レイアウト
 
   // 初期化と、消えたセッションの掃除
+  // 一度でもタイルを開いたか。閉じきったあとに勝手に開き直さないための目印
+  const opened = useRef(false);
+  useEffect(() => {
+    if (layout) opened.current = true;
+  }, [layout]);
+
   useEffect(() => {
     if (!state) return;
     const valid = new Set(sessions.map((s) => s.id));
     setLayout((prev) => {
       const pruned = prev ? pruneStale(prev, valid) : null;
       if (pruned) return pruned === prev ? prev : pruned;
+      // 自分で閉じた／消えた結果として空になったなら、そのままにしておく
+      if (opened.current) return null;
       const first = sessions[0];
       if (!first) return null;
       const active =
@@ -122,7 +132,7 @@ export default function App() {
         windows.find((w) => w.sessionId === first.id);
       return makeLeaf(first.id, active?.id ?? null);
     });
-  }, [state, sessions, windows, setLayout]);
+  }, [state, sessions, windows, layout, setLayout]);
 
   const leaves = useMemo(() => (layout ? allLeaves(layout) : []), [layout]);
 
@@ -168,25 +178,31 @@ export default function App() {
     [windowPanes],
   );
 
-  // フォーカス中のタイルのウィンドウが消えたら、同じセッションの別ウィンドウに寄せる
+  /**
+   * ウィンドウが消えたタイルは閉じる。
+   * 別のウィンドウに繋ぎ変えると、閉じたはずの端末の場所に関係ないものが出てきて
+   * 紛らわしい。最後の 1 枚だった場合は何も開いていない状態になる。
+   */
   useEffect(() => {
-    if (!layout || !focusedLeaf) return;
-    if (focusedLeaf.windowId && windows.some((w) => w.id === focusedLeaf.windowId)) {
-      pendingWindows.current.delete(focusedLeaf.windowId);
-      return;
-    }
-    // 自分で作ったばかりのウィンドウは、まだ状態に載っていないだけ。
-    // ここで「消えた」と誤認して寄せると、新しいタイルが直前のウィンドウを映してしまう
-    if (focusedLeaf.windowId && pendingWindows.current.has(focusedLeaf.windowId)) return;
-    const fallback =
-      windows.find((w) => w.sessionId === focusedLeaf.sessionId && w.active) ??
-      windows.find((w) => w.sessionId === focusedLeaf.sessionId);
-    if (fallback && fallback.id !== focusedLeaf.windowId) {
-      setLayout((prev) =>
-        prev ? retargetLeaf(prev, focusedLeaf.id, focusedLeaf.sessionId, fallback.id) : prev,
-      );
-    }
-  }, [windows, focusedLeaf, layout, setLayout]);
+    if (!state || !layout) return;
+    const live = new Set(windows.map((w) => w.id));
+    for (const id of live) pendingWindows.current.delete(id);
+
+    // windowId が無いタイルはセッションのアクティブウィンドウを見るので対象外
+    const dead = allLeaves(layout).filter(
+      (l) => l.windowId && !live.has(l.windowId) && !pendingWindows.current.has(l.windowId),
+    );
+    if (dead.length === 0) return;
+
+    setLayout((prev) => {
+      let next: LayoutNode | null = prev;
+      for (const l of dead) {
+        if (!next) break;
+        next = removeLeaf(next, l.id);
+      }
+      return next;
+    });
+  }, [state, windows, layout, setLayout]);
 
   const focusedTerm = () => (focusedId ? termRefs.current.get(focusedId) : undefined);
 
@@ -488,7 +504,6 @@ export default function App() {
           onFontSize={(d) => setFontSize((f) => Math.min(28, Math.max(8, f + d)))}
           onCopyPane={copyPane}
           onOpenCheatSheet={() => setCheatOpen(true)}
-          onConfirm={confirmThen}
         />
 
         <div className="workspace">
@@ -522,6 +537,11 @@ export default function App() {
                       <code>?token=...</code> 付きの URL で開き直してください。
                       セッションが消えたわけではありません。
                     </p>
+                  </>
+                ) : sessions.length > 0 ? (
+                  <>
+                    <p>開いているタイルがありません。</p>
+                    <p className="dim">左の一覧からウィンドウを選ぶと、ここに出ます。</p>
                   </>
                 ) : (
                   <>

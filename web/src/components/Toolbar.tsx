@@ -17,7 +17,6 @@ interface Props {
   onFontSize(delta: number): void;
   onCopyPane(): void;
   onOpenCheatSheet(): void;
-  onConfirm(title: string, detail: string, run: () => void): void;
 }
 
 export function Toolbar({
@@ -34,7 +33,6 @@ export function Toolbar({
   onFontSize,
   onCopyPane,
   onOpenCheatSheet,
-  onConfirm,
 }: Props) {
   const [cmd, setCmd] = useState('');
   const paneTarget = activePane?.id;
@@ -85,14 +83,8 @@ export function Toolbar({
         <button
           className="btn danger"
           disabled={disabled}
-          title="このペインを閉じる"
-          onClick={() =>
-            onConfirm(
-              `ペイン ${activePane?.index} を閉じますか？`,
-              `${activePane?.command} が ${activePane?.path} で動いています。`,
-              () => onAction('killPane', { target: paneTarget }),
-            )
-          }
+          title="このペインを閉じる（確認なし）"
+          onClick={() => onAction('killPane', { target: paneTarget })}
         >
           ✕ ペイン
         </button>

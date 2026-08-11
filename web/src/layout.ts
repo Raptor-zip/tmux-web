@@ -131,9 +131,8 @@ export function retargetLeaf(
   );
 }
 
-/** タイルを閉じる。最後の 1 枚は消さない */
-export function removeLeaf(tree: LayoutNode, targetId: string): LayoutNode {
-  if (tree.type === 'leaf') return tree;
+/** タイルを閉じる。最後の 1 枚を閉じたら null（＝何も開いていない状態）になる */
+export function removeLeaf(tree: LayoutNode, targetId: string): LayoutNode | null {
   const prune = (node: LayoutNode): LayoutNode | null => {
     if (node.type === 'leaf') return node.id === targetId ? null : node;
     const a = prune(node.a);
@@ -142,7 +141,7 @@ export function removeLeaf(tree: LayoutNode, targetId: string): LayoutNode {
     if (!b) return a;
     return a === node.a && b === node.b ? node : { ...node, a, b };
   };
-  return prune(tree) ?? tree;
+  return prune(tree);
 }
 
 export function setRatio(tree: LayoutNode, splitId: string, ratio: number): LayoutNode {
