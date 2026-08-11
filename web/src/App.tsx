@@ -63,6 +63,7 @@ export default function App() {
   const [showPaneMap, setShowPaneMap] = usePersisted('tw.paneMap2', false);
   const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar', true);
   const [fontSize, setFontSize] = usePersisted('tw.fontSize', 13);
+  const [lineHeight, setLineHeight] = usePersisted('tw.lineHeight', 1.15);
   // 狭い画面ではサイドバーが全面を覆ってしまうので、最初は畳んでおく
   const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
   // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
@@ -499,10 +500,14 @@ export default function App() {
           showPaneMap={showPaneMap}
           showKeyBar={showKeyBar}
           fontSize={fontSize}
+          lineHeight={lineHeight}
           onAction={doAction}
           onSplitNewWindow={splitIntoNewWindow}
           onToggle={onToggle}
           onFontSize={(d) => setFontSize((f) => Math.min(28, Math.max(8, f + d)))}
+          onLineHeight={(d) =>
+            setLineHeight((v) => Math.round(Math.min(2, Math.max(1, v + d)) * 100) / 100)
+          }
           onCopyPane={copyPane}
           onOpenCheatSheet={() => setCheatOpen(true)}
         />
@@ -519,6 +524,7 @@ export default function App() {
                 mode={mode}
                 showStatusBar={showStatusBar}
                 fontSize={fontSize}
+                lineHeight={lineHeight}
                 drag={drag}
                 onFocus={setFocusedId}
                 onClose={closeTile}

@@ -234,6 +234,32 @@ input {
   user-select: none;
 }
 
+/* ---- 日本語入力（IME）の変換中の見た目 ---- */
+/* xterm は変換中の文字を .composition-view に出す。カーソル位置に「行の高さ」ぶんの
+   箱を置くだけで、中の文字は行送りに従って上寄りに描かれるため、確定するまで
+   1 行ぶん浮いて見える。箱の中で縦中央に揃えて、行の文字と高さを合わせる。
+   xterm 本体の CSS にも `/* TODO: Composition position got messed up somewhere *\/` と
+   書かれているとおり、上流でも直っていない。 */
+.xterm .composition-view {
+  display: none;
+  align-items: center;
+  line-height: normal;
+  padding: 0 1px;
+  background: var(--accent-dim);
+  color: var(--fg);
+  border-bottom: 1px solid var(--accent);
+}
+.xterm .composition-view.active {
+  display: flex;
+}
+
+/* 変換中の文字はこの textarea にも入る。既定のままだとブラウザの monospace に
+   なって字幅が変わるので、端末と同じ等幅フォントに揃える。
+   （inherit にすると .xterm には等幅指定が無く、本文用のフォントを拾ってしまう） */
+.xterm .xterm-helper-textarea {
+  font-family: var(--mono);
+}
+
 /* ---- サイドバーの木への落とし込み ---- */
 /* ドラッグ中は行の中のボタンにポインタを取られないようにする。
    取られると行の pointermove が飛ばず、落とし先が決まらない */

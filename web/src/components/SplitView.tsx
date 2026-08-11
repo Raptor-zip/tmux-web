@@ -28,6 +28,7 @@ interface Props {
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
   fontSize: number;
+  lineHeight: number;
   /** ドラッグ中のウィンドウ。null ならドラッグしていない */
   drag: DragPayload | null;
   onFocus(leafId: string): void;
@@ -71,6 +72,7 @@ export function SplitView({
   mode,
   showStatusBar,
   fontSize,
+  lineHeight,
   drag,
   onFocus,
   onClose,
@@ -196,6 +198,7 @@ export function SplitView({
                 mode={mode}
                 showStatusBar={showStatusBar}
                 fontSize={fontSize}
+                lineHeight={lineHeight}
                 onStatus={(s) => onStatus(leaf.id, s)}
               />
             </div>

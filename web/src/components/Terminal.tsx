@@ -48,11 +48,12 @@ interface Props {
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
   fontSize: number;
+  lineHeight: number;
   onStatus?: (s: { connected: boolean; message?: string }) => void;
 }
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
-  { sessionId, windowId, windowIndex, mode, showStatusBar, fontSize, onStatus },
+  { sessionId, windowId, windowIndex, mode, showStatusBar, fontSize, lineHeight, onStatus },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -113,7 +114,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       fontFamily:
         '"JetBrains Mono", "Fira Code", "Cascadia Code", "Noto Sans Mono CJK JP", "Menlo", monospace',
       fontSize,
-      lineHeight: 1.15,
+      lineHeight,
       letterSpacing: 0,
       cursorBlink: true,
       allowProposedApi: true,
@@ -170,9 +171,10 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   useEffect(() => {
     if (termRef.current) {
       termRef.current.options.fontSize = fontSize;
+      termRef.current.options.lineHeight = lineHeight;
       safeFitRef.current();
     }
-  }, [fontSize]);
+  }, [fontSize, lineHeight]);
 
   // 接続（セッション・モードが変わったら張り直す）
   useEffect(() => {

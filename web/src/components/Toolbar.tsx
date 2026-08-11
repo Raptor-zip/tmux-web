@@ -10,11 +10,13 @@ interface Props {
   showPaneMap: boolean;
   showKeyBar: boolean;
   fontSize: number;
+  lineHeight: number;
   onAction(action: string, params: Record<string, unknown>): void;
   /** 新しいウィンドウを作って、その向きに並べる */
   onSplitNewWindow(side: 'right' | 'bottom'): void;
   onToggle(key: 'mode' | 'showStatusBar' | 'showPaneMap' | 'showKeyBar'): void;
   onFontSize(delta: number): void;
+  onLineHeight(delta: number): void;
   onCopyPane(): void;
   onOpenCheatSheet(): void;
 }
@@ -27,10 +29,12 @@ export function Toolbar({
   showPaneMap,
   showKeyBar,
   fontSize,
+  lineHeight,
   onAction,
   onSplitNewWindow,
   onToggle,
   onFontSize,
+  onLineHeight,
   onCopyPane,
   onOpenCheatSheet,
 }: Props) {
@@ -132,6 +136,13 @@ export function Toolbar({
         <span className="dim mono">{fontSize}</span>
         <button className="btn small" title="文字を大きく" onClick={() => onFontSize(1)}>
           A＋
+        </button>
+        <button className="btn small" title="行間を詰める" onClick={() => onLineHeight(-0.05)}>
+          ↕−
+        </button>
+        <span className="dim mono">{lineHeight.toFixed(2)}</span>
+        <button className="btn small" title="行間を広げる" onClick={() => onLineHeight(0.05)}>
+          ↕＋
         </button>
       </div>
 
