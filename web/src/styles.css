@@ -57,9 +57,10 @@ input {
 
 .app {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  /* grid-template-columns は transition を付けない。
+     minmax() を含む値は補間できず、Chrome では切り替えが効かないまま止まる */
+  grid-template-columns: var(--sidebar-w, 300px) minmax(0, 1fr);
   height: 100dvh;
-  transition: grid-template-columns 0.16s ease;
 }
 .app.sidebar-hidden {
   grid-template-columns: 0 minmax(0, 1fr);

@@ -65,7 +65,8 @@ export default function App() {
   const [fontSize, setFontSize] = usePersisted('tw.fontSize', 13);
   // 狭い画面ではサイドバーが全面を覆ってしまうので、最初は畳んでおく
   const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
-  const [sidebarOpen, setSidebarOpen] = useState(() => !isNarrow());
+  // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
+  const [sidebarOpen, setSidebarOpen] = usePersisted('tw.sidebar', !isNarrow());
   const [cheatOpen, setCheatOpen] = useState(false);
   const [drag, setDrag] = useState<DragPayload | null>(null);
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
