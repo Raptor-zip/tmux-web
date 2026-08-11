@@ -285,6 +285,33 @@ export default function App() {
     [setLineHeight],
   );
 
+  /**
+   * ステータスバーの数値をクリックしたときのメニュー。
+   * 押すたびに一方向へ動くだけだと小さくできないので、増減とリセットを並べて出す。
+   * メニューは上に開くよう、ボタンの上端を基準にする。
+   */
+  const openStatusMenu = useCallback(
+    (e: React.MouseEvent, kind: 'fontSize' | 'lineHeight') => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const items: MenuEntry[] =
+        kind === 'fontSize'
+          ? [
+              { label: '大きく', hint: '+1px', run: () => setFontSize((f) => Math.min(28, f + 1)) },
+              { label: '小さく', hint: '-1px', run: () => setFontSize((f) => Math.max(8, f - 1)) },
+              SEP,
+              { label: '既定に戻す', hint: '13px', run: () => setFontSize(13) },
+            ]
+          : [
+              { label: '広げる', hint: '+0.05', run: () => onLineHeightStep(0.05) },
+              { label: '詰める', hint: '-0.05', run: () => onLineHeightStep(-0.05) },
+              SEP,
+              { label: '既定に戻す', hint: '1.15', run: () => setLineHeight(1.15) },
+            ];
+      setMenu({ x: r.left, y: r.top - 8 - items.length * 26, items });
+    },
+    [setFontSize, setLineHeight, onLineHeightStep],
+  );
+
   /** サイドバーでウィンドウを選ぶ = フォーカス中のタイルの表示を差し替える */
   const selectWindow = useCallback(
     (win: TmuxWindow) => {
@@ -647,13 +674,23 @@ export default function App() {
         )}
         <span className="sb-right">
           <span className="sb-item">{leaves.length} タイル</span>
-          <button className="sb-item" title="行間" onClick={() => onLineHeightStep(0.05)}>
+          <button
+            className="sb-item"
+            title="行間を変える"
+            onClick={(e) => openStatusMenu(e, 'lineHeight')}
+          >
             行間 {lineHeight.toFixed(2)}
           </button>
-          <button className="sb-item" title="文字サイズ" onClick={() => setFontSize((f) => (f >= 28 ? 8 : f + 1))}>
+          <button
+            className="sb-item"
+            title="文字サイズを変える"
+            onClick={(e) => openStatusMenu(e, 'fontSize')}
+          >
             {fontSize}px
           </button>
-          <span className="sb-item">{mode === 'mirror' ? 'ミラー' : '直接'}</span>
+          <button className="sb-item" title="接続モードを切り替える" onClick={() => onToggle('mode')}>
+            {mode === 'mirror' ? 'ミラー' : '直接'}
+          </button>
           {state?.server?.version && <span className="sb-item">{state.server.version}</span>}
         </span>
       </footer>
