@@ -1,186 +1,159 @@
-import { useState } from 'react';
 import { LAYOUTS } from '../types';
-import type { Pane, TmuxWindow } from '../types';
+import type { Pane, Session, TmuxWindow } from '../types';
+import { SEP, type MenuEntry } from './ContextMenu';
 
 interface Props {
+  session: Session | null;
   window: TmuxWindow | null;
   activePane: Pane | null;
+  tileCount: number;
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
   showPaneMap: boolean;
   showKeyBar: boolean;
-  fontSize: number;
-  lineHeight: number;
+  connected: boolean;
+  statusMessage?: string;
   onAction(action: string, params: Record<string, unknown>): void;
   /** 新しいウィンドウを作って、その向きに並べる */
   onSplitNewWindow(side: 'right' | 'bottom'): void;
   onToggle(key: 'mode' | 'showStatusBar' | 'showPaneMap' | 'showKeyBar'): void;
-  onFontSize(delta: number): void;
-  onLineHeight(delta: number): void;
   onCopyPane(): void;
   onOpenCheatSheet(): void;
+  onSendCommand(): void;
+  /** 右端の「⋯」で開くメニュー。中身をここで組み立てて親に渡す */
+  onOpenMenu(items: MenuEntry[], x: number, y: number): void;
 }
 
+/**
+ * VS Code のエディタ上部に倣った細い操作バー。
+ * 左にパンくず、右によく使うアイコンだけを置き、残りは「⋯」にしまう。
+ * ボタンを 20 個並べておくより、目当てのものに届くまでが短い。
+ */
 export function Toolbar({
+  session,
   window: win,
   activePane,
+  tileCount,
   mode,
   showStatusBar,
   showPaneMap,
   showKeyBar,
-  fontSize,
-  lineHeight,
+  connected,
+  statusMessage,
   onAction,
   onSplitNewWindow,
   onToggle,
-  onFontSize,
-  onLineHeight,
   onCopyPane,
   onOpenCheatSheet,
+  onSendCommand,
+  onOpenMenu,
 }: Props) {
-  const [cmd, setCmd] = useState('');
-  const paneTarget = activePane?.id;
-  const disabled = !paneTarget;
+  const pane = activePane?.id;
 
-  const submitCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cmd.trim() || !paneTarget) return;
-    onAction('runCommand', { target: paneTarget, command: cmd });
-    setCmd('');
-  };
+  const moreItems = (): MenuEntry[] => [
+    { label: 'コマンドを送る…', run: onSendCommand, disabled: !pane },
+    { label: '本文をコピー', run: onCopyPane, disabled: !pane },
+    SEP,
+    ...LAYOUTS.map((l) => ({
+      label: `ペイン配置: ${l.label}`,
+      run: () => win && onAction('setLayout', { target: win.id, layout: l.id }),
+      disabled: !win,
+    })),
+    SEP,
+    { label: `ペイン配置図を${showPaneMap ? '隠す' : '表示'}`, run: () => onToggle('showPaneMap') },
+    { label: `キーバーを${showKeyBar ? '隠す' : '表示'}`, run: () => onToggle('showKeyBar') },
+    {
+      label: `tmux のステータス行を${showStatusBar ? '隠す' : '表示'}`,
+      run: () => onToggle('showStatusBar'),
+    },
+    {
+      label: mode === 'mirror' ? '直接接続に切り替える' : 'ミラー接続に切り替える',
+      run: () => onToggle('mode'),
+    },
+    SEP,
+    { label: 'tmux チートシート', hint: 'Alt+/', run: onOpenCheatSheet },
+  ];
 
   return (
-    <div className="toolbar">
-      <div className="toolbar-group">
+    <div className="editorbar">
+      <div className="crumbs">
+        {session ? (
+          <>
+            <span className="crumb strong">{session.name}</span>
+            {win && (
+              <>
+                <span className="sep">›</span>
+                <span className="crumb">
+                  {win.index}:{win.name}
+                </span>
+              </>
+            )}
+            {activePane && (
+              <>
+                <span className="sep">›</span>
+                <span className="crumb dim">
+                  pane {activePane.index} · {activePane.command}
+                </span>
+              </>
+            )}
+            {tileCount > 1 && <span className="tile-count">{tileCount} 分割</span>}
+          </>
+        ) : (
+          <span className="dim">セッションが選択されていません</span>
+        )}
+      </div>
+
+      <div className="editorbar-actions">
+        {statusMessage && !connected && <span className="term-status">{statusMessage}</span>}
         <button
-          className="btn"
+          className="icon-btn"
+          disabled={!win}
+          title="新しいウィンドウを右に並べる"
+          onClick={() => onSplitNewWindow('right')}
+        >
+          ▥
+        </button>
+        <button
+          className="icon-btn"
+          disabled={!win}
+          title="新しいウィンドウを下に並べる"
+          onClick={() => onSplitNewWindow('bottom')}
+        >
+          ⊟
+        </button>
+        <button
+          className="icon-btn"
           disabled={!win}
           title="このセッションに新しいウィンドウを作る"
           onClick={() => win && onAction('newWindow', { target: win.sessionId })}
         >
-          ＋ ウィンドウ
+          ＋
         </button>
         <button
-          className="btn"
-          disabled={!win}
-          title="新しいウィンドウを作って右隣に並べる（tmux のペインは増やさない）"
-          onClick={() => onSplitNewWindow('right')}
+          className="icon-btn"
+          disabled={!pane}
+          title="ペインを全画面 / 元に戻す"
+          onClick={() => onAction('zoomPane', { target: pane })}
         >
-          ▐ 左右に分割
+          ⤢
         </button>
         <button
-          className="btn"
-          disabled={!win}
-          title="新しいウィンドウを作って下に並べる（tmux のペインは増やさない）"
-          onClick={() => onSplitNewWindow('bottom')}
-        >
-          ▄ 上下に分割
-        </button>
-        <button
-          className="btn"
-          disabled={disabled}
-          title="ペインのズームを切り替え"
-          onClick={() => onAction('zoomPane', { target: paneTarget })}
-        >
-          ⤢ ズーム
-        </button>
-        <button
-          className="btn danger"
-          disabled={disabled}
+          className="icon-btn danger"
+          disabled={!pane}
           title="このペインを閉じる（確認なし）"
-          onClick={() => onAction('killPane', { target: paneTarget })}
+          onClick={() => onAction('killPane', { target: pane })}
         >
-          ✕ ペイン
-        </button>
-      </div>
-
-      <div className="toolbar-group">
-        <span className="label">レイアウト</span>
-        {LAYOUTS.map((l) => (
-          <button
-            key={l.id}
-            className="btn small"
-            disabled={!win}
-            title={l.id}
-            onClick={() => win && onAction('setLayout', { target: win.id, layout: l.id })}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-
-      <form className="toolbar-group grow" onSubmit={submitCommand}>
-        <input
-          className="cmd-input"
-          placeholder={
-            activePane
-              ? `ペイン ${activePane.index} (${activePane.command}) にコマンドを送る…`
-              : 'ペインを選択してください'
-          }
-          value={cmd}
-          disabled={disabled}
-          onChange={(e) => setCmd(e.target.value)}
-        />
-        <button className="btn primary" type="submit" disabled={disabled || !cmd.trim()}>
-          送信
-        </button>
-      </form>
-
-      <div className="toolbar-group">
-        <button className="btn" disabled={disabled} title="表示中の内容をクリップボードへ" onClick={onCopyPane}>
-          ⧉ 本文をコピー
-        </button>
-        <button className="btn small" title="文字を小さく" onClick={() => onFontSize(-1)}>
-          A−
-        </button>
-        <span className="dim mono">{fontSize}</span>
-        <button className="btn small" title="文字を大きく" onClick={() => onFontSize(1)}>
-          A＋
-        </button>
-        <button className="btn small" title="行間を詰める" onClick={() => onLineHeight(-0.05)}>
-          ↕−
-        </button>
-        <span className="dim mono">{lineHeight.toFixed(2)}</span>
-        <button className="btn small" title="行間を広げる" onClick={() => onLineHeight(0.05)}>
-          ↕＋
-        </button>
-      </div>
-
-      <div className="toolbar-group">
-        <button
-          className={`btn toggle ${showPaneMap ? 'on' : ''}`}
-          title="ペイン配置図の表示切り替え"
-          onClick={() => onToggle('showPaneMap')}
-        >
-          配置図
+          ✕
         </button>
         <button
-          className={`btn toggle ${showKeyBar ? 'on' : ''}`}
-          title="特殊キーのツールバー"
-          onClick={() => onToggle('showKeyBar')}
+          className="icon-btn"
+          title="その他の操作"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            onOpenMenu(moreItems(), r.right, r.bottom);
+          }}
         >
-          キー
-        </button>
-        <button
-          className={`btn toggle ${showStatusBar ? 'on' : ''}`}
-          title="tmux のステータスバーをブラウザ側にも出す"
-          onClick={() => onToggle('showStatusBar')}
-        >
-          status
-        </button>
-        <button
-          className={`btn toggle ${mode === 'direct' ? 'on' : ''}`}
-          title={
-            mode === 'mirror'
-              ? 'ミラー接続中: 端末側の tmux 表示を邪魔しません（クリックで直接接続に切替）'
-              : '直接接続中: 端末側とサイズ・表示ウィンドウを共有します（クリックでミラーに切替）'
-          }
-          onClick={() => onToggle('mode')}
-        >
-          {mode === 'mirror' ? 'ミラー' : '直接'}
-        </button>
-        <button className="btn ghost" title="tmux チートシート" onClick={onOpenCheatSheet}>
-          ？
+          ⋯
         </button>
       </div>
     </div>

@@ -250,24 +250,28 @@ input {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 3px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 .tile-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 6px;
-  border: 1px solid var(--border);
-  border-bottom: 0;
-  border-radius: 5px 5px 0 0;
-  background: var(--bg-1);
-  font-size: 11px;
+  padding: 0 10px;
+  height: 35px; /* VS Code のタブと同じ高さ */
+  background: var(--bg-2);
+  border-right: 1px solid var(--bg);
+  border-top: 1px solid transparent;
+  font-size: 12px;
   min-width: 0;
   flex: none;
+  color: var(--fg-dim);
 }
+/* 選択中のタブ。上に色の線、本体と地続きの背景 */
 .tile.focused .tile-head {
-  border-color: var(--accent-dim);
-  background: #14232a;
+  background: var(--bg);
+  border-top-color: var(--accent);
+  color: #fff;
 }
 .tile-title {
   display: flex;
@@ -278,11 +282,10 @@ input {
   white-space: nowrap;
 }
 .tile-session {
-  color: var(--accent);
-  font-weight: 600;
+  color: inherit;
 }
 .tile.focused .tile-session {
-  color: #a8f0ff;
+  color: #fff;
 }
 .tile-sep {
   color: var(--fg-faint);
@@ -807,16 +810,18 @@ input {
   font-size: 10px;
 }
 
-/* ------------------------------------------------------------- タイトル */
+/* --------------------------------------------------- エディタ上部の操作バー */
 
-.titlebar {
+/* VS Code のパンくず行に相当する 1 本。左に現在地、右にアイコンだけ */
+.editorbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  height: 30px;
+  padding: 0 4px 0 12px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-  min-height: 38px;
+  flex: none;
 }
 .crumbs {
   flex: 1;
@@ -824,117 +829,58 @@ input {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--mono);
   font-size: 12px;
   overflow: hidden;
   white-space: nowrap;
+  color: var(--fg-dim);
 }
 .crumb.strong {
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--fg);
 }
 .crumbs .sep {
   color: var(--fg-faint);
 }
-.titlebar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
+.tile-count {
+  margin-left: 8px;
+  color: var(--fg-faint);
 }
 .term-status {
   color: var(--yellow);
-  font-size: 11px;
+  font-size: 12px;
 }
 
-/* --------------------------------------------------------------- ボタン */
-
-.btn {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  color: var(--fg);
+.editorbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.icon-btn {
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
   border-radius: var(--radius);
-  padding: 5px 10px;
+  color: var(--fg-dim);
+  font-size: 14px;
   cursor: pointer;
-  white-space: nowrap;
-  line-height: 1.4;
-  transition: background 0.12s, border-color 0.12s;
 }
-.btn:hover:not(:disabled) {
+.icon-btn:hover:not(:disabled) {
   background: var(--bg-3);
-  border-color: var(--border-strong);
+  color: #fff;
 }
-.btn:disabled {
-  opacity: 0.4;
+.icon-btn:disabled {
+  color: var(--fg-faint);
+  opacity: 0.5;
   cursor: default;
 }
-.btn.primary {
-  background: var(--accent-dim);
-  border-color: #2c6c80;
-  color: #d8f7ff;
-}
-.btn.primary:hover:not(:disabled) {
-  background: #2a5f70;
-}
-.btn.danger:hover:not(:disabled) {
-  background: rgba(255, 123, 114, 0.16);
-  border-color: rgba(255, 123, 114, 0.4);
+.icon-btn.danger:hover:not(:disabled) {
+  background: rgba(241, 76, 76, 0.2);
   color: var(--red);
 }
-.btn.ghost {
-  background: none;
-  border-color: transparent;
-}
-.btn.ghost:hover {
-  background: var(--bg-3);
-}
-.btn.small {
-  padding: 3px 7px;
-  font-size: 11px;
-}
-.btn.icon {
-  padding: 4px 8px;
-}
-.btn.block {
-  width: 100%;
-}
-.btn.toggle.on {
-  background: var(--accent-dim);
-  border-color: #2c6c80;
-  color: #d8f7ff;
-}
 
-/* ------------------------------------------------------------ ツールバー */
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-}
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-right: 6px;
-  border-right: 1px solid var(--border);
-}
-.toolbar-group:last-child {
-  border-right: 0;
-}
-.toolbar-group.grow {
-  flex: 1;
-  min-width: 220px;
-  border-right: 0;
-}
-.toolbar .label {
-  color: var(--fg-faint);
-  font-size: 11px;
-  padding-right: 2px;
-}
 
 .cmd-input {
   flex: 1;
@@ -1310,10 +1256,6 @@ input {
   }
   .panemap {
     display: none;
-  }
-  .toolbar-group.grow {
-    min-width: 100%;
-    order: 10;
   }
   .keybar {
     padding-bottom: max(6px, env(safe-area-inset-bottom));

@@ -71,6 +71,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = usePersisted('tw.sidebar', !isNarrow());
   const [cheatOpen, setCheatOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; leafId: string } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
   const [drag, setDrag] = useState<DragPayload | null>(null);
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -538,64 +539,34 @@ export default function App() {
       />
 
       <main className={`main ${drag ? 'dragging' : ''}`}>
-        <div className="titlebar">
-          <button
-            className="btn ghost icon"
-            title="サイドバーの表示切り替え (Alt+B)"
-            onClick={() => setSidebarOpen((v) => !v)}
-          >
-            ☰
-          </button>
-          <div className="crumbs">
-            {currentSession ? (
-              <>
-                <span className="crumb strong">{currentSession.name}</span>
-                {currentWindow && (
-                  <>
-                    <span className="sep">/</span>
-                    <span className="crumb">
-                      {currentWindow.index}:{currentWindow.name}
-                    </span>
-                  </>
-                )}
-                {activePane && (
-                  <>
-                    <span className="sep">/</span>
-                    <span className="crumb dim">
-                      pane {activePane.index} · {activePane.command}
-                    </span>
-                  </>
-                )}
-                {leaves.length > 1 && <span className="tile-count">{leaves.length} 分割</span>}
-              </>
-            ) : (
-              <span className="dim">セッションが選択されていません</span>
-            )}
-          </div>
-          <div className="titlebar-right">
-            {termStatus.message && !termStatus.connected && (
-              <span className="term-status">{termStatus.message}</span>
-            )}
-            <span className={`dot ${termStatus.connected ? 'ok' : 'bad'}`} />
-          </div>
-        </div>
-
         <Toolbar
+          session={currentSession}
           window={currentWindow}
           activePane={activePane}
+          tileCount={leaves.length}
           mode={mode}
           showStatusBar={showStatusBar}
           showPaneMap={showPaneMap}
           showKeyBar={showKeyBar}
-          fontSize={fontSize}
-          lineHeight={lineHeight}
+          connected={termStatus.connected}
+          statusMessage={termStatus.message}
           onAction={doAction}
           onSplitNewWindow={splitIntoNewWindow}
           onToggle={onToggle}
-          onFontSize={(d) => setFontSize((f) => Math.min(28, Math.max(8, f + d)))}
-          onLineHeight={onLineHeightStep}
           onCopyPane={copyPane}
           onOpenCheatSheet={() => setCheatOpen(true)}
+          onSendCommand={() =>
+            activePane &&
+            setDialog({
+              kind: 'prompt',
+              title: `ペイン ${activePane.index} (${activePane.command}) にコマンドを送る`,
+              placeholder: 'コマンド',
+              confirmLabel: '送信',
+              onSubmit: (cmd) =>
+                cmd.trim() && doAction('runCommand', { target: activePane.id, command: cmd }),
+            })
+          }
+          onOpenMenu={(items, x, y) => setMenu({ x, y, items })}
         />
 
         <div className="workspace">
@@ -689,6 +660,10 @@ export default function App() {
 
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={menuItems()} onClose={() => setCtxMenu(null)} />
+      )}
+
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
       )}
 
       {cheatOpen && <CheatSheet prefix={prefix} onClose={() => setCheatOpen(false)} />}
