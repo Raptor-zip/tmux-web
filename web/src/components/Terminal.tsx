@@ -7,28 +7,29 @@ import { CanvasAddon } from '@xterm/addon-canvas';
 import '@xterm/xterm/css/xterm.css';
 import { wsUrl } from '../api';
 
+// VS Code の既定のダークテーマ（Dark+）の端末色に合わせている
 const THEME = {
-  background: '#0d1117',
-  foreground: '#d5dae2',
-  cursor: '#6ee7ff',
-  cursorAccent: '#0d1117',
-  selectionBackground: '#2b4a6f',
-  black: '#1c2128',
-  red: '#ff7b72',
-  green: '#7ee787',
-  yellow: '#e3b341',
-  blue: '#79c0ff',
-  magenta: '#d2a8ff',
-  cyan: '#6ee7ff',
-  white: '#c9d1d9',
-  brightBlack: '#57606a',
-  brightRed: '#ffa198',
-  brightGreen: '#a5f3b0',
-  brightYellow: '#f2cc60',
-  brightBlue: '#a5d6ff',
-  brightMagenta: '#e2c5ff',
-  brightCyan: '#9df0ff',
-  brightWhite: '#f0f6fc',
+  background: '#1e1e1e',
+  foreground: '#cccccc',
+  cursor: '#aeafad',
+  cursorAccent: '#1e1e1e',
+  selectionBackground: '#264f78',
+  black: '#000000',
+  red: '#cd3131',
+  green: '#0dbc79',
+  yellow: '#e5e510',
+  blue: '#2472c8',
+  magenta: '#bc3fbc',
+  cyan: '#11a8cd',
+  white: '#e5e5e5',
+  brightBlack: '#666666',
+  brightRed: '#f14c4c',
+  brightGreen: '#23d18b',
+  brightYellow: '#f5f543',
+  brightBlue: '#3b8eea',
+  brightMagenta: '#d670d6',
+  brightCyan: '#29b8db',
+  brightWhite: '#e5e5e5',
 };
 
 export interface TerminalHandle {
@@ -49,11 +50,13 @@ interface Props {
   showStatusBar: boolean;
   fontSize: number;
   lineHeight: number;
+  /** 端末の上で右クリックされた。アプリ側のメニューを出す */
+  onContextMenu?: (x: number, y: number) => void;
   onStatus?: (s: { connected: boolean; message?: string }) => void;
 }
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
-  { sessionId, windowId, windowIndex, mode, showStatusBar, fontSize, lineHeight, onStatus },
+  { sessionId, windowId, windowIndex, mode, showStatusBar, fontSize, lineHeight, onContextMenu, onStatus },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -88,6 +91,9 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   // 接続完了時に「今どのウィンドウを見たいか」を参照するための最新値
   const windowIndexRef = useRef<number | null>(windowIndex);
   windowIndexRef.current = windowIndex;
+  // 端末は一度だけ組み立てるので、最新のハンドラは ref 経由で見る
+  const onContextMenuRef = useRef(onContextMenu);
+  onContextMenuRef.current = onContextMenu;
 
   useImperativeHandle(ref, () => ({
     selectWindow(index: number) {
@@ -145,22 +151,36 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     ro.observe(hostRef.current);
 
     /**
-     * 右クリックは tmux に渡す（`.tmux.conf` の MouseDown3Pane がメニューを出す）。
-     * ブラウザのメニューも同時に開くと二枚重なって選べないので、tmux がマウスを
-     * 見ているときだけ既定の動作を止める。マウス報告が無い相手のときは邪魔しない。
-     * ブラウザのメニューが要るときは Shift を押しながら右クリック（端末の慣習）。
+     * 右クリックはアプリ側のメニューに回す。
+     *
+     * tmux の display-menu に任せると、マウス報告が届くかどうか・コピーモード中か
+     * どうかで出たり出なかったりする。ブラウザ側で出せばどの状況でも同じに使える。
+     * そのため右ボタンは tmux に送らない（capture 段階で xterm より先に止める）。
+     * ブラウザ本来のメニューが要るときは Shift を押しながら右クリック。
      */
-    const onContextMenu = (e: MouseEvent) => {
-      if (e.shiftKey) return;
-      if (term.modes.mouseTrackingMode === 'none') return;
-      e.preventDefault();
-    };
     const host = hostRef.current;
-    host.addEventListener('contextmenu', onContextMenu);
+
+    const swallowRightButton = (e: MouseEvent) => {
+      if (e.button !== 2 || e.shiftKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      if (e.shiftKey) return; // ブラウザのメニューへの逃げ道
+      e.preventDefault();
+      e.stopPropagation();
+      onContextMenuRef.current?.(e.clientX, e.clientY);
+    };
+
+    host.addEventListener('mousedown', swallowRightButton, true);
+    host.addEventListener('mouseup', swallowRightButton, true);
+    host.addEventListener('contextmenu', onContextMenu, true);
 
     return () => {
       ro.disconnect();
-      host.removeEventListener('contextmenu', onContextMenu);
+      host.removeEventListener('mousedown', swallowRightButton, true);
+      host.removeEventListener('mouseup', swallowRightButton, true);
+      host.removeEventListener('contextmenu', onContextMenu, true);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

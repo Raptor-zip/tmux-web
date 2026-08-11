@@ -1,19 +1,24 @@
+/* VS Code の Dark+ に合わせた色。役割ごとの名前は元のまま使い回している */
 :root {
-  --bg: #0d1117;
-  --bg-1: #12181f;
-  --bg-2: #161c24;
-  --bg-3: #1c242e;
-  --border: #262e39;
-  --border-strong: #38404c;
-  --fg: #d5dae2;
-  --fg-dim: #8b949e;
-  --fg-faint: #626b76;
-  --accent: #6ee7ff;
-  --accent-dim: #1f4a58;
-  --green: #7ee787;
-  --red: #ff7b72;
-  --yellow: #e3b341;
-  --radius: 6px;
+  --bg: #1e1e1e; /* エディタ本体 */
+  --bg-1: #252526; /* サイドバー */
+  --bg-2: #333333; /* アクティビティバー・タブの非選択 */
+  --bg-3: #2a2d2e; /* ホバー */
+  --bg-selected: #37373d; /* 選択行 */
+  --border: #2b2b2b;
+  --border-strong: #454545;
+  --fg: #cccccc;
+  --fg-dim: #9d9d9d;
+  --fg-faint: #6e7681;
+  --accent: #0097fb; /* フォーカス枠・リンク */
+  --accent-dim: #04395e; /* 選択の下地 */
+  --status: #007acc; /* ステータスバー */
+  --green: #89d185;
+  --red: #f14c4c;
+  --yellow: #cca700;
+  --radius: 3px;
+  --sidebar-w: 260px;
+  --activity-w: 48px;
   --mono: 'JetBrains Mono', 'Fira Code', 'Noto Sans Mono CJK JP', ui-monospace, monospace;
   --sans: system-ui, -apple-system, 'Noto Sans JP', 'Hiragino Sans', 'Meiryo', sans-serif;
   color-scheme: dark;
@@ -55,19 +60,157 @@ input {
 
 /* --------------------------------------------------------------- レイアウト */
 
+/* アクティビティバー / サイドバー / 本体、の 3 列。下にステータスバー */
 .app {
   display: grid;
   /* grid-template-columns は transition を付けない。
      minmax() を含む値は補間できず、Chrome では切り替えが効かないまま止まる */
-  grid-template-columns: var(--sidebar-w, 300px) minmax(0, 1fr);
+  grid-template-columns: var(--activity-w) var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 22px;
+  grid-template-areas:
+    'activity sidebar main'
+    'status   status  status';
   height: 100dvh;
 }
 .app.sidebar-hidden {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-columns: var(--activity-w) 0 minmax(0, 1fr);
 }
 .app.sidebar-hidden .sidebar {
   opacity: 0;
   pointer-events: none;
+}
+
+/* ---- アクティビティバー（左端のアイコン列）---- */
+.activitybar {
+  grid-area: activity;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+  gap: 2px;
+}
+.activitybar .spacer {
+  flex: 1;
+}
+.act-btn {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--fg-dim);
+  font-size: 20px;
+  cursor: pointer;
+}
+.act-btn:hover {
+  color: #fff;
+}
+/* 選択中は VS Code と同じで左端に白い線が入る */
+.act-btn.on {
+  color: #fff;
+  border-left-color: #fff;
+}
+
+/* ---- ステータスバー（下の青い帯）---- */
+.statusbar {
+  grid-area: status;
+  background: var(--status);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 10px;
+  font-size: 12px;
+  user-select: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.statusbar .sb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.statusbar .sb-right {
+  margin-left: auto;
+  display: flex;
+  gap: 14px;
+}
+.statusbar button.sb-item {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0 4px;
+  height: 22px;
+  cursor: pointer;
+}
+.statusbar button.sb-item:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.statusbar .sb-bad {
+  background: var(--red);
+  padding: 0 6px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sidebar {
+  grid-area: sidebar;
+}
+.main {
+  grid-area: main;
+}
+
+/* ---- 右クリックメニュー（アプリ側で出す）---- */
+.ctxmenu {
+  position: fixed;
+  z-index: 200;
+  min-width: 220px;
+  padding: 4px 0;
+  background: #1f1f1f;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+}
+.ctxmenu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  padding: 4px 12px;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ctxmenu button:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+.ctxmenu button:disabled {
+  color: var(--fg-faint);
+  cursor: default;
+}
+.ctxmenu .ctx-key {
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+.ctxmenu button:hover:not(:disabled) .ctx-key {
+  color: #e6e6e6;
+}
+.ctxmenu hr {
+  border: 0;
+  border-top: 1px solid var(--border-strong);
+  margin: 4px 0;
 }
 
 .main {
@@ -1142,16 +1285,25 @@ input {
 /* ------------------------------------------------------------ モバイル */
 
 @media (max-width: 760px) {
-  .app {
+  /* 狭い画面ではアクティビティバーを畳み、サイドバーは上に重ねて出す */
+  .app,
+  .app.sidebar-hidden {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'main'
+      'status';
+  }
+  .activitybar {
+    display: none;
   }
   .sidebar {
     position: fixed;
-    inset: 0 auto 0 0;
+    inset: 0 auto 22px 0;
     width: 84vw;
     max-width: 320px;
     z-index: 40;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+    opacity: 1;
   }
   .app.sidebar-hidden .sidebar {
     transform: translateX(-100%);

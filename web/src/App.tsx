@@ -8,6 +8,7 @@ import { KeyBar } from './components/KeyBar';
 import { CheatSheet } from './components/CheatSheet';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, type DragPayload } from './components/SplitView';
+import { ContextMenu, SEP, type MenuEntry } from './components/ContextMenu';
 import type { TerminalHandle } from './components/Terminal';
 import {
   allLeaves,
@@ -69,6 +70,7 @@ export default function App() {
   // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
   const [sidebarOpen, setSidebarOpen] = usePersisted('tw.sidebar', !isNarrow());
   const [cheatOpen, setCheatOpen] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; leafId: string } | null>(null);
   const [drag, setDrag] = useState<DragPayload | null>(null);
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -270,6 +272,14 @@ export default function App() {
     [focusedLeaf, focusedId, sessions, activePane, setLayout, refresh, toast],
   );
 
+  /** 行間を増減する。1 未満まで詰められる（0.8〜2.00） */
+  const onLineHeightStep = useCallback(
+    (d: number) => {
+      setLineHeight((v) => Math.round(Math.min(2, Math.max(0.8, v + d)) * 100) / 100);
+    },
+    [setLineHeight],
+  );
+
   /** サイドバーでウィンドウを選ぶ = フォーカス中のタイルの表示を差し替える */
   const selectWindow = useCallback(
     (win: TmuxWindow) => {
@@ -373,6 +383,59 @@ export default function App() {
     }
   }, [activePane, toast]);
 
+  /** 端末を右クリックしたときに出す項目。tmux の display-menu の代わり */
+  const menuItems = useCallback((): MenuEntry[] => {
+    const pane = activePane?.id;
+    const win = currentWindow;
+    return [
+      { label: '左右に分割', hint: '新しいウィンドウ', run: () => splitIntoNewWindow('right') },
+      { label: '上下に分割', hint: '新しいウィンドウ', run: () => splitIntoNewWindow('bottom') },
+      SEP,
+      { label: '本文をコピー', run: copyPane, disabled: !pane },
+      {
+        label: '貼り付け',
+        hint: 'Ctrl+V',
+        run: async () => {
+          try {
+            const text = await navigator.clipboard.readText();
+            if (text) focusedTerm()?.send(text);
+          } catch {
+            toast('クリップボードを読めませんでした（HTTPS で開いてください）');
+          }
+        },
+      },
+      SEP,
+      {
+        label: 'ペインを全画面 / 元に戻す',
+        run: () => pane && doAction('zoomPane', { target: pane }),
+        disabled: !pane,
+      },
+      {
+        label: 'tmux のペインとして分割（左右）',
+        run: () => pane && doAction('splitPane', { target: pane, direction: 'horizontal' }),
+        disabled: !pane,
+      },
+      SEP,
+      {
+        label: 'ペインを閉じる',
+        run: () => pane && doAction('killPane', { target: pane }),
+        disabled: !pane,
+      },
+      {
+        label: 'ウィンドウを閉じる',
+        run: () =>
+          win &&
+          confirmThen(
+            `ウィンドウ「${win.name}」を閉じますか？`,
+            'この中で動いているプロセスはすべて終了します。',
+            () => doAction('killWindow', { target: win.id }),
+          ),
+        disabled: !win,
+      },
+    ];
+  }, [activePane, currentWindow, splitIntoNewWindow, copyPane, doAction, confirmThen, toast]);
+
+
   const onToggle = useCallback(
     (key: 'mode' | 'showStatusBar' | 'showPaneMap' | 'showKeyBar') => {
       if (key === 'mode') setMode((m) => (m === 'mirror' ? 'direct' : 'mirror'));
@@ -413,6 +476,27 @@ export default function App() {
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
+      <nav className="activitybar">
+        <button
+          className={`act-btn ${sidebarOpen ? 'on' : ''}`}
+          title="セッション一覧 (Alt+B)"
+          onClick={() => setSidebarOpen((v) => !v)}
+        >
+          ☰
+        </button>
+        <button
+          className={`act-btn ${showPaneMap ? 'on' : ''}`}
+          title="ペイン配置図"
+          onClick={() => onToggle('showPaneMap')}
+        >
+          ▦
+        </button>
+        <span className="spacer" />
+        <button className="act-btn" title="tmux チートシート (Alt+/)" onClick={() => setCheatOpen(true)}>
+          ？
+        </button>
+      </nav>
+
       <Sidebar
         sessions={sessions}
         windows={windows}
@@ -505,9 +589,7 @@ export default function App() {
           onSplitNewWindow={splitIntoNewWindow}
           onToggle={onToggle}
           onFontSize={(d) => setFontSize((f) => Math.min(28, Math.max(8, f + d)))}
-          onLineHeight={(d) =>
-            setLineHeight((v) => Math.round(Math.min(2, Math.max(1, v + d)) * 100) / 100)
-          }
+          onLineHeight={onLineHeightStep}
           onCopyPane={copyPane}
           onOpenCheatSheet={() => setCheatOpen(true)}
         />
@@ -532,6 +614,10 @@ export default function App() {
                 onDragEnd={() => setDrag(null)}
                 onRatio={(id, r) => setLayout((prev) => (prev ? setRatio(prev, id, r) : prev))}
                 onStatus={handleStatus}
+                onTerminalContextMenu={(leafId, x, y) => {
+                  setFocusedId(leafId);
+                  setCtxMenu({ x, y, leafId });
+                }}
                 registerTerm={registerTerm}
               />
             ) : (
@@ -574,6 +660,32 @@ export default function App() {
 
         {showKeyBar && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
       </main>
+
+      <footer className="statusbar">
+        <span className="sb-item">
+          {currentSession ? currentSession.name : 'セッションなし'}
+          {currentWindow && ` / ${currentWindow.index}:${currentWindow.name}`}
+        </span>
+        {!connected && <span className="sb-item sb-bad">サーバと切断</span>}
+        {termStatus.message && !termStatus.connected && (
+          <span className="sb-item">{termStatus.message}</span>
+        )}
+        <span className="sb-right">
+          <span className="sb-item">{leaves.length} タイル</span>
+          <button className="sb-item" title="行間" onClick={() => onLineHeightStep(0.05)}>
+            行間 {lineHeight.toFixed(2)}
+          </button>
+          <button className="sb-item" title="文字サイズ" onClick={() => setFontSize((f) => (f >= 28 ? 8 : f + 1))}>
+            {fontSize}px
+          </button>
+          <span className="sb-item">{mode === 'mirror' ? 'ミラー' : '直接'}</span>
+          {state?.server?.version && <span className="sb-item">{state.server.version}</span>}
+        </span>
+      </footer>
+
+      {ctxMenu && (
+        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={menuItems()} onClose={() => setCtxMenu(null)} />
+      )}
 
       {cheatOpen && <CheatSheet prefix={prefix} onClose={() => setCheatOpen(false)} />}
 

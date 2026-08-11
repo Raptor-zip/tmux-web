@@ -29,6 +29,7 @@ interface Props {
   showStatusBar: boolean;
   fontSize: number;
   lineHeight: number;
+  onTerminalContextMenu(leafId: string, x: number, y: number): void;
   /** ドラッグ中のウィンドウ。null ならドラッグしていない */
   drag: DragPayload | null;
   onFocus(leafId: string): void;
@@ -73,6 +74,7 @@ export function SplitView({
   showStatusBar,
   fontSize,
   lineHeight,
+  onTerminalContextMenu,
   drag,
   onFocus,
   onClose,
@@ -199,6 +201,7 @@ export function SplitView({
                 showStatusBar={showStatusBar}
                 fontSize={fontSize}
                 lineHeight={lineHeight}
+                onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
                 onStatus={(s) => onStatus(leaf.id, s)}
               />
             </div>
