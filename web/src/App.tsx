@@ -272,10 +272,14 @@ export default function App() {
     [focusedLeaf, focusedId, sessions, activePane, setLayout, refresh, toast],
   );
 
-  /** 行間を増減する。1 未満まで詰められる（0.8〜2.00） */
+  /**
+   * 行間を増減する。下限は 1.00。
+   * xterm は lineHeight < 1 を投げて弾く（文字が上下で重なるため）ので、
+   * それより詰めたいときは文字サイズを下げるしかない。
+   */
   const onLineHeightStep = useCallback(
     (d: number) => {
-      setLineHeight((v) => Math.round(Math.min(2, Math.max(0.8, v + d)) * 100) / 100);
+      setLineHeight((v) => Math.round(Math.min(2, Math.max(1, v + d)) * 100) / 100);
     },
     [setLineHeight],
   );

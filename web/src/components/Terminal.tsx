@@ -56,9 +56,16 @@ interface Props {
 }
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
-  { sessionId, windowId, windowIndex, mode, showStatusBar, fontSize, lineHeight, onContextMenu, onStatus },
+  { sessionId, windowId, windowIndex, mode, showStatusBar, fontSize, lineHeight: rawLineHeight, onContextMenu, onStatus },
   ref,
 ) {
+  /**
+   * xterm は lineHeight < 1 を例外で弾く。保存値が古かったり壊れていたりしても
+   * 画面ごと落ちないよう、渡す手前で必ず有効な範囲に収める。
+   */
+  const lineHeight = Number.isFinite(rawLineHeight)
+    ? Math.min(2, Math.max(1, rawLineHeight))
+    : 1;
   const hostRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
