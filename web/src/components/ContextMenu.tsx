@@ -42,15 +42,23 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   }, [x, y]);
 
   useEffect(() => {
-    const close = () => onClose();
+    /**
+     * メニューの外を押したら閉じる。
+     * capture で拾うので、中を押したかどうかは自分で見分ける必要がある。
+     * ここで無条件に閉じると、pointerdown の時点でメニューが消えてしまい、
+     * 続く click が項目に届かない＝どれを押しても何も起きない、になる。
+     */
+    const onDown = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node)) return;
+      onClose();
+    };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    // capture で拾う。メニューの外を押した時点で閉じたい
-    window.addEventListener('pointerdown', close, true);
-    window.addEventListener('blur', close);
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('blur', onClose);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('pointerdown', close, true);
-      window.removeEventListener('blur', close);
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('blur', onClose);
       window.removeEventListener('keydown', onKey);
     };
   }, [onClose]);
