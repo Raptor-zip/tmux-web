@@ -125,6 +125,9 @@ cat <<EOS
   自動起動解除 : systemctl --user disable tmux-web
   アンインストール : $REPO_DIR/scripts/uninstall-service.sh
 
+  再起動をまたいでセッションを残すなら:
+    $REPO_DIR/scripts/install-persistence.sh
+
   スマホなど tailnet 内の端末から使うなら:
     $REPO_DIR/scripts/tailscale-serve.sh
 

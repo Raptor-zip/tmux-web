@@ -226,16 +226,43 @@ PORT=8080 TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
 tmux はサーバプロセスが死ぬとセッションを失う。何も仕込んでいなければ
 ディスクに記録が残らず、再起動後に復元する手段はない。
 
-`~/.tmux.conf` に tmux-resurrect と tmux-continuum を入れてある（TPM は使わず
-`~/.tmux/plugins/` に直接 clone）。15 分ごとに自動保存し、tmux サーバの起動時に
-自動復元する。保存先は `~/.local/share/tmux/resurrect/`。
+tmux-resurrect と tmux-continuum を使う（TPM は使わず `~/.tmux/plugins/` に直接 clone）。
+15 分ごとに自動保存し、tmux サーバの起動時に自動復元する。
+保存先は `~/.local/share/tmux/resurrect/`。
+
+クローンした端末で有効にするには:
+
+```bash
+./scripts/install-persistence.sh
+```
+
+やることは 4 つで、何度実行しても同じ結果になる。
+
+1. tmux-resurrect / tmux-continuum を `~/.tmux/plugins/` に clone（既にあれば更新）
+2. `tmux/persistence.conf` のクローン先パスを埋めて
+   `~/.config/tmux-web/persistence.conf` に展開
+3. `~/.tmux.conf` に `source-file ~/.config/tmux-web/persistence.conf` を 1 行追記
+4. 動作中の tmux があれば設定を読み直す
+
+既に自分で resurrect / continuum を書いている `~/.tmux.conf` には追記しない
+（`run-shell` が二重になると保存フックがぶつかるため）。その場合は手書きの行を消して
+`source-file` に置き換えればリポジトリ側に寄せられる。
+
+設定の中身は `tmux/persistence.conf`:
 
 ```tmux
 set -g @resurrect-dir '~/.local/share/tmux/resurrect'
 set -g @resurrect-capture-pane-contents 'on'
 set -g @continuum-save-interval '15'
 set -g @continuum-restore 'on'
-set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; ~/tmux-web/scripts/resurrect-strip-mirrors.sh >/dev/null 2>&1 || true'
+set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; @@REPO_DIR@@/scripts/resurrect-strip-mirrors.sh >/dev/null 2>&1 || true'
+```
+
+手で操作したいときは:
+
+```bash
+~/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet    # 今すぐ保存（電源を切る前など）
+~/.tmux/plugins/tmux-resurrect/scripts/restore.sh       # 手動で復元
 ```
 
 戻るのはウィンドウ構成・ペイン分割・作業ディレクトリ・画面内容まで。
@@ -247,6 +274,7 @@ set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; ~/
 [agent-config](https://github.com/Raptor-zip/agent-config) の `bin/` にある
 （Claude Code の会話を扱うコマンドで、tmux-web が無くても単体で使うため）。
 無くてもフックは黙って先へ進むので、tmux-web 側の動作には影響しない。
+`install-persistence.sh` も、見つからなければその旨を出すだけで先へ進む。
 
 ### ミラーセッションを保存から落とす
 
@@ -323,6 +351,13 @@ web/src/
     KeyBar.tsx         特殊キーのツールバー
     CheatSheet.tsx     キーバインド一覧
     Dialog.tsx         確認・入力ダイアログ
+tmux/
+  persistence.conf     resurrect / continuum の設定断片（インストーラが展開する）
+scripts/
+  install-service.sh          systemd --user への登録
+  install-persistence.sh      セッション保存・復元の仕組みを入れる
+  resurrect-strip-mirrors.sh  保存ファイルからミラーセッションを落とす
+  tailscale-serve.sh          tailnet に公開する
 ```
 
 分割レイアウトは二分木で持つが、描画は木構造のままではなく
