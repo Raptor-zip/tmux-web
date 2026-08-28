@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { HoverPreview, type PreviewTarget } from './HoverPreview';
 import type { DragPayload } from './SplitView';
 import type { Pane, Session, TmuxWindow } from '../types';
 
@@ -100,6 +101,36 @@ export function Sidebar({
   };
 
   /**
+   * ホバー中の行のプレビュー。ウィンドウを開かずに中身を覗くためのもの。
+   * マウス以外（タッチ・ペン）では出さない。指を置いただけで被さると邪魔になる。
+   */
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+
+  const hoverPreview = (e: React.PointerEvent, win: TmuxWindow | null, session: Session) => {
+    if (e.pointerType !== 'mouse' || drag) return;
+    const pane = win ? leadPane.get(win.id) : null;
+    if (!pane) {
+      setPreview(null);
+      return;
+    }
+    const d = win ? describe(win) : null;
+    setPreview({
+      paneId: pane.id,
+      title: d?.primary ?? session.name,
+      subtitle: [session.name, win ? `${win.index}: ${win.name}` : null, pane.command]
+        .filter(Boolean)
+        .join(' · '),
+      anchor: e.currentTarget.getBoundingClientRect(),
+    });
+  };
+
+  /** そのセッションでいまアクティブなウィンドウ（セッション行のプレビュー用） */
+  const activeWindowOf = (session: Session): TmuxWindow | null =>
+    windows.find((w) => w.sessionId === session.id && w.active) ??
+    windows.find((w) => w.sessionId === session.id) ??
+    null;
+
+  /**
    * ポインタを押してから 6px 動いたらドラッグ開始とみなす。
    * HTML5 の draggable ではタッチ操作で動かないので使わない。
    */
@@ -114,6 +145,7 @@ export function Sidebar({
       if (!p) return;
       if (Math.hypot(ev.clientX - p.x, ev.clientY - p.y) < 6) return;
       cleanup();
+      setPreview(null);
       onStartDrag(p.payload);
     };
     const cleanup = () => {
@@ -267,7 +299,11 @@ export function Sidebar({
 
       <nav
         className={`tree ${drag ? 'dropping' : ''}`}
-        onPointerLeave={() => setDropAt(null)}
+        onPointerLeave={() => {
+          setDropAt(null);
+          setPreview(null);
+        }}
+        onScroll={() => setPreview(null)}
       >
         {visibleSessions.length === 0 && (
           <p className="empty">
@@ -309,6 +345,7 @@ export function Sidebar({
                   })
                 }
                 onPointerMove={(e) => hoverRow(e, { kind: 'session', sessionId: session.id })}
+                onPointerEnter={(e) => hoverPreview(e, activeWindowOf(session), session)}
                 onPointerUp={() => dropRow({ kind: 'session', sessionId: session.id })}
                 title={
                   drag
@@ -398,6 +435,7 @@ export function Sidebar({
                           place: 'before',
                         })
                       }
+                      onPointerEnter={(e) => hoverPreview(e, win, session)}
                       onPointerUp={() =>
                         dropRow({
                           kind: 'window',
@@ -470,6 +508,8 @@ export function Sidebar({
           );
         })}
       </nav>
+
+      <HoverPreview target={preview} />
 
       <footer className="sidebar-foot">
         <span>{serverVersion ?? ''}</span>

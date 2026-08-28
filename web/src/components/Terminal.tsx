@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { CanvasAddon } from '@xterm/addon-canvas';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
 import { wsUrl } from '../api';
 
@@ -39,6 +40,9 @@ export interface TerminalHandle {
   send(data: string): void;
   focus(): void;
   fit(): void;
+  /** xterm 側で選択されている文字列（tmux の選択はここには出ない） */
+  getSelection(): string;
+  clearSelection(): void;
 }
 
 interface Props {
@@ -53,10 +57,23 @@ interface Props {
   /** 端末の上で右クリックされた。アプリ側のメニューを出す */
   onContextMenu?: (x: number, y: number) => void;
   onStatus?: (s: { connected: boolean; message?: string }) => void;
+  /** クリップボードに入ったことを知らせる（選択したのに入っていないと分からないため） */
+  onCopied?: (text: string) => void;
 }
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
-  { sessionId, windowId, windowIndex, mode, showStatusBar, fontSize, lineHeight: rawLineHeight, onContextMenu, onStatus },
+  {
+    sessionId,
+    windowId,
+    windowIndex,
+    mode,
+    showStatusBar,
+    fontSize,
+    lineHeight: rawLineHeight,
+    onContextMenu,
+    onStatus,
+    onCopied,
+  },
   ref,
 ) {
   /**
@@ -101,6 +118,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   // 端末は一度だけ組み立てるので、最新のハンドラは ref 経由で見る
   const onContextMenuRef = useRef(onContextMenu);
   onContextMenuRef.current = onContextMenu;
+  const onCopiedRef = useRef(onCopied);
+  onCopiedRef.current = onCopied;
 
   useImperativeHandle(ref, () => ({
     selectWindow(index: number) {
@@ -117,6 +136,12 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     },
     fit() {
       safeFitRef.current();
+    },
+    getSelection() {
+      return termRef.current?.getSelection() ?? '';
+    },
+    clearSelection() {
+      termRef.current?.clearSelection();
     },
   }));
 
@@ -142,6 +167,13 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     term.loadAddon(uni);
     term.unicode.activeVersion = '11';
     term.open(innerRef.current!);
+    /**
+     * OSC 52 を受け取ってブラウザのクリップボードに入れる。
+     * tmux 側でマウス選択してコピーしたとき（copy-selection）、tmux は
+     * set-clipboard on なら OSC 52 でクライアント端末に渡してくる。それが
+     * ここに届く。これが無いと「選択したのにブラウザには何も入らない」になる。
+     */
+    term.loadAddon(new ClipboardAddon());
     // canvas レンダラ。WebGL はドライバ依存で描画が固まることがあるので使わない。
     try {
       term.loadAddon(new CanvasAddon());
@@ -167,6 +199,42 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
      */
     const host = hostRef.current;
 
+    /**
+     * 選択したらそのままクリップボードに入れる（tmux のマウス選択と同じ感覚にする）。
+     *
+     * xterm 側の選択が起きるのは、tmux にマウス報告が渡らない場面
+     * （Shift を押しながらのドラッグ、mouse off のペイン、コピーモードでない画面）。
+     * ボタンを離した時点だけを見る。onSelectionChange はドラッグ中に何度も鳴るので、
+     * そのたびに書き込むとクリップボードが途中経過で埋まる。
+     */
+    const copySelection = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const text = termRef.current?.getSelection() ?? '';
+      if (!text.trim()) return;
+      navigator.clipboard
+        ?.writeText(text)
+        .then(() => onCopiedRef.current?.(text))
+        .catch(() => {
+          /* 権限が無い / HTTP で開いている場合は諦める。選択自体は残る */
+        });
+    };
+
+    /**
+     * Ctrl+Shift+C は端末の慣習どおりコピーに使う（Ctrl+C は SIGINT のまま送る）。
+     * 選択が無いときは何もせず、キーはそのまま tmux へ流す。
+     */
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true;
+      const copyKey = e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c');
+      if (!copyKey || !term.hasSelection()) return true;
+      const text = term.getSelection();
+      navigator.clipboard
+        ?.writeText(text)
+        .then(() => onCopiedRef.current?.(text))
+        .catch(() => {});
+      return false;
+    });
+
     const swallowRightButton = (e: MouseEvent) => {
       if (e.button !== 2 || e.shiftKey) return;
       e.preventDefault();
@@ -182,12 +250,14 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     host.addEventListener('mousedown', swallowRightButton, true);
     host.addEventListener('mouseup', swallowRightButton, true);
     host.addEventListener('contextmenu', onContextMenu, true);
+    host.addEventListener('mouseup', copySelection);
 
     return () => {
       ro.disconnect();
       host.removeEventListener('mousedown', swallowRightButton, true);
       host.removeEventListener('mouseup', swallowRightButton, true);
       host.removeEventListener('contextmenu', onContextMenu, true);
+      host.removeEventListener('mouseup', copySelection);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

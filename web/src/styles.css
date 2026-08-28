@@ -1261,3 +1261,80 @@ input {
     padding-bottom: max(6px, env(safe-area-inset-bottom));
   }
 }
+
+/* --------------------------------------------------------------------------
+   サイドバーのホバープレビュー
+   行に乗せたときだけ出る、ペインの中身の覗き窓。操作はできない。
+   -------------------------------------------------------------------------- */
+.hover-preview {
+  position: fixed;
+  z-index: 60;
+  width: min(560px, 46vw);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  pointer-events: none; /* 覗くだけ。ポインタは下の行に通す */
+}
+
+.hover-preview-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 10px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.hover-preview-head .hp-title {
+  color: var(--fg);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hover-preview-head .hp-sub {
+  color: var(--fg-faint);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hover-preview .hp-body {
+  margin: 0;
+  padding: 8px 10px;
+  overflow: hidden;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--fg-dim);
+  white-space: pre;
+}
+
+.hover-preview .hp-error {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--fg-faint);
+}
+
+/* タイルの見出しは掴んで動かせる（並べ替え・セッション間の移動） */
+.tile-head {
+  cursor: grab;
+  touch-action: none; /* 掴んだ指でスクロールさせない */
+}
+
+.tile-head:active {
+  cursor: grabbing;
+}
+
+.tile-head.dragging {
+  opacity: 0.5;
+}

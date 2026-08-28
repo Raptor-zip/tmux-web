@@ -52,6 +52,8 @@ export interface TmuxState {
   windows: TmuxWindow[];
   panes: Pane[];
   ts: number;
+  /** tmux サーバのプロセス id。変わったら再起動＝id が振り直されたということ */
+  serverPid?: number | null;
   server?: { version: string; prefix: string; socketName: string; home: string };
 }
 
