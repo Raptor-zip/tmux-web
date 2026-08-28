@@ -17,6 +17,11 @@ export interface DragPayload {
   sessionId: string;
   windowId: string | null;
   label: string;
+  /**
+   * すでに開いているタイルを掴んだ場合、その元タイルの id。
+   * 新しく開くのではなく「移動」になるので、落とし先に置いたあと元は消す。
+   */
+  fromLeafId?: string | null;
 }
 
 interface Props {
@@ -35,9 +40,13 @@ interface Props {
   onFocus(leafId: string): void;
   onClose(leafId: string): void;
   onDropWindow(targetLeafId: string, side: DropSide, payload: DragPayload): void;
+  /** タイルの見出しを掴んで動かし始めた。以降はサイドバーからのドラッグと同じ扱い */
+  onStartDrag(payload: DragPayload): void;
   onDragEnd(): void;
   onRatio(splitId: string, ratio: number): void;
   onStatus(leafId: string, status: { connected: boolean; message?: string }): void;
+  /** 端末で選択した内容がクリップボードに入った */
+  onCopied(text: string): void;
   registerTerm(leafId: string, handle: TerminalHandle | null): void;
 }
 
@@ -79,9 +88,11 @@ export function SplitView({
   onFocus,
   onClose,
   onDropWindow,
+  onStartDrag,
   onDragEnd,
   onRatio,
   onStatus,
+  onCopied,
   registerTerm,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -120,6 +131,35 @@ export function SplitView({
     },
     [tiles],
   );
+
+  /**
+   * タイルの見出しを掴んでの移動。サイドバーの行と同じく 6px 動いたら開始とみなす。
+   * 閾値を置かないと、タイルを選ぶだけのクリックでドラッグが始まってしまう。
+   */
+  const pending = useRef<{ x: number; y: number; payload: DragPayload } | null>(null);
+
+  const armTileDrag = (e: React.PointerEvent, payload: DragPayload) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if ((e.target as HTMLElement).closest('button')) return; // ✕ などは掴まない
+    pending.current = { x: e.clientX, y: e.clientY, payload };
+
+    const move = (ev: PointerEvent) => {
+      const p = pending.current;
+      if (!p) return;
+      if (Math.hypot(ev.clientX - p.x, ev.clientY - p.y) < 6) return;
+      cleanup();
+      onStartDrag(p.payload);
+    };
+    const cleanup = () => {
+      pending.current = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', cleanup);
+      window.removeEventListener('pointercancel', cleanup);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', cleanup);
+    window.addEventListener('pointercancel', cleanup);
+  };
 
   const startDividerDrag = useCallback(
     (e: React.PointerEvent, split: { id: string; dir: 'row' | 'column'; parent: Rect }) => {
@@ -168,7 +208,19 @@ export function SplitView({
             style={pct(rect)}
             onMouseDown={() => onFocus(leaf.id)}
           >
-            <div className="tile-head">
+            <div
+              className={`tile-head ${drag?.fromLeafId === leaf.id ? 'dragging' : ''}`}
+              onPointerDown={(e) =>
+                armTileDrag(e, {
+                  kind: 'window',
+                  sessionId: leaf.sessionId,
+                  windowId: leaf.windowId,
+                  label: win ? `${win.index}:${win.name}` : (session?.name ?? 'ウィンドウ'),
+                  fromLeafId: leaf.id,
+                })
+              }
+              title="ドラッグ：別のタイルの端に落とすと並べ替え、サイドバーに落とすとセッション間の移動"
+            >
               <span className="tile-title" title={`${session?.name ?? ''} / ${win?.name ?? ''}`}>
                 <span className="tile-session">{session?.name ?? '—'}</span>
                 <span className="tile-sep">/</span>
@@ -203,6 +255,7 @@ export function SplitView({
                 lineHeight={lineHeight}
                 onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
                 onStatus={(s) => onStatus(leaf.id, s)}
+                onCopied={onCopied}
               />
             </div>
           </div>

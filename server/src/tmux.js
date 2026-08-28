@@ -103,6 +103,9 @@ export async function listSessions() {
   const rows = await query(
     ['list-sessions'],
     [
+      // pid は tmux サーバ自身のプロセス id（セッションごとの値ではない）。
+      // 一覧に混ぜて取ると追加のコマンドを打たずに済む
+      'pid',
       'session_id',
       'session_name',
       'session_windows',
@@ -116,6 +119,7 @@ export async function listSessions() {
   );
   return rows.map((r) => ({
     id: r.session_id,
+    serverPid: num(r.pid),
     name: r.session_name,
     windows: num(r.session_windows),
     created: num(r.session_created) * 1000,
@@ -210,7 +214,9 @@ export async function snapshot() {
     listWindows(),
     listPanes(),
   ]);
-  return { sessions, windows, panes, ts: Date.now() };
+  // tmux サーバが入れ替わると id ($1 や @3) は全部振り直される。画面側は
+  // この pid の変化で「再起動された」と判断し、保存した配置を名前で繋ぎ直す。
+  return { sessions, windows, panes, serverPid: sessions[0]?.serverPid ?? null, ts: Date.now() };
 }
 
 export async function capturePane(target, { lines = 2000, escapes = true } = {}) {

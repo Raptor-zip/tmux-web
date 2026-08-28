@@ -51,7 +51,21 @@ export async function createAttachment({
     await tmux(['set-option', '-t', mirrorName, 'aggressive-resize', 'on'], {
       allowFailure: true,
     });
+
+    // ブラウザ側だけマウスを有効にする。ミラーはセッション単位なので、端末で開いて
+    // いる元セッションの mouse 設定は変わらない。TMUX_WEB_MOUSE=0 で無効にできる。
+    if (process.env.TMUX_WEB_MOUSE !== '0') {
+      await tmux(['set-option', '-t', mirrorName, 'mouse', 'on'], { allowFailure: true });
+    }
     attachTarget = mirrorName;
+  }
+
+  // tmux のマウス選択（copy-selection）の結果をブラウザのクリップボードへ渡すには、
+  // tmux が OSC 52 をクライアントに送る必要がある。既定の 'external' はアプリ発の
+  // OSC 52 を中継するだけで、tmux 自身のコピーは送らないので 'on' にする。
+  // set-clipboard はサーバ単位のオプションで、セッションごとには持てない。
+  if (process.env.TMUX_WEB_SET_CLIPBOARD !== '0') {
+    await tmux(['set-option', '-s', 'set-clipboard', 'on'], { allowFailure: true });
   }
 
   if (windowId) {

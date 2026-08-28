@@ -15,8 +15,10 @@ import {
   findLeaf,
   makeLeaf,
   pruneStale,
+  remapByName,
   removeLeaf,
   retargetLeaf,
+  stampNames,
   setRatio,
   splitLeaf,
   type DropSide,
@@ -115,6 +117,30 @@ export default function App() {
 
   // ---------------------------------------------------------------- レイアウト
 
+  /**
+   * tmux を再起動したあとの繋ぎ直し。
+   *
+   * resurrect が構成を復元すると $1 や @3 といった id は全部振り直されるので、
+   * 保存した木をそのまま使うと「知らないセッション」扱いで全部畳まれ、
+   * 分割していた画面が 1 枚に戻ってしまう。サーバの pid が変わったのを見て、
+   * そのときだけ名前で繋ぎ直す。同じサーバのまま消えたウィンドウは今まで通り閉じる。
+   */
+  const [savedPid, setSavedPid] = usePersisted<number | null>('tw.serverPid', null);
+  const serverPid = state?.serverPid ?? null;
+  const needsRemap = serverPid !== null && savedPid !== serverPid;
+
+  useEffect(() => {
+    if (!state || serverPid === null || !needsRemap) return;
+    setLayout((prev) => (prev ? remapByName(prev, { sessions, windows }) : prev));
+    setSavedPid(serverPid);
+  }, [state, serverPid, needsRemap, sessions, windows, setLayout, setSavedPid]);
+
+  // 名前は繋ぎ直しの手がかりなので、繋がっているあいだに焼き込んでおく
+  useEffect(() => {
+    if (!state || needsRemap) return;
+    setLayout((prev) => (prev ? stampNames(prev, { sessions, windows }) : prev));
+  }, [state, needsRemap, sessions, windows, setLayout]);
+
   // 初期化と、消えたセッションの掃除
   // 一度でもタイルを開いたか。閉じきったあとに勝手に開き直さないための目印
   const opened = useRef(false);
@@ -124,6 +150,8 @@ export default function App() {
 
   useEffect(() => {
     if (!state) return;
+    // 繋ぎ直しが済むまでは古い id で判定してしまうので触らない
+    if (needsRemap) return;
     const valid = new Set(sessions.map((s) => s.id));
     setLayout((prev) => {
       const pruned = prev ? pruneStale(prev, valid) : null;
@@ -137,7 +165,7 @@ export default function App() {
         windows.find((w) => w.sessionId === first.id);
       return makeLeaf(first.id, active?.id ?? null);
     });
-  }, [state, sessions, windows, layout, setLayout]);
+  }, [state, needsRemap, sessions, windows, layout, setLayout]);
 
   const leaves = useMemo(() => (layout ? allLeaves(layout) : []), [layout]);
 
@@ -189,7 +217,7 @@ export default function App() {
    * 紛らわしい。最後の 1 枚だった場合は何も開いていない状態になる。
    */
   useEffect(() => {
-    if (!state || !layout) return;
+    if (!state || !layout || needsRemap) return;
     const live = new Set(windows.map((w) => w.id));
     for (const id of live) pendingWindows.current.delete(id);
 
@@ -207,7 +235,7 @@ export default function App() {
       }
       return next;
     });
-  }, [state, windows, layout, setLayout]);
+  }, [state, needsRemap, windows, layout, setLayout]);
 
   const focusedTerm = () => (focusedId ? termRefs.current.get(focusedId) : undefined);
 
@@ -331,12 +359,21 @@ export default function App() {
     (targetLeafId: string, side: DropSide, payload: DragPayload) => {
       setLayout((prev) => {
         if (!prev) return makeLeaf(payload.sessionId, payload.windowId);
+
+        // すでに開いているタイルを掴んでいた場合は「移動」。先に元の場所から外してから
+        // 置き直す。外すと分割がひとつ畳まれるので、置き先の判定はその後の木で行う。
+        const from = payload.fromLeafId ?? null;
+        if (from && from === targetLeafId) return prev;
+        const base = from ? removeLeaf(prev, from) : prev;
+        if (!base) return makeLeaf(payload.sessionId, payload.windowId);
+        if (!findLeaf(base, targetLeafId)) return base;
+
         if (side === 'center') {
-          return retargetLeaf(prev, targetLeafId, payload.sessionId, payload.windowId);
+          return retargetLeaf(base, targetLeafId, payload.sessionId, payload.windowId);
         }
         const leaf = makeLeaf(payload.sessionId, payload.windowId);
         setFocusedId(leaf.id);
-        return splitLeaf(prev, targetLeafId, side, leaf);
+        return splitLeaf(base, targetLeafId, side, leaf);
       });
     },
     [setLayout],
@@ -404,6 +441,20 @@ export default function App() {
     window.addEventListener('pointercancel', end);
   }, []);
 
+  /** 端末で選択中の文字列をコピーする。右クリックメニューから使う */
+  const copySelection = useCallback(async () => {
+    const text = focusedTerm()?.getSelection() ?? '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`選択した ${text.split('\n').length} 行をコピーしました`, 'info');
+    } catch (err) {
+      toast(`コピーに失敗: ${(err as Error).message}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedId, toast]);
+
+  /** 画面（スクロールバックを含む）を丸ごとコピーする。選択とは別物だと分かる名前にする */
   const copyPane = useCallback(async () => {
     if (!activePane) return;
     try {
@@ -419,11 +470,26 @@ export default function App() {
   const menuItems = useCallback((): MenuEntry[] => {
     const pane = activePane?.id;
     const win = currentWindow;
+    const selection = focusedTerm()?.getSelection().trim() ?? '';
     return [
+      // 選択があるときはそれが主役。「本文をコピー」を先頭に置くと、選択したつもりで
+      // 画面全体が入ってしまうので、選択の有無で並びと文言を変える
+      ...(selection
+        ? [
+            { label: '選択部分をコピー', hint: `${selection.split('\n').length} 行`, run: copySelection },
+            { label: '選択を解除', run: () => focusedTerm()?.clearSelection() },
+            SEP,
+          ]
+        : []),
       { label: '左右に分割', hint: '新しいウィンドウ', run: () => splitIntoNewWindow('right') },
       { label: '上下に分割', hint: '新しいウィンドウ', run: () => splitIntoNewWindow('bottom') },
       SEP,
-      { label: '本文をコピー', run: copyPane, disabled: !pane },
+      {
+        label: '画面全体をコピー',
+        hint: 'スクロールバック込み',
+        run: copyPane,
+        disabled: !pane,
+      },
       {
         label: '貼り付け',
         hint: 'Ctrl+V',
@@ -465,7 +531,16 @@ export default function App() {
         disabled: !win,
       },
     ];
-  }, [activePane, currentWindow, splitIntoNewWindow, copyPane, doAction, confirmThen, toast]);
+  }, [
+    activePane,
+    currentWindow,
+    splitIntoNewWindow,
+    copyPane,
+    copySelection,
+    doAction,
+    confirmThen,
+    toast,
+  ]);
 
 
   const onToggle = useCallback(
@@ -613,9 +688,19 @@ export default function App() {
                 onFocus={setFocusedId}
                 onClose={closeTile}
                 onDropWindow={dropWindow}
+                onStartDrag={startDrag}
                 onDragEnd={() => setDrag(null)}
                 onRatio={(id, r) => setLayout((prev) => (prev ? setRatio(prev, id, r) : prev))}
                 onStatus={handleStatus}
+                onCopied={(text) => {
+                  const lines = text.split('\n').length;
+                  toast(
+                    lines > 1
+                      ? `${lines} 行をコピーしました`
+                      : `「${text.length > 24 ? text.slice(0, 24) + '…' : text}」をコピーしました`,
+                    'info',
+                  );
+                }}
                 onTerminalContextMenu={(leafId, x, y) => {
                   setFocusedId(leafId);
                   setCtxMenu({ x, y, leafId });
