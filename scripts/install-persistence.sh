@@ -7,6 +7,8 @@
 #   1. tmux-resurrect / tmux-continuum を ~/.tmux/plugins/ に clone（TPM は使わない）
 #   2. tmux/persistence.conf を ~/.config/tmux-web/persistence.conf に展開
 #   3. ~/.tmux.conf にその 1 行を source-file として追記（既にあれば何もしない）
+#   4. systemd --user があれば、15 分ごとに保存するタイマーを登録する
+#      （continuum の自動保存は status バー頼みで、tmux-web のミラーは status off なので動かない）
 #
 # 何度実行しても同じ結果になる。
 
@@ -40,8 +42,22 @@ clone_or_pull tmux-resurrect https://github.com/tmux-plugins/tmux-resurrect
 clone_or_pull tmux-continuum https://github.com/tmux-plugins/tmux-continuum
 
 # --- 2. 設定の展開 ----------------------------------------------------------
+# systemd のタイマーが使えるなら、そちらに保存を任せて continuum の自動保存は切る。
+# 二重に保存しても壊れはしないが、同じディレクトリに無駄なスナップショットが増える。
+if systemctl --user show-environment >/dev/null 2>&1; then
+  USE_TIMER=1
+  SAVE_INTERVAL=0
+else
+  USE_TIMER=0
+  SAVE_INTERVAL=15
+  say "systemd --user が使えないので continuum の自動保存（15 分）にフォールバックします"
+  say "  ブラウザだけで使っていると保存が走りません。端末から 1 つ attach しておいてください"
+fi
+
 mkdir -p "$CONF_DIR" "$HOME/.local/share/tmux/resurrect"
-sed "s|@@REPO_DIR@@|$REPO_DIR|g" "$REPO_DIR/tmux/persistence.conf" > "$CONF_PATH"
+sed -e "s|@@REPO_DIR@@|$REPO_DIR|g" \
+    -e "s|@@SAVE_INTERVAL@@|$SAVE_INTERVAL|g" \
+    "$REPO_DIR/tmux/persistence.conf" > "$CONF_PATH"
 say "設定を書き出しました : $CONF_PATH"
 
 # --- 3. ~/.tmux.conf への取り込み -------------------------------------------
@@ -64,6 +80,35 @@ else
   } >> "$TMUX_CONF"
 fi
 
+# --- 4. 保存タイマー --------------------------------------------------------
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+if [ "$USE_TIMER" = 1 ]; then
+  mkdir -p "$UNIT_DIR"
+  cat > "$UNIT_DIR/tmux-web-resurrect-save.service" <<EOF
+[Unit]
+Description=tmux のセッション構成を保存する（tmux-web / tmux-resurrect）
+
+[Service]
+Type=oneshot
+ExecStart=$REPO_DIR/scripts/resurrect-autosave.sh
+EOF
+  cat > "$UNIT_DIR/tmux-web-resurrect-save.timer" <<EOF
+[Unit]
+Description=tmux のセッション構成を 15 分ごとに保存する
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=false
+
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl --user daemon-reload
+  systemctl --user enable --now tmux-web-resurrect-save.timer >/dev/null
+  say "保存タイマーを登録しました : tmux-web-resurrect-save.timer（15 分ごと）"
+fi
+
 # --- 反映 -------------------------------------------------------------------
 if tmux info >/dev/null 2>&1; then
   tmux source-file "$TMUX_CONF" >/dev/null 2>&1 && say "動作中の tmux に反映しました" \
@@ -76,8 +121,9 @@ cat <<EOS
     ・15 分ごとに構成が自動保存されます（$HOME/.local/share/tmux/resurrect/）
     ・tmux サーバが次に起動したとき、自動で復元されます
 
-  今すぐ保存    : ~/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet
+  今すぐ保存    : $REPO_DIR/scripts/resurrect-autosave.sh
   手動で復元    : ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh
+  保存の状況    : systemctl --user list-timers tmux-web-resurrect-save.timer
 
 EOS
 

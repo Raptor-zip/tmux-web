@@ -236,13 +236,14 @@ tmux-resurrect と tmux-continuum を使う（TPM は使わず `~/.tmux/plugins/
 ./scripts/install-persistence.sh
 ```
 
-やることは 4 つで、何度実行しても同じ結果になる。
+やることは 5 つで、何度実行しても同じ結果になる。
 
 1. tmux-resurrect / tmux-continuum を `~/.tmux/plugins/` に clone（既にあれば更新）
-2. `tmux/persistence.conf` のクローン先パスを埋めて
+2. `tmux/persistence.conf` のクローン先パスと保存間隔を埋めて
    `~/.config/tmux-web/persistence.conf` に展開
 3. `~/.tmux.conf` に `source-file ~/.config/tmux-web/persistence.conf` を 1 行追記
-4. 動作中の tmux があれば設定を読み直す
+4. systemd --user があれば `tmux-web-resurrect-save.timer` を登録（15 分ごとに保存）
+5. 動作中の tmux があれば設定を読み直す
 
 既に自分で resurrect / continuum を書いている `~/.tmux.conf` には追記しない
 （`run-shell` が二重になると保存フックがぶつかるため）。その場合は手書きの行を消して
@@ -253,7 +254,7 @@ tmux-resurrect と tmux-continuum を使う（TPM は使わず `~/.tmux/plugins/
 ```tmux
 set -g @resurrect-dir '~/.local/share/tmux/resurrect'
 set -g @resurrect-capture-pane-contents 'on'
-set -g @continuum-save-interval '15'
+set -g @continuum-save-interval '@@SAVE_INTERVAL@@'
 set -g @continuum-restore 'on'
 set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; @@REPO_DIR@@/scripts/resurrect-strip-mirrors.sh >/dev/null 2>&1 || true'
 ```
@@ -261,9 +262,30 @@ set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; @@
 手で操作したいときは:
 
 ```bash
-~/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet    # 今すぐ保存（電源を切る前など）
+./scripts/resurrect-autosave.sh                         # 今すぐ保存（電源を切る前など）
 ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh       # 手動で復元
+systemctl --user list-timers tmux-web-resurrect-save.timer   # 次の保存はいつか
 ```
+
+#### 自動保存を status バーに依存させない
+
+continuum の自動保存は `status-right` に `#(continuum_save.sh)` を差し込んで、status バーが
+再描画されるたびに「前回から 15 分経ったか」を見る仕組みになっている。つまり
+**status バーが描かれない限り一度も保存されない**。
+
+tmux-web はブラウザ用のミラーセッションを `status off` で作る（ブラウザ側が独自の
+ツールバーを描くため）。端末から attach せずブラウザだけで使っていると、
+attach 中のクライアントは全部 status off のミラーになり、自動保存が丸ごと止まる。
+実際、ブラウザからだけ使っていた 30 分のあいだ、自動保存が 1 度も走っていなかった。
+
+そのため systemd がある環境では continuum の自動保存を切り（`@continuum-save-interval` を
+`0`）、`scripts/resurrect-autosave.sh` を `tmux-web-resurrect-save.timer` から 15 分ごとに
+回す。tmux サーバが動いていなければ何もせず終わる。
+サーバ起動時の自動復元（`@continuum-restore`）は status バーと無関係なので、そのまま
+continuum に任せる。
+
+systemd が使えない環境では従来どおり continuum の 15 分間隔にフォールバックする。
+その場合はブラウザだけで使わず、端末から 1 つ attach しておく必要がある。
 
 戻るのはウィンドウ構成・ペイン分割・作業ディレクトリ・画面内容まで。
 **実行中のプロセスは戻らない**。claude は意図的に復元対象から外してある
@@ -275,6 +297,21 @@ set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; @@
 （Claude Code の会話を扱うコマンドで、tmux-web が無くても単体で使うため）。
 無くてもフックは黙って先へ進むので、tmux-web 側の動作には影響しない。
 `install-persistence.sh` も、見つからなければその旨を出すだけで先へ進む。
+
+### 画面の分割も一緒に戻す
+
+ブラウザ側のタイル配置（どこを何分割して、どのウィンドウを映していたか）は
+localStorage に持っている。ただし tmux を再起動すると `$1` や `@3` といった id は
+resurrect が復元しても全部振り直されるので、id だけでは繋がらない。
+
+そこでタイルにはセッション名・ウィンドウ名・ウィンドウ番号も一緒に焼き込んでおき、
+サーバの pid（`#{pid}`、状態に `serverPid` として乗る）が変わったのを見て、
+そのときだけ名前で繋ぎ直す。分割の形と比率はそのまま残る。
+
+- セッションが復元されなかったタイルは閉じる
+- セッションはあるがウィンドウが見つからないタイルは残し、
+  そのセッションのアクティブウィンドウを映す（分割の形は崩さない）
+- 同じサーバのまま閉じたウィンドウは、今まで通りタイルも閉じる
 
 ### ミラーセッションを保存から落とす
 
@@ -356,6 +393,7 @@ tmux/
 scripts/
   install-service.sh          systemd --user への登録
   install-persistence.sh      セッション保存・復元の仕組みを入れる
+  resurrect-autosave.sh       systemd タイマーから叩く保存（status バーに依存しない）
   resurrect-strip-mirrors.sh  保存ファイルからミラーセッションを落とす
   tailscale-serve.sh          tailnet に公開する
 ```
