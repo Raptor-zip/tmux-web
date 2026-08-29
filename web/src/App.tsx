@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, useTmuxState } from './api';
-import { Sidebar, type TreeDropTarget } from './components/Sidebar';
+import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { PaneMap } from './components/PaneMap';
 import { KeyBar } from './components/KeyBar';
@@ -65,6 +65,9 @@ export default function App() {
   // 保存キーを変えてあるのは、既に true が保存されている環境にも新しい既定を効かせるため
   const [showPaneMap, setShowPaneMap] = usePersisted('tw.paneMap2', false);
   const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar', true);
+  // 一覧はプロジェクト（作業ディレクトリのリポジトリ）単位を既定にする。
+  // 1 つのディレクトリに 1 つのエージェント、という使い方に一覧の形を合わせる
+  const [groupBy, setGroupBy] = usePersisted<GroupBy>('tw.groupBy', 'project');
   const [fontSize, setFontSize] = usePersisted('tw.fontSize', 13);
   const [lineHeight, setLineHeight] = usePersisted('tw.lineHeight', 1.15);
   // 狭い画面ではサイドバーが全面を覆ってしまうので、最初は畳んでおく
@@ -609,12 +612,14 @@ export default function App() {
         windows={windows}
         panes={panes}
         home={state?.server?.home ?? ''}
+        groupBy={groupBy}
         activeSessionId={focusedLeaf?.sessionId ?? null}
         activeWindowId={focusedLeaf?.windowId ?? null}
         openWindowIds={leaves.map((l) => l.windowId)}
         connected={connected}
         unauthorized={unauthorized}
         serverVersion={state?.server?.version}
+        onChangeGroupBy={setGroupBy}
         onSelectSession={(id) => {
           const first =
             windows.find((w) => w.sessionId === id && w.active) ??

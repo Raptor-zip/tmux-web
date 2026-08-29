@@ -610,7 +610,7 @@ input {
   font-weight: 600;
 }
 .window-row {
-  padding-left: 12px;
+  padding-left: 6px;
 }
 .window-row.active {
   background: var(--accent-dim);
@@ -727,16 +727,195 @@ input {
   line-height: 1.35;
 }
 .line-sub {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
   color: var(--fg-faint);
   font-size: 10.5px;
   font-family: var(--mono);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.3;
 }
-.window-row.active .line-sub {
+.window-row.active .sub-rest {
   color: #9fd4e4;
+}
+
+
+/* 一覧の並べ方の切り替え。VS Code のセグメントコントロールに近い見た目 */
+.group-switch {
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
+}
+.group-switch button {
+  flex: 1;
+  background: none;
+  border: 0;
+  border-radius: 2px;
+  color: var(--fg-dim);
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.group-switch button:hover {
+  color: var(--fg);
+}
+.group-switch button.on {
+  background: var(--border-strong);
+  color: #fff;
+}
+
+/* プロジェクト見出しの下に出すフルパス */
+.group-path {
+  padding: 0 8px 4px 30px;
+  margin-top: -3px;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------- 状態（プロセスから判定） */
+
+/*
+  working = エージェントが手を動かしている / waiting = エージェントは生きているが入力待ち
+  server  = ポートを待ち受けている        / run     = その他のコマンドが実行中
+  idle    = シェルしかいない＝もう使われていない
+*/
+.state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  margin: 9px 5px 0 6px;
+  align-self: flex-start;
+  background: var(--fg-faint);
+}
+.state-dot.working {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.state-dot.waiting {
+  background: var(--green);
+  box-shadow: 0 0 5px rgba(137, 209, 133, 0.6);
+}
+.state-dot.server {
+  background: #c586c0;
+  box-shadow: 0 0 5px rgba(197, 134, 192, 0.6);
+}
+.state-dot.run {
+  background: var(--yellow);
+}
+.state-dot.idle {
+  background: none;
+  border: 1px solid var(--fg-faint);
+  opacity: 0.55;
+}
+
+.state-text {
+  flex: none;
+}
+.state-text.working {
+  color: var(--accent);
+}
+.state-text.waiting {
+  color: var(--green);
+}
+.state-text.server {
+  color: #c586c0;
+}
+.state-text.run {
+  color: var(--yellow);
+}
+.state-text.idle {
+  color: var(--fg-faint);
+}
+.sub-rest {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 何も動いていない行は一段沈める。一覧の中で「生きている行」が浮き上がる */
+.window-row.st-idle .name {
+  color: var(--fg-dim);
+}
+.window-row.st-idle:not(.active) {
+  opacity: 0.72;
+}
+.window-row.st-idle:hover {
+  opacity: 1;
+}
+
+/* 行の右に出す短いチップ。エージェント名とポート番号 */
+.chip {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 14px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-3);
+  color: var(--fg-dim);
+}
+.chip.working {
+  background: rgba(0, 151, 251, 0.18);
+  color: #7fc6ff;
+}
+.chip.waiting {
+  background: rgba(137, 209, 133, 0.16);
+  color: var(--green);
+}
+.chip.server {
+  background: rgba(197, 134, 192, 0.18);
+  color: #dcb3d8;
+}
+.chip.run {
+  background: rgba(204, 167, 0, 0.16);
+  color: #e3c14a;
+}
+
+/* 見出しの状態集計。色つきの点＋件数 */
+.tally {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.tally i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+}
+.tally.working i {
+  background: var(--accent);
+}
+.tally.waiting i {
+  background: var(--green);
+}
+.tally.server i {
+  background: #c586c0;
+}
+.tally.run i {
+  background: var(--yellow);
+}
+.tally.idle i {
+  background: none;
+  border: 1px solid var(--fg-faint);
+}
+.tally.idle {
+  color: var(--fg-faint);
+}
+.group-label .meta {
+  gap: 6px;
 }
 
 .badge {

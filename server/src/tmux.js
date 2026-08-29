@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
 
+import { inspectPanes } from './inspect.js';
+
 const execFileAsync = promisify(execFile);
 
 /** tmux の -F フォーマット用の区切り文字（通常のテキストにまず現れない制御文字） */
@@ -145,6 +147,7 @@ export async function listWindows() {
       'window_layout',
       'window_zoomed_flag',
       'window_activity_flag',
+      'window_activity',
       'window_bell_flag',
       'window_width',
       'window_height',
@@ -161,6 +164,7 @@ export async function listWindows() {
     layout: r.window_layout,
     zoomed: bool(r.window_zoomed_flag),
     activity: bool(r.window_activity_flag),
+    lastActivity: num(r.window_activity) * 1000,
     bell: bool(r.window_bell_flag),
     width: num(r.window_width),
     height: num(r.window_height),
@@ -209,11 +213,13 @@ export async function listPanes() {
 
 /** UI が 1 回のリクエストで必要とする全状態 */
 export async function snapshot() {
-  const [sessions, windows, panes] = await Promise.all([
+  const [sessions, windows, rawPanes] = await Promise.all([
     listSessions(),
     listWindows(),
     listPanes(),
   ]);
+  // 端末タイトルは中のプロセスが終わっても残るので、実際の中身はプロセスから見る
+  const panes = await inspectPanes(rawPanes);
   // tmux サーバが入れ替わると id ($1 や @3) は全部振り直される。画面側は
   // この pid の変化で「再起動された」と判断し、保存した配置を名前で繋ぎ直す。
   return { sessions, windows, panes, serverPid: sessions[0]?.serverPid ?? null, ts: Date.now() };

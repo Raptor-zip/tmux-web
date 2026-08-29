@@ -76,7 +76,11 @@ export function useTmuxState() {
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === 'state') setState(msg as TmuxState);
+          // push には server（バージョン・prefix・ホームディレクトリ）が乗っていない。
+          // 素朴に差し替えると初回の REST で得た情報が 1 秒で消えるので引き継ぐ
+          if (msg.type === 'state') {
+            setState((prev) => ({ ...(msg as TmuxState), server: prev?.server }));
+          }
         } catch {
           /* ignore */
         }
