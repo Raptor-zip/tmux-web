@@ -21,9 +21,31 @@ export interface TmuxWindow {
   layout: string;
   zoomed: boolean;
   activity: boolean;
+  /** 最後に何か出力があった時刻（ms）。「もう使われていない」の目安 */
+  lastActivity: number;
   bell: boolean;
   width: number;
   height: number;
+}
+
+/** ペインの中で実際に動いているもの。端末タイトルではなくプロセスから判定した結果 */
+export interface PaneProc {
+  /** agent=AI エージェント / server=ポートを開いている / run=何か実行中 / idle=シェルだけ */
+  kind: 'agent' | 'server' | 'run' | 'idle';
+  /** エージェントの表示名（Claude など）。エージェントでなければ null */
+  agent: string | null;
+  /** いま前面にいるコマンド名 */
+  command: string;
+  /** 子孫が LISTEN している TCP ポート */
+  ports: number[];
+  /** そのコマンドが始まった時刻（ms, 5 秒丸め）。何も動いていなければ null */
+  since: number | null;
+}
+
+/** 作業ディレクトリが属するリポジトリ */
+export interface Project {
+  root: string;
+  name: string;
 }
 
 export interface Pane {
@@ -45,6 +67,8 @@ export interface Pane {
   top: number;
   dead: boolean;
   inMode: boolean;
+  proc: PaneProc | null;
+  project: Project | null;
 }
 
 export interface TmuxState {
