@@ -90,6 +90,14 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   const wsRef = useRef<WebSocket | null>(null);
   const rafRef = useRef(0);
 
+  /** tmux への入力はここだけを通す。空文字は送らない（IME 確定後の空振りを弾く） */
+  const sendInputRef = useRef((data: string) => {
+    const s = wsRef.current;
+    if (data && s?.readyState === WebSocket.OPEN) {
+      s.send(JSON.stringify({ type: 'input', data }));
+    }
+  });
+
   /**
    * fit() は次のフレームにまとめ、実際にサイズが変わるときだけ呼ぶ。
    * こうしないと ResizeObserver と描画が延々と互いを呼び合ってタブが固まる。
@@ -127,8 +135,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         wsRef.current.send(JSON.stringify({ type: 'selectWindow', index }));
     },
     send(data: string) {
-      wsRef.current?.readyState === WebSocket.OPEN &&
-        wsRef.current.send(JSON.stringify({ type: 'input', data }));
+      sendInputRef.current(data);
       termRef.current?.focus();
     },
     focus() {
@@ -247,6 +254,36 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       onContextMenuRef.current?.(e.clientX, e.clientY);
     };
 
+    /**
+     * 日本語入力（IME）の確定文字は、xterm ではなくここで送る。
+     *
+     * xterm 5.5 の CompositionHelper は、確定時に補助 textarea の
+     * `value.substring(start, end)` を切り出して送る。`start` は変換開始時に同期で
+     * 決まるのに、`end` は compositionupdate の `setTimeout(0)` で遅れて更新される。
+     * 変換で文字数が変わる（「おは」→「おはようございます」）と `end` は古いまま残り、
+     * 次の変換では `start > end` になる。JS の `substring` は start > end だと
+     * **引数を入れ替える**ので、確定したはずの文字ではなく
+     * 「ひとつ前に入力した文章の断片」が送られてしまう。
+     *
+     * 補助 textarea は xterm が確定・Enter・blur のときしか消さないため、確定文が
+     * そこに溜まり続けているのがこの誤爆の材料になる。ここでは変換の前後で必ず空にし、
+     * 確定文字は compositionend の `data`（IME が確定した文字そのもの）から送る。
+     * `data` を持たない環境（null）では textarea を触らず、従来どおり xterm に任せる。
+     */
+    const clearHelper = () => {
+      if (term.textarea) term.textarea.value = '';
+    };
+    const onCompositionEnd = (e: Event) => {
+      const data = (e as CompositionEvent).data;
+      if (data == null) return; // data を出さない環境。xterm の経路に任せる
+      clearHelper();
+      if (data) sendInputRef.current(data);
+    };
+
+    // xterm 自身のリスナーは textarea（イベントの target）に付いている。
+    // 先に動かす必要があるので、祖先である host の capture 段階で受ける。
+    host.addEventListener('compositionstart', clearHelper, true);
+    host.addEventListener('compositionend', onCompositionEnd, true);
     host.addEventListener('mousedown', swallowRightButton, true);
     host.addEventListener('mouseup', swallowRightButton, true);
     host.addEventListener('contextmenu', onContextMenu, true);
@@ -254,6 +291,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     return () => {
       ro.disconnect();
+      host.removeEventListener('compositionstart', clearHelper, true);
+      host.removeEventListener('compositionend', onCompositionEnd, true);
       host.removeEventListener('mousedown', swallowRightButton, true);
       host.removeEventListener('mouseup', swallowRightButton, true);
       host.removeEventListener('contextmenu', onContextMenu, true);
@@ -289,10 +328,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     // 入出力の橋渡しは張り直しても増えないよう、接続の外で一度だけ繋ぐ
     disposables.push(
-      term.onData((data) => {
-        const s = wsRef.current;
-        if (s?.readyState === WebSocket.OPEN) s.send(JSON.stringify({ type: 'input', data }));
-      }),
+      term.onData((data) => sendInputRef.current(data)),
       term.onResize(({ cols: c, rows: r }) => {
         const s = wsRef.current;
         if (s?.readyState === WebSocket.OPEN) {
