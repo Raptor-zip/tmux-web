@@ -163,6 +163,27 @@ xterm 5.5 は確定時に補助 textarea の `value.substring(start, end)` を�
 `data` から送ることで、どちらの経路も断つ。変換の途中経過（下線付きの表示）は
 これまでどおり xterm が描く。
 
+#### 「？」「、」が 2 つ 3 つ並ぶ
+
+xterm には確定文字を送る経路が 3 つあり、どれが動くかがイベントの届く順で変わる。
+
+| 経路 | 動く条件 |
+| --- | --- |
+| `CompositionHelper._finalizeComposition` | 変換確定（上の `substring` の件） |
+| `CompositionHelper._handleAnyTextareaChanges` | IME 有効時のキー（keyCode 229）。`setTimeout(0)` 後に textarea の増分を送る |
+| `Terminal._inputEvent` | `input` イベントの `data`。`keyup` が `input` より先に来たときだけ通る |
+
+「？」「、」のように IME が変換を挟まず即確定する文字は、確定してから補助 textarea に
+書き戻される。こちらが `compositionend` で送ったあとに書き戻しが起きるので、
+2 番目（増分検出）や 3 番目（`input`）が同じ文字をもう一度送っていた。
+`keyup` の順で通る経路が変わるため、**出るときと出ないときがある**のがこの症状の質。
+
+そこで IME が絡む入力（keyCode 229 の keydown、または変換確定の直後）は
+`input` を capture 段階で受け取って xterm に渡さず、こちらだけが送る。
+確定直後に同じ文字が戻ってきたぶんは捨て、補助 textarea は変換中以外つねに空にする
+（空にしておかないと、増分検出が「減った」と見て `DEL` を送ってしまう）。
+IME を経由しない挿入（絵文字パレットなど）は今までどおり xterm に任せる。
+
 ### 切れても勝手に繋ぎ直す
 
 端末の WebSocket が切れたら、0.5 秒から最大 5 秒までのバックオフで張り直す。
