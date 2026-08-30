@@ -1,4 +1,6 @@
+import { Fragment, type ReactElement } from 'react';
 import { LAYOUTS } from '../types';
+import { projectName, tildePath } from '../paths';
 import type { Pane, Session, TmuxWindow } from '../types';
 import { SEP, type MenuEntry } from './ContextMenu';
 
@@ -6,6 +8,8 @@ interface Props {
   session: Session | null;
   window: TmuxWindow | null;
   activePane: Pane | null;
+  /** ホームディレクトリ。パンくずのパスを `~` に畳むのに使う */
+  home: string;
   tileCount: number;
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
@@ -33,6 +37,7 @@ export function Toolbar({
   session,
   window: win,
   activePane,
+  home,
   tileCount,
   mode,
   showStatusBar,
@@ -49,6 +54,9 @@ export function Toolbar({
   onOpenMenu,
 }: Props) {
   const pane = activePane?.id;
+  // パンくずの先頭はプロジェクト名。セッション名やウィンドウ番号より、
+  // 「どのプロジェクトを触っているか」のほうが手を止めずに確かめたい
+  const project = projectName(activePane, home);
 
   const moreItems = (): MenuEntry[] => [
     { label: 'コマンドを送る…', run: onSendCommand, disabled: !pane },
@@ -74,28 +82,43 @@ export function Toolbar({
     { label: 'tmux チートシート', hint: 'Alt+/', run: onOpenCheatSheet },
   ];
 
+  /**
+   * パンくず。先頭はプロジェクト名で、そこから tmux 側の居場所へ降りていく。
+   * セッション名がプロジェクト名と同じときは繰り返さない（同じ語が 2 つ並ぶだけ）。
+   */
+  const crumbs = (): ReactElement[] =>
+    [
+      project ? (
+        <span className="crumb project" title={tildePath(activePane?.path ?? '', home)}>
+          {project}
+        </span>
+      ) : null,
+      session && session.name !== project ? (
+        <span className="crumb strong">{session.name}</span>
+      ) : null,
+      win ? (
+        <span className="crumb">
+          {win.index}:{win.name}
+        </span>
+      ) : null,
+      activePane ? (
+        <span className="crumb dim">
+          pane {activePane.index} · {activePane.command}
+        </span>
+      ) : null,
+    ].filter((node): node is ReactElement => node !== null);
+
   return (
     <div className="editorbar">
       <div className="crumbs">
         {session ? (
           <>
-            <span className="crumb strong">{session.name}</span>
-            {win && (
-              <>
-                <span className="sep">›</span>
-                <span className="crumb">
-                  {win.index}:{win.name}
-                </span>
-              </>
-            )}
-            {activePane && (
-              <>
-                <span className="sep">›</span>
-                <span className="crumb dim">
-                  pane {activePane.index} · {activePane.command}
-                </span>
-              </>
-            )}
+            {crumbs().map((node, i) => (
+              <Fragment key={i}>
+                {i > 0 && <span className="sep">›</span>}
+                {node}
+              </Fragment>
+            ))}
             {tileCount > 1 && <span className="tile-count">{tileCount} 分割</span>}
           </>
         ) : (

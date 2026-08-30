@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { HoverPreview, type PreviewTarget } from './HoverPreview';
 import type { DragPayload } from './SplitView';
 import { STATUS_ORDER, relTime, summarize, windowStatus, type StatusKind, type WindowStatus } from '../status';
+import { shortPath, subPath, tildePath } from '../paths';
 import type { Pane, Session, TmuxWindow } from '../types';
 
 /** 一覧の並べ方。プロジェクト = 作業ディレクトリのリポジトリ単位 */
@@ -38,26 +39,6 @@ interface Props {
 export type TreeDropTarget =
   | { kind: 'session'; sessionId: string }
   | { kind: 'window'; windowId: string; sessionId: string; place: 'before' | 'after' };
-
-/** 表示用にパスを縮める。ホーム直下なら `~`、それ以外は末尾のディレクトリ名 */
-function shortPath(path: string, home: string): string {
-  if (!path) return '';
-  if (path === home) return '~';
-  const leaf = path.replace(/\/+$/, '').split('/').pop();
-  return leaf || path;
-}
-
-/** ホームを `~` に畳んだフルパス。見出しの補足とツールチップに使う */
-function tildePath(path: string, home: string): string {
-  if (!path) return '';
-  return home && path.startsWith(home) ? '~' + path.slice(home.length) : path;
-}
-
-/** プロジェクトのルートより下にいるときだけ、その相対パスを返す */
-function subPath(full: string, root: string): string {
-  if (!full || !root || full === root || !full.startsWith(root + '/')) return '';
-  return full.slice(root.length + 1);
-}
 
 export function Sidebar({
   sessions,
@@ -671,6 +652,14 @@ export function Sidebar({
                       )}
 
                       <span className="win-flags">
+                        {opened && (
+                          <span
+                            className="badge open"
+                            title="いまタイルに出ています。選ぶとそのタイルに移ります"
+                          >
+                            表示中
+                          </span>
+                        )}
                         {win.panes > 1 && <span className="badge">{win.panes}p</span>}
                         {win.zoomed && <span className="badge zoom">Z</span>}
                         {win.bell && <span className="badge bell">!</span>}

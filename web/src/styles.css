@@ -257,6 +257,7 @@ input {
   display: flex;
   align-items: center;
   gap: 8px;
+  overflow: hidden;
   padding: 0 10px;
   height: 35px; /* VS Code のタブと同じ高さ */
   background: var(--bg-2);
@@ -275,23 +276,42 @@ input {
 }
 .tile-title {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 4px;
   flex: none;
+  min-width: 0;
+  max-width: 60%;
+  overflow: hidden;
   font-family: var(--mono);
   white-space: nowrap;
 }
-.tile-session {
-  color: inherit;
+/* 見出しの主役。どのプロジェクトの端末かは、まずここだけで見分ける */
+.tile-project {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.tile.focused .tile-session {
+.tile.focused .tile-project {
   color: #fff;
 }
-.tile-sep {
-  color: var(--fg-faint);
+/* プロジェクトのルートより下にいるときだけ出る相対パス */
+.tile-rel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-dim);
 }
-.tile-window {
-  color: var(--fg);
+/* tmux 側の居場所。見分けの役には立たないので小さく後ろに置く */
+.tile-where {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-faint);
 }
 .tile-sub {
   flex: 1;
@@ -467,12 +487,6 @@ input {
   font-size: 10px;
 }
 
-.window-row.opened .win-index::after {
-  content: '▪';
-  color: var(--accent);
-  margin-left: 2px;
-}
-
 /* 外側 (.terminal-host) のサイズは CSS だけで決まる。内側の xterm がどう伸び縮み
    しても外側は変わらないので、ResizeObserver が自分の描画で再発火しない。 */
 .terminal-host {
@@ -627,17 +641,6 @@ input {
   color: var(--fg-faint);
   cursor: pointer;
   padding: 0;
-}
-
-.win-index {
-  width: 18px;
-  flex: none;
-  align-self: flex-start;
-  padding-top: 6px;
-  text-align: center;
-  color: var(--fg-faint);
-  font-family: var(--mono);
-  font-size: 11px;
 }
 
 /* 実行中のペインを持つウィンドウ。点字スピナーの検出結果 */
@@ -942,6 +945,11 @@ input {
   color: var(--yellow);
   background: none;
 }
+/* いまタイルに出ているウィンドウ。もう一度選んでも増えず、そのタイルに移るだけ */
+.badge.open {
+  background: var(--accent-dim);
+  color: #cdf5ff;
+}
 
 .row-tools {
   display: none;
@@ -1015,6 +1023,15 @@ input {
 }
 .crumb.strong {
   color: var(--fg);
+}
+/* パンくずの主役。タイルの見出しと同じく、まずプロジェクト名を読ませる */
+.crumb.project {
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .crumbs .sep {
   color: var(--fg-faint);
