@@ -64,6 +64,49 @@ export function findLeaf(node: LayoutNode, id: string): LeafNode | null {
   return findLeaf(node.a, id) ?? findLeaf(node.b, id);
 }
 
+/**
+ * そのタイルが「何を映しているか」を表す鍵。
+ * windowId が null のタイルはセッションのアクティブウィンドウを映すので、
+ * 同じセッションの null 同士も同じものを映していることになる。
+ */
+export function targetKey(leaf: LeafNode): string {
+  return `${leaf.sessionId}:${leaf.windowId ?? '*'}`;
+}
+
+/** 同じものを映しているタイルを探す。exceptId は自分自身を除くため */
+export function findLeafByTarget(
+  tree: LayoutNode,
+  sessionId: string,
+  windowId: string | null,
+  exceptId?: string | null,
+): LeafNode | null {
+  const key = `${sessionId}:${windowId ?? '*'}`;
+  return allLeaves(tree).find((l) => l.id !== exceptId && targetKey(l) === key) ?? null;
+}
+
+/**
+ * 同じものを映すタイルが 2 枚以上あれば 1 枚に畳む。
+ * 同じ端末が並んでいても情報は増えず、どちらを操作しているのか分からなくなるだけ。
+ * keepId を渡すと、その 1 枚を残す（いま選んだタイルを消さないため）。
+ */
+export function dedupeLeaves(tree: LayoutNode, keepId?: string | null): LayoutNode | null {
+  const leaves = allLeaves(tree);
+  const keep = new Map<string, string>();
+  for (const leaf of leaves) {
+    const key = targetKey(leaf);
+    if (!keep.has(key) || leaf.id === keepId) keep.set(key, leaf.id);
+  }
+  const drop = leaves.filter((leaf) => keep.get(targetKey(leaf)) !== leaf.id);
+  if (drop.length === 0) return tree;
+
+  let next: LayoutNode | null = tree;
+  for (const leaf of drop) {
+    if (!next) break;
+    next = removeLeaf(next, leaf.id);
+  }
+  return next;
+}
+
 /** 各タイルの矩形を % で返す */
 export function leafRects(node: LayoutNode, rect: Rect = FULL): Array<{ leaf: LeafNode; rect: Rect }> {
   if (node.type === 'leaf') return [{ leaf: node, rect }];
@@ -225,6 +268,7 @@ export function stampNames(tree: LayoutNode, { sessions, windows }: NameSource):
  * ・セッションは見つかるがウィンドウが見つからないタイルは残し、windowId を null にして
  *   そのセッションのアクティブウィンドウを映す。分割の形だけでも保つほうが混乱が少ない。
  * ・同じウィンドウを 2 枚のタイルが取り合わないよう、割り当て済みは避ける。
+ *   それでも同じものを映す 2 枚が残ったら、あとで dedupeLeaves が 1 枚に畳む。
  */
 export function remapByName(tree: LayoutNode, src: NameSource): LayoutNode | null {
   const { sessions, windows } = src;

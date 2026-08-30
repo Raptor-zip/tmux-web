@@ -12,7 +12,9 @@ import { ContextMenu, SEP, type MenuEntry } from './components/ContextMenu';
 import type { TerminalHandle } from './components/Terminal';
 import {
   allLeaves,
+  dedupeLeaves,
   findLeaf,
+  findLeafByTarget,
   makeLeaf,
   pruneStale,
   remapByName,
@@ -240,6 +242,24 @@ export default function App() {
     });
   }, [state, needsRemap, windows, layout, setLayout]);
 
+  /**
+   * 同じものを映すタイルが 2 枚できてしまったら 1 枚に畳む。
+   * 選ぶ・落とす経路では作らせないようにしてあるが、tmux 再起動後の繋ぎ直しや
+   * 古い localStorage の配置からは出てくる。最後の砦としてここで畳んでおく。
+   */
+  useEffect(() => {
+    setLayout((prev) => (prev ? dedupeLeaves(prev, focusedId) : prev));
+  }, [layout, focusedId, setLayout]);
+
+  /**
+   * ブラウザのタブ／ウィンドウ名も、いま見ているプロジェクト名にする。
+   * tmux web を複数のウィンドウで開いたとき、タブの並びだけでどれがどれか分かる。
+   */
+  useEffect(() => {
+    const name = activePane?.project?.name;
+    document.title = name ? `${name} — tmux web` : 'tmux web';
+  }, [activePane]);
+
   const focusedTerm = () => (focusedId ? termRefs.current.get(focusedId) : undefined);
 
   const registerTerm = useCallback((id: string, handle: TerminalHandle | null) => {
@@ -343,9 +363,21 @@ export default function App() {
     [setFontSize, setLineHeight, onLineHeightStep],
   );
 
-  /** サイドバーでウィンドウを選ぶ = フォーカス中のタイルの表示を差し替える */
+  /**
+   * サイドバーでウィンドウを選ぶ = フォーカス中のタイルの表示を差し替える。
+   * ただし、すでにどこかのタイルに出ているものを選んだときは開き直さず、
+   * そのタイルへフォーカスを移すだけにする。同じ端末が 2 枚並んでも中身は同じで、
+   * どちらを操作しているのか分からなくなるだけなので。
+   */
   const selectWindow = useCallback(
     (win: TmuxWindow) => {
+      const already = layout ? findLeafByTarget(layout, win.sessionId, win.id) : null;
+      if (already) {
+        setFocusedId(already.id);
+        if (isNarrow()) setSidebarOpen(false);
+        termRefs.current.get(already.id)?.focus();
+        return;
+      }
       setLayout((prev) => {
         if (!prev) return makeLeaf(win.sessionId, win.id);
         if (!focusedId) return prev;
@@ -355,7 +387,7 @@ export default function App() {
       focusedTerm()?.focus();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [focusedId, setLayout],
+    [layout, focusedId, setLayout],
   );
 
   const dropWindow = useCallback(
@@ -363,9 +395,22 @@ export default function App() {
       setLayout((prev) => {
         if (!prev) return makeLeaf(payload.sessionId, payload.windowId);
 
+        // 落とし先がすでに同じものを映しているなら何もしない。
+        // 端に落とされても、同じ端末を隣に増やすだけになってしまう
+        const target = findLeaf(prev, targetLeafId);
+        if (
+          target &&
+          target.sessionId === payload.sessionId &&
+          target.windowId === payload.windowId
+        ) {
+          return prev;
+        }
+
         // すでに開いているタイルを掴んでいた場合は「移動」。先に元の場所から外してから
         // 置き直す。外すと分割がひとつ畳まれるので、置き先の判定はその後の木で行う。
-        const from = payload.fromLeafId ?? null;
+        // サイドバーから掴んだものでも、それが別のタイルに出ているなら同じ扱いにする。
+        const opened = findLeafByTarget(prev, payload.sessionId, payload.windowId, targetLeafId);
+        const from = payload.fromLeafId ?? opened?.id ?? null;
         if (from && from === targetLeafId) return prev;
         const base = from ? removeLeaf(prev, from) : prev;
         if (!base) return makeLeaf(payload.sessionId, payload.windowId);
@@ -650,6 +695,7 @@ export default function App() {
           session={currentSession}
           window={currentWindow}
           activePane={activePane}
+          home={state?.server?.home ?? ''}
           tileCount={leaves.length}
           mode={mode}
           showStatusBar={showStatusBar}
@@ -685,6 +731,7 @@ export default function App() {
                 sessions={sessions}
                 windows={windows}
                 panes={panes}
+                home={state?.server?.home ?? ''}
                 mode={mode}
                 showStatusBar={showStatusBar}
                 fontSize={fontSize}

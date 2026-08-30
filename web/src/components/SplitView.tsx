@@ -8,6 +8,7 @@ import {
   type Rect,
 } from '../layout';
 import { TerminalView, type TerminalHandle } from './Terminal';
+import { projectName, subPath, tildePath } from '../paths';
 import type { Pane, Session, TmuxWindow } from '../types';
 
 /** サイドバーからドラッグしてくるウィンドウ、またはセッションそのもの */
@@ -30,6 +31,8 @@ interface Props {
   sessions: Session[];
   windows: TmuxWindow[];
   panes: Pane[];
+  /** ホームディレクトリ。見出しのパスを `~` に畳むのに使う */
+  home: string;
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
   fontSize: number;
@@ -79,6 +82,7 @@ export function SplitView({
   sessions,
   windows,
   panes,
+  home,
   mode,
   showStatusBar,
   fontSize,
@@ -201,6 +205,20 @@ export function SplitView({
           null;
         const focused = leaf.id === focusedId;
 
+        // 見出しの主役はプロジェクト名（＝作業ディレクトリのリポジトリ名）。
+        // セッション名やウィンドウ番号は tmux 側の都合で、どれを見ているかの目印には
+        // ならない。「どのプロジェクトの端末か」がひと目で分かる並びにする
+        const project = projectName(lead, home) || session?.name || '—';
+        const rel = lead?.project ? subPath(lead.path, lead.project.root) : '';
+        // セッション名がプロジェクト名と同じなら繰り返さない。
+        // 同じ語が 2 度並ぶと、どちらが見出しなのか読みにくくなるだけ
+        const where = [
+          win ? `${win.index}:${win.name}` : 'ウィンドウなし',
+          session && session.name !== project ? session.name : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+
         return (
           <div
             key={leaf.id}
@@ -215,19 +233,20 @@ export function SplitView({
                   kind: 'window',
                   sessionId: leaf.sessionId,
                   windowId: leaf.windowId,
-                  label: win ? `${win.index}:${win.name}` : (session?.name ?? 'ウィンドウ'),
+                  label: project,
                   fromLeafId: leaf.id,
                 })
               }
               title="ドラッグ：別のタイルの端に落とすと並べ替え、サイドバーに落とすとセッション間の移動"
             >
-              <span className="tile-title" title={`${session?.name ?? ''} / ${win?.name ?? ''}`}>
-                <span className="tile-session">{session?.name ?? '—'}</span>
-                <span className="tile-sep">/</span>
-                <span className="tile-window">
-                  {win ? `${win.index}:${win.name}` : 'ウィンドウなし'}
-                </span>
+              <span
+                className="tile-title"
+                title={[tildePath(lead?.path ?? '', home), where].filter(Boolean).join('\n')}
+              >
+                <span className="tile-project">{project}</span>
+                {rel && <span className="tile-rel">/{rel}</span>}
               </span>
+              <span className="tile-where">{where}</span>
               <span className="tile-sub">{lead?.title || lead?.command || ''}</span>
               {closable && (
                 <button
