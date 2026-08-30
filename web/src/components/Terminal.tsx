@@ -257,33 +257,98 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     /**
      * 日本語入力（IME）の確定文字は、xterm ではなくここで送る。
      *
-     * xterm 5.5 の CompositionHelper は、確定時に補助 textarea の
-     * `value.substring(start, end)` を切り出して送る。`start` は変換開始時に同期で
-     * 決まるのに、`end` は compositionupdate の `setTimeout(0)` で遅れて更新される。
-     * 変換で文字数が変わる（「おは」→「おはようございます」）と `end` は古いまま残り、
-     * 次の変換では `start > end` になる。JS の `substring` は start > end だと
-     * **引数を入れ替える**ので、確定したはずの文字ではなく
-     * 「ひとつ前に入力した文章の断片」が送られてしまう。
+     * xterm には確定文字を送る経路が 3 つあり、どれが動くかはイベントが届く順で
+     * 変わる。IME が絡むと同じ文字が 2 回、3 回と送られる。
      *
-     * 補助 textarea は xterm が確定・Enter・blur のときしか消さないため、確定文が
-     * そこに溜まり続けているのがこの誤爆の材料になる。ここでは変換の前後で必ず空にし、
-     * 確定文字は compositionend の `data`（IME が確定した文字そのもの）から送る。
-     * `data` を持たない環境（null）では textarea を触らず、従来どおり xterm に任せる。
+     * 1. CompositionHelper._finalizeComposition
+     *    補助 textarea の `value.substring(start, end)` を切り出して送る。`start` は
+     *    変換開始時に同期で決まるのに、`end` は compositionupdate の `setTimeout(0)`
+     *    で遅れて更新される。変換で文字数が変わる（「おは」→「おはようございます」）と
+     *    `end` が古いまま残り、次の変換では `start > end` になる。JS の `substring` は
+     *    start > end だと**引数を入れ替える**ので、ひとつ前に入力した文章の断片が出る。
+     * 2. CompositionHelper._handleAnyTextareaChanges
+     *    IME が有効なときのキーは keyCode 229 で届く。xterm はそこで textarea の値を
+     *    覚えておき、`setTimeout(0)` のあとに増えていたぶんを送る。「？」「、」のように
+     *    IME が変換を挟まず即確定する文字がここを通る。
+     * 3. Terminal._inputEvent
+     *    input イベントの `data` をそのまま送る。keyup が input より先に来たときだけ
+     *    通る（`_keyDownSeen` の判定）ので、出たり出なかったりする。
+     *
+     * 2 と 3 は同じ文字を二重に送りうるし、こちらが compositionend で送ればさらに
+     * 増える。「？」や「、」が 2 つ 3 つ並ぶのはこれ。そこで IME が絡む入力はすべて
+     * こちらで引き受け、xterm には渡さない。確定文字は compositionend の `data`
+     * （IME が確定した文字そのもの）から送り、そのあと textarea に書き戻された同じ
+     * 文字は捨てる。補助 textarea は常に空にしておき、2 の差分検出を空振りさせる。
+     *
+     * IME が絡まない入力（絵文字パレットなど）は今までどおり xterm に任せる。
+     * `data` を出さない環境の compositionend も同じく xterm の経路に戻す。
      */
     const clearHelper = () => {
       if (term.textarea) term.textarea.value = '';
     };
-    const onCompositionEnd = (e: Event) => {
-      const data = (e as CompositionEvent).data;
-      if (data == null) return; // data を出さない環境。xterm の経路に任せる
+
+    /** 変換中か。途中経過の textarea は IME のものなので触らない */
+    let composing = false;
+    /** 直前の keydown が IME のものだったか（IME が有効なキーは keyCode 229 で届く） */
+    let imeKey = false;
+    /** compositionend で送った確定文字。同じものが input で戻ってきたら捨てる */
+    let sent: { data: string; at: number } | null = null;
+
+    const onKeyDown = (e: Event) => {
+      const ev = e as KeyboardEvent;
+      imeKey = ev.keyCode === 229 || ev.isComposing;
+      // xterm はこの keydown の時点の textarea を覚えておき、あとで増減を見て
+      // 差分（減っていれば DEL）を送る。変換中でなければ空が正しい状態なので、
+      // 書き戻しの取りこぼしが残っていてもここで必ず空に揃える。
+      if (imeKey && !composing) clearHelper();
+    };
+    const onCompositionStart = () => {
+      composing = true;
+      sent = null;
       clearHelper();
-      if (data) sendInputRef.current(data);
+    };
+    const onCompositionEnd = (e: Event) => {
+      composing = false;
+      const data = (e as CompositionEvent).data;
+      if (data == null) {
+        // data を出さない環境。この確定は xterm の経路に任せる
+        imeKey = false;
+        return;
+      }
+      clearHelper();
+      if (data) {
+        sent = { data, at: Date.now() };
+        sendInputRef.current(data);
+      }
+    };
+
+    /**
+     * 確定文字が補助 textarea に書き込まれたときに来る。ここで textarea を空に戻し、
+     * xterm には渡さない。compositionend で送った直後なら二度目なので捨てる。
+     */
+    const onInput = (e: Event) => {
+      if (composing) return; // 変換の途中経過。IME の下敷きを壊さない
+      const data = (e as InputEvent).data;
+      if (data == null) return; // 削除など、文字を伴わない変更は xterm に任せる
+      if (!imeKey && !sent) return; // IME 由来でなければ今までどおり
+      clearHelper();
+      e.stopPropagation();
+      // 確定直後に同じ文字が戻ってきただけなら送らない。時間で区切るのは、
+      // 同じ文字を続けて打ったときに 2 文字目まで消さないため
+      if (sent && sent.data === data && Date.now() - sent.at < 500) {
+        sent = null;
+        return;
+      }
+      sent = null;
+      sendInputRef.current(data);
     };
 
     // xterm 自身のリスナーは textarea（イベントの target）に付いている。
     // 先に動かす必要があるので、祖先である host の capture 段階で受ける。
-    host.addEventListener('compositionstart', clearHelper, true);
+    host.addEventListener('keydown', onKeyDown, true);
+    host.addEventListener('compositionstart', onCompositionStart, true);
     host.addEventListener('compositionend', onCompositionEnd, true);
+    host.addEventListener('input', onInput, true);
     host.addEventListener('mousedown', swallowRightButton, true);
     host.addEventListener('mouseup', swallowRightButton, true);
     host.addEventListener('contextmenu', onContextMenu, true);
@@ -291,8 +356,10 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     return () => {
       ro.disconnect();
-      host.removeEventListener('compositionstart', clearHelper, true);
+      host.removeEventListener('keydown', onKeyDown, true);
+      host.removeEventListener('compositionstart', onCompositionStart, true);
       host.removeEventListener('compositionend', onCompositionEnd, true);
+      host.removeEventListener('input', onInput, true);
       host.removeEventListener('mousedown', swallowRightButton, true);
       host.removeEventListener('mouseup', swallowRightButton, true);
       host.removeEventListener('contextmenu', onContextMenu, true);
