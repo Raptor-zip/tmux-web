@@ -1,55 +1,67 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  activeTab,
   dividers,
   dropSideFor,
   leafRects,
   type DropSide,
   type LayoutNode,
   type Rect,
+  type TabRef,
 } from '../layout';
+import { TabStrip } from './TabStrip';
 import { TerminalView, type TerminalHandle } from './Terminal';
-import { projectName, subPath, tildePath } from '../paths';
-import type { Pane, Session, TmuxWindow } from '../types';
+import type { Session, TmuxWindow } from '../types';
+import type { WindowView } from '../windows';
 
-/** サイドバーからドラッグしてくるウィンドウ、またはセッションそのもの */
+/** サイドバーやタブから掴んだもの */
 export interface DragPayload {
   /** session を掴んだときは windowId が null になり、代表ウィンドウが開かれる */
   kind: 'window' | 'session';
   sessionId: string;
   windowId: string | null;
   label: string;
-  /**
-   * すでに開いているタイルを掴んだ場合、その元タイルの id。
-   * 新しく開くのではなく「移動」になるので、落とし先に置いたあと元は消す。
-   */
-  fromLeafId?: string | null;
+  /** すでに開いているタブを掴んだ場合、その元タブの id。新規ではなく「移動」になる */
+  fromTabId?: string | null;
 }
+
+/** ドラッグ中のものを落とせる場所 */
+export type DropTarget =
+  | { kind: 'split'; leafId: string; side: Exclude<DropSide, 'center'> }
+  | { kind: 'tab'; leafId: string; before: string | null };
 
 interface Props {
   tree: LayoutNode;
   focusedId: string | null;
   sessions: Session[];
   windows: TmuxWindow[];
-  panes: Pane[];
-  /** ホームディレクトリ。見出しのパスを `~` に畳むのに使う */
-  home: string;
+  /** ウィンドウ id → 表示に使う情報 */
+  views: Map<string, WindowView>;
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
   fontSize: number;
   lineHeight: number;
-  onTerminalContextMenu(leafId: string, x: number, y: number): void;
-  /** ドラッグ中のウィンドウ。null ならドラッグしていない */
+  /** ドラッグ中のもの。null ならドラッグしていない */
   drag: DragPayload | null;
+  /**
+   * tmux が入れ替わって、配置を繋ぎ直している最中。
+   * 覚えている id は別のセッションを指しているので、繋ぎ直しが済むまで attach しない。
+   */
+  pendingRemap: boolean;
   onFocus(leafId: string): void;
-  onClose(leafId: string): void;
-  onDropWindow(targetLeafId: string, side: DropSide, payload: DragPayload): void;
-  /** タイルの見出しを掴んで動かし始めた。以降はサイドバーからのドラッグと同じ扱い */
+  onActivateTab(tabId: string): void;
+  onCloseTab(tabId: string): void;
+  onCloseTile(leafId: string): void;
+  onNewTab(leafId: string): void;
+  onDrop(target: DropTarget, payload: DragPayload): void;
   onStartDrag(payload: DragPayload): void;
   onDragEnd(): void;
   onRatio(splitId: string, ratio: number): void;
   onStatus(leafId: string, status: { connected: boolean; message?: string }): void;
   /** 端末で選択した内容がクリップボードに入った */
   onCopied(text: string): void;
+  onTerminalContextMenu(leafId: string, x: number, y: number): void;
+  onTabContextMenu(tabId: string, x: number, y: number): void;
   registerTerm(leafId: string, handle: TerminalHandle | null): void;
 }
 
@@ -61,7 +73,7 @@ const pct = (r: Rect) => ({
 });
 
 /** ドロップ先のプレビュー矩形（タイルのどこに入るかを見せる） */
-function previewRect(rect: Rect, side: DropSide): Rect {
+function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
   switch (side) {
     case 'left':
       return { ...rect, width: rect.width / 2 };
@@ -69,10 +81,8 @@ function previewRect(rect: Rect, side: DropSide): Rect {
       return { ...rect, left: rect.left + rect.width / 2, width: rect.width / 2 };
     case 'top':
       return { ...rect, height: rect.height / 2 };
-    case 'bottom':
-      return { ...rect, top: rect.top + rect.height / 2, height: rect.height / 2 };
     default:
-      return rect;
+      return { ...rect, top: rect.top + rect.height / 2, height: rect.height / 2 };
   }
 }
 
@@ -81,35 +91,80 @@ export function SplitView({
   focusedId,
   sessions,
   windows,
-  panes,
-  home,
+  views,
   mode,
   showStatusBar,
   fontSize,
   lineHeight,
-  onTerminalContextMenu,
   drag,
+  pendingRemap,
   onFocus,
-  onClose,
-  onDropWindow,
+  onActivateTab,
+  onCloseTab,
+  onCloseTile,
+  onNewTab,
+  onDrop,
   onStartDrag,
   onDragEnd,
   onRatio,
   onStatus,
   onCopied,
+  onTerminalContextMenu,
+  onTabContextMenu,
   registerTerm,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const [dropHint, setDropHint] = useState<{ leafId: string; side: DropSide } | null>(null);
+  const [dropAt, setDropAt] = useState<DropTarget | null>(null);
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null);
 
   const tiles = useMemo(() => leafRects(tree), [tree]);
   const bars = useMemo(() => dividers(tree), [tree]);
-  const closable = tiles.length > 1;
+  const closableTile = tiles.length > 1;
 
-  /** カーソル位置から「どのタイルのどの辺か」を求める。矩形は % なので実寸に直して判定する */
+  /** タブが映しているウィンドウ。windowId が null のタブはセッションのアクティブを見る */
+  const viewOf = useCallback(
+    (tab: TabRef) => {
+      const session = sessions.find((s) => s.id === tab.sessionId) ?? null;
+      const win = tab.windowId
+        ? windows.find((w) => w.id === tab.windowId)
+        : windows.find((w) => w.sessionId === tab.sessionId && w.active);
+      return { view: win ? views.get(win.id) ?? null : null, session };
+    },
+    [sessions, windows, views],
+  );
+
+  /**
+   * カーソルの下に何があるかを求める。
+   *
+   * タブ列の上なら差し込み位置、そうでなければタイルのどの辺か。タブの当たり判定は
+   * 実際の DOM に聞く（elementsFromPoint はドラッグ用の面の下にあるものまで返す）。
+   * 矩形を自前で持たないので、タブ列が横スクロールしていてもずれない。
+   */
   const hitTest = useCallback(
-    (clientX: number, clientY: number) => {
+    (clientX: number, clientY: number): DropTarget | null => {
+      const stack = document
+        .elementsFromPoint(clientX, clientY)
+        .filter((el): el is HTMLElement => el instanceof HTMLElement);
+
+      const tabEl = stack.find((el) => el.dataset.tabId);
+      const stripEl = stack.find((el) => el.dataset.stripLeaf);
+      if (tabEl && stripEl) {
+        const ids = [...stripEl.querySelectorAll<HTMLElement>('[data-tab-id]')].map(
+          (el) => el.dataset.tabId as string,
+        );
+        const at = ids.indexOf(tabEl.dataset.tabId as string);
+        const r = tabEl.getBoundingClientRect();
+        const after = clientX > r.left + r.width / 2;
+        return {
+          kind: 'tab',
+          leafId: stripEl.dataset.stripLeaf as string,
+          before: after ? ids[at + 1] ?? null : ids[at],
+        };
+      }
+      if (stripEl) {
+        return { kind: 'tab', leafId: stripEl.dataset.stripLeaf as string, before: null };
+      }
+
       const host = hostRef.current;
       if (!host) return null;
       const box = host.getBoundingClientRect();
@@ -123,47 +178,13 @@ export function SplitView({
           y < rect.top + rect.height,
       );
       if (!hit) return null;
-      return {
-        leafId: hit.leaf.id,
-        side: dropSideFor(
-          x - hit.rect.left,
-          y - hit.rect.top,
-          hit.rect.width,
-          hit.rect.height,
-        ),
-      };
+      const side = dropSideFor(x - hit.rect.left, y - hit.rect.top, hit.rect.width, hit.rect.height);
+      return side === 'center'
+        ? { kind: 'tab', leafId: hit.leaf.id, before: null }
+        : { kind: 'split', leafId: hit.leaf.id, side };
     },
     [tiles],
   );
-
-  /**
-   * タイルの見出しを掴んでの移動。サイドバーの行と同じく 6px 動いたら開始とみなす。
-   * 閾値を置かないと、タイルを選ぶだけのクリックでドラッグが始まってしまう。
-   */
-  const pending = useRef<{ x: number; y: number; payload: DragPayload } | null>(null);
-
-  const armTileDrag = (e: React.PointerEvent, payload: DragPayload) => {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
-    if ((e.target as HTMLElement).closest('button')) return; // ✕ などは掴まない
-    pending.current = { x: e.clientX, y: e.clientY, payload };
-
-    const move = (ev: PointerEvent) => {
-      const p = pending.current;
-      if (!p) return;
-      if (Math.hypot(ev.clientX - p.x, ev.clientY - p.y) < 6) return;
-      cleanup();
-      onStartDrag(p.payload);
-    };
-    const cleanup = () => {
-      pending.current = null;
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', cleanup);
-      window.removeEventListener('pointercancel', cleanup);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', cleanup);
-    window.addEventListener('pointercancel', cleanup);
-  };
 
   const startDividerDrag = useCallback(
     (e: React.PointerEvent, split: { id: string; dir: 'row' | 'column'; parent: Rect }) => {
@@ -197,85 +218,52 @@ export function SplitView({
   return (
     <div className="splitview" ref={hostRef}>
       {tiles.map(({ leaf, rect }) => {
-        const session = sessions.find((s) => s.id === leaf.sessionId) ?? null;
-        const win = windows.find((w) => w.id === leaf.windowId) ?? null;
-        const lead =
-          panes.find((p) => p.windowId === leaf.windowId && p.active) ??
-          panes.find((p) => p.windowId === leaf.windowId) ??
-          null;
+        const tab = activeTab(leaf);
+        const { view } = tab ? viewOf(tab) : { view: null };
         const focused = leaf.id === focusedId;
-
-        // 見出しの主役はプロジェクト名（＝作業ディレクトリのリポジトリ名）。
-        // セッション名やウィンドウ番号は tmux 側の都合で、どれを見ているかの目印には
-        // ならない。「どのプロジェクトの端末か」がひと目で分かる並びにする
-        const project = projectName(lead, home) || session?.name || '—';
-        const rel = lead?.project ? subPath(lead.path, lead.project.root) : '';
-        // セッション名がプロジェクト名と同じなら繰り返さない。
-        // 同じ語が 2 度並ぶと、どちらが見出しなのか読みにくくなるだけ
-        const where = [
-          win ? `${win.index}:${win.name}` : 'ウィンドウなし',
-          session && session.name !== project ? session.name : '',
-        ]
-          .filter(Boolean)
-          .join(' · ');
+        const tabDrop = dropAt?.kind === 'tab' && dropAt.leafId === leaf.id;
 
         return (
           <div
             key={leaf.id}
-            className={`tile ${focused ? 'focused' : ''}`}
+            className={`tile ${focused ? 'focused' : ''} ${tabDrop ? 'drop-tab' : ''}`}
             style={pct(rect)}
             onMouseDown={() => onFocus(leaf.id)}
           >
-            <div
-              className={`tile-head ${drag?.fromLeafId === leaf.id ? 'dragging' : ''}`}
-              onPointerDown={(e) =>
-                armTileDrag(e, {
-                  kind: 'window',
-                  sessionId: leaf.sessionId,
-                  windowId: leaf.windowId,
-                  label: project,
-                  fromLeafId: leaf.id,
-                })
-              }
-              title="ドラッグ：別のタイルの端に落とすと並べ替え、サイドバーに落とすとセッション間の移動"
-            >
-              <span
-                className="tile-title"
-                title={[tildePath(lead?.path ?? '', home), where].filter(Boolean).join('\n')}
-              >
-                <span className="tile-project">{project}</span>
-                {rel && <span className="tile-rel">/{rel}</span>}
-              </span>
-              <span className="tile-where">{where}</span>
-              <span className="tile-sub">{lead?.title || lead?.command || ''}</span>
-              {closable && (
-                <button
-                  className="tile-close"
-                  title="このタイルを閉じる"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(leaf.id);
-                  }}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+            <TabStrip
+              leaf={leaf}
+              focused={focused}
+              viewOf={viewOf}
+              closableTile={closableTile}
+              draggingTabId={drag?.fromTabId ?? null}
+              caret={tabDrop ? dropAt.before : undefined}
+              onActivate={(id) => {
+                onFocus(leaf.id);
+                onActivateTab(id);
+              }}
+              onClose={onCloseTab}
+              onCloseTile={() => onCloseTile(leaf.id)}
+              onNewTab={() => onNewTab(leaf.id)}
+              onStartDrag={onStartDrag}
+              onContextMenu={onTabContextMenu}
+            />
 
             <div className="tile-body">
-              <TerminalView
-                ref={(h) => registerTerm(leaf.id, h)}
-                sessionId={leaf.sessionId}
-                windowId={leaf.windowId}
-                windowIndex={win?.index ?? null}
-                mode={mode}
-                showStatusBar={showStatusBar}
-                fontSize={fontSize}
-                lineHeight={lineHeight}
-                onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
-                onStatus={(s) => onStatus(leaf.id, s)}
-                onCopied={onCopied}
-              />
+              {tab ? (
+                <TerminalView
+                  ref={(h) => registerTerm(leaf.id, h)}
+                  sessionId={pendingRemap ? null : tab.sessionId}
+                  windowId={tab.windowId}
+                  windowIndex={view?.win.index ?? null}
+                  mode={mode}
+                  showStatusBar={showStatusBar}
+                  fontSize={fontSize}
+                  lineHeight={lineHeight}
+                  onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
+                  onStatus={(s) => onStatus(leaf.id, s)}
+                  onCopied={onCopied}
+                />
+              ) : null}
             </div>
           </div>
         );
@@ -300,39 +288,39 @@ export function SplitView({
           className="drag-catcher"
           onPointerMove={(e) => {
             setGhost({ x: e.clientX, y: e.clientY });
-            setDropHint(hitTest(e.clientX, e.clientY));
+            setDropAt(hitTest(e.clientX, e.clientY));
           }}
           onPointerUp={(e) => {
             const target = hitTest(e.clientX, e.clientY);
-            setDropHint(null);
+            setDropAt(null);
             setGhost(null);
-            if (target) onDropWindow(target.leafId, target.side, drag);
+            if (target) onDrop(target, drag);
             onDragEnd();
           }}
           onPointerCancel={() => {
-            setDropHint(null);
+            setDropAt(null);
             setGhost(null);
             onDragEnd();
           }}
         />
       )}
 
-      {drag && dropHint && (
+      {drag && dropAt?.kind === 'split' && (
         <div
           className="drop-preview"
           style={pct(
             previewRect(
-              tiles.find((t) => t.leaf.id === dropHint.leafId)?.rect ?? {
+              tiles.find((t) => t.leaf.id === dropAt.leafId)?.rect ?? {
                 left: 0,
                 top: 0,
                 width: 100,
                 height: 100,
               },
-              dropHint.side,
+              dropAt.side,
             ),
           )}
         >
-          <span>{dropHint.side === 'center' ? 'ここに差し替え' : 'ここに並べる'}</span>
+          <span>ここに並べる</span>
         </div>
       )}
 

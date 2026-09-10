@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { HoverPreview, type PreviewTarget } from './HoverPreview';
 import type { DragPayload } from './SplitView';
-import { STATUS_ORDER, relTime, summarize, windowStatus, type StatusKind, type WindowStatus } from '../status';
-import { shortPath, subPath, tildePath } from '../paths';
-import type { Pane, Session, TmuxWindow } from '../types';
+import { STATUS_ORDER, relTime, summarize, type StatusKind, type WindowStatus } from '../status';
+import { shortPath, tildePath } from '../paths';
+import type { WindowView } from '../windows';
+import type { Session, TmuxWindow } from '../types';
 
 /** 一覧の並べ方。プロジェクト = 作業ディレクトリのリポジトリ単位 */
 export type GroupBy = 'project' | 'session';
@@ -11,12 +12,13 @@ export type GroupBy = 'project' | 'session';
 interface Props {
   sessions: Session[];
   windows: TmuxWindow[];
-  panes: Pane[];
+  /** ウィンドウ id → 見せ方。タブや切り替えパレットと同じものを使う */
+  views: Map<string, WindowView>;
   home: string;
   groupBy: GroupBy;
   activeSessionId: string | null;
   activeWindowId: string | null;
-  /** いまタイルに表示されているウィンドウ。分割中の見分け用 */
+  /** いまタブとして開かれているウィンドウ */
   openWindowIds: (string | null)[];
   connected: boolean;
   unauthorized: boolean;
@@ -43,7 +45,7 @@ export type TreeDropTarget =
 export function Sidebar({
   sessions,
   windows,
-  panes,
+  views,
   home,
   groupBy,
   activeSessionId,
@@ -70,72 +72,22 @@ export function Sidebar({
   const [draft, setDraft] = useState('');
   const [filter, setFilter] = useState('');
 
-  // 「未使用 12分」のような相対時間を、状態が変わらなくても進ませる
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  /** ウィンドウ id → そのウィンドウのペイン（重複して届くので id で畳む） */
-  const panesByWindow = useMemo(() => {
-    const map = new Map<string, Map<string, Pane>>();
-    for (const p of panes) {
-      let inner = map.get(p.windowId);
-      if (!inner) map.set(p.windowId, (inner = new Map()));
-      inner.set(p.id, p);
-    }
-    return new Map([...map].map(([id, inner]) => [id, [...inner.values()]]));
-  }, [panes]);
-
-  /** ウィンドウごとの「代表するペイン」。アクティブなペイン、無ければ先頭 */
-  const leadPane = useMemo(() => {
-    const map = new Map<string, Pane>();
-    for (const [id, list] of panesByWindow) {
-      const lead =
-        list.find((p) => p.active) ??
-        [...list].sort((a, b) => a.index - b.index)[0] ??
-        null;
-      if (lead) map.set(id, lead);
-    }
-    return map;
-  }, [panesByWindow]);
-
-  const statusOf = useMemo(() => {
-    const map = new Map<string, WindowStatus>();
-    for (const win of windows) {
-      map.set(win.id, windowStatus(win, panesByWindow.get(win.id) ?? [], now));
-    }
-    return map;
-  }, [windows, panesByWindow, now]);
-
-  /** ウィンドウ 1 行に出す情報をまとめる */
+  /** ウィンドウ 1 行に出す情報。見せ方そのものは windows.ts が持つ */
   const describe = (win: TmuxWindow) => {
-    const pane = leadPane.get(win.id);
-    const title = pane?.title?.trim() ?? '';
-    const project = pane?.project ?? null;
-    const full = pane?.path ?? '';
-    // 端末タイトルがあればそれを主役にする（ウィンドウ名が "claude" だらけでも見分けられる）
-    const primary = title || win.name;
-    const sub = project ? subPath(full, project.root) : '';
-
+    const v = views.get(win.id);
     // プロジェクト別に並べているときは、プロジェクト名は見出しに出ているので繰り返さない。
     // 代わりに「どのセッションのウィンドウか」を出す（tmux 側で探すときの手がかり）
     const secondary =
       groupBy === 'project'
-        ? [win.sessionName, `${win.index}:${win.name}`, sub].filter(Boolean).join(' · ')
-        : [`${win.index}:${win.name}`, project?.name ?? shortPath(full, home), sub]
-            .filter(Boolean)
-            .join(' · ');
-
+        ? [win.sessionName, v?.where, v?.rel].filter(Boolean).join(' · ')
+        : [v?.where, v?.project, v?.rel].filter(Boolean).join(' · ');
     return {
-      primary,
+      primary: v?.primary ?? win.name,
       secondary,
-      busy: pane?.busy ?? false,
-      fullPath: full,
-      command: pane?.command ?? '',
-      project,
-      status: statusOf.get(win.id) ?? null,
+      fullPath: v?.fullPath ?? '',
+      command: v?.command ?? '',
+      project: v?.lead?.project ?? null,
+      status: (v?.status ?? null) as WindowStatus | null,
     };
   };
 
@@ -147,7 +99,7 @@ export function Sidebar({
 
   const hoverPreview = (e: React.PointerEvent, win: TmuxWindow | null, label: string) => {
     if (e.pointerType !== 'mouse' || drag) return;
-    const pane = win ? leadPane.get(win.id) : null;
+    const pane = win ? views.get(win.id)?.lead : null;
     if (!pane) {
       setPreview(null);
       return;
@@ -204,7 +156,7 @@ export function Sidebar({
    * 行の高さがまちまちでもスクロールしても当たり判定がずれない。
    *
    * プロジェクト別に並べているときは木の形が tmux の構造と一致しないので、
-   * 並べ替えの落とし先にはしない（掴んで端末側に落とす＝画面分割だけ効く）。
+   * 並べ替えの落とし先にはしない（掴んで端末側に落とす＝タブや分割だけ効く）。
    */
   const [dropAt, setDropAt] = useState<TreeDropTarget | null>(null);
   const treeDrops = groupBy === 'session';
@@ -257,8 +209,17 @@ export function Sidebar({
   const matches = (win: TmuxWindow) => {
     if (!query) return true;
     const d = describe(win);
-    return [win.sessionName, win.name, d.primary, d.secondary, d.fullPath, d.command,
-      d.project?.name, d.status?.label, ...(d.status?.chips ?? [])]
+    return [
+      win.sessionName,
+      win.name,
+      d.primary,
+      d.secondary,
+      d.fullPath,
+      d.command,
+      d.project?.name,
+      d.status?.label,
+      ...(d.status?.chips ?? []),
+    ]
       .join(' ')
       .toLowerCase()
       .includes(query);
@@ -296,7 +257,7 @@ export function Sidebar({
 
     const byRoot = new Map<string, Group>();
     for (const win of visible) {
-      const pane = leadPane.get(win.id);
+      const pane = views.get(win.id)?.lead ?? null;
       const root = pane?.project?.root ?? pane?.path ?? win.sessionName;
       let g = byRoot.get(root);
       if (!g) {
@@ -318,7 +279,9 @@ export function Sidebar({
     // 動いているプロジェクトを上にまとめる。その中は名前順にして、状態が変わるまで
     // 並びが動かないようにする（毎秒入れ替わると目で追えない）
     const rank = (g: Group) =>
-      Math.min(...g.wins.map((w) => STATUS_ORDER.indexOf(statusOf.get(w.id)?.kind ?? 'idle')));
+      Math.min(
+        ...g.wins.map((w) => STATUS_ORDER.indexOf(views.get(w.id)?.status.kind ?? 'idle')),
+      );
     return [...byRoot.values()]
       .map((g) => ({
         ...g,
@@ -332,7 +295,7 @@ export function Sidebar({
         return ra - rb || a.name.localeCompare(b.name);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupBy, sessions, windows, leadPane, statusOf, home, query]);
+  }, [groupBy, sessions, windows, views, home, query]);
 
   const toggle = (id: string) => {
     setCollapsed((prev) => {
@@ -375,7 +338,9 @@ export function Sidebar({
 
   /** 見出しの右に出す「作業中 2・未使用 5」の要約 */
   const groupSummary = (g: Group) => {
-    const counts = summarize(g.wins.map((w) => statusOf.get(w.id)!).filter(Boolean));
+    const counts = summarize(
+      g.wins.map((w) => views.get(w.id)?.status).filter((s): s is WindowStatus => Boolean(s)),
+    );
     return STATUS_ORDER.filter((k) => counts[k]).map((k) => (
       <span key={k} className={`tally ${k}`} title={`${k}`}>
         <i />
@@ -501,7 +466,11 @@ export function Sidebar({
                     : g.hint
                 }
               >
-                <button className="twisty" onClick={() => toggle(g.key)}>
+                <button
+                  className="twisty"
+                  aria-label={isOpen ? '畳む' : '開く'}
+                  onClick={() => toggle(g.key)}
+                >
                   {isOpen ? '▾' : '▸'}
                 </button>
 
@@ -531,11 +500,8 @@ export function Sidebar({
 
                 <div className="row-tools">
                   <button
-                    title={
-                      session
-                        ? 'ウィンドウを追加'
-                        : `${g.hint} で新しいウィンドウを開く`
-                    }
+                    title={session ? 'ウィンドウを追加' : `${g.hint} で新しいウィンドウを開く`}
+                    aria-label="ウィンドウを追加"
                     onClick={() =>
                       headSessionId &&
                       onAction('newWindow', {
@@ -550,6 +516,7 @@ export function Sidebar({
                     <>
                       <button
                         title="名前を変更"
+                        aria-label="名前を変更"
                         onClick={() => startRename('session', session.id, session.name)}
                       >
                         ✎
@@ -557,6 +524,7 @@ export function Sidebar({
                       <button
                         className="danger"
                         title="セッションを削除"
+                        aria-label="セッションを削除"
                         onClick={() =>
                           onConfirm(
                             `セッション「${session.name}」を削除しますか？`,
@@ -620,7 +588,7 @@ export function Sidebar({
                       title={
                         drag && treeDrops
                           ? 'ここに落とすとこの位置に差し込まれます'
-                          : 'ドラッグ：右の端に落とすと画面分割、別のセッションに落とすと移動'
+                          : 'クリックでタブに開く。ドラッグ：タブ列に落とすと差し込み、端末の端なら画面分割、別のセッション行なら移動'
                       }
                     >
                       <span className={`state-dot ${kind}`} title={st?.label} />
@@ -655,7 +623,7 @@ export function Sidebar({
                         {opened && (
                           <span
                             className="badge open"
-                            title="いまタイルに出ています。選ぶとそのタイルに移ります"
+                            title="いまタブとして開いています。選ぶとそのタブに移ります"
                           >
                             表示中
                           </span>
@@ -673,13 +641,15 @@ export function Sidebar({
                       <div className="row-tools">
                         <button
                           title="名前を変更"
+                          aria-label="名前を変更"
                           onClick={() => startRename('window', win.id, win.name)}
                         >
                           ✎
                         </button>
                         <button
                           className="danger"
-                          title="ウィンドウを閉じる"
+                          title="ウィンドウを閉じる（tmux ごと）"
+                          aria-label="ウィンドウを閉じる"
                           onClick={() =>
                             onConfirm(
                               `ウィンドウ「${win.name}」を閉じますか？`,

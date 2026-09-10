@@ -123,7 +123,7 @@ const COLLAPSE_GROUPS = process.env.TMUX_WEB_SHOW_GROUP_VIEWS !== '1';
  * - グループを共有するセッションは 1 つだけ残す。tmux のグループはウィンドウを
  *   共有するので、`tmux new-session -t <既存>` で端末ごとに view を作る使い方だと、
  *   同じウィンドウが view の数だけ並んでしまう。中身が同じものを何度も見せない。
- *   残すのはいちばん古いもの（＝元のセッション）。
+ *   残すのはグループ名と同じ名前のもの（＝元のセッション）。無ければいちばん古いもの。
  *
  * ウィンドウとペインはセッションごとに重複して返るので、残したセッションの分だけに揃える。
  */
@@ -132,10 +132,17 @@ function visibleState(state) {
 
   if (COLLAPSE_GROUPS) {
     const keep = new Map(); // グループ名 -> 残すセッション
+    // 作成時刻だけで選ぶと、再起動で復元される順番しだいで残るセッションが入れ替わる。
+    // ブラウザは配置をセッション名で覚えているので、名前が入れ替わると繋ぎ直せない。
+    // グループ名と同じ名前のもの（＝元のセッション）を優先し、無ければ古いほうを残す。
+    const better = (s, cur) => {
+      if (!cur) return true;
+      if ((s.name === s.group) !== (cur.name === cur.group)) return s.name === s.group;
+      return s.created < cur.created;
+    };
     for (const s of sessions) {
       if (!s.group || s.groupSize <= 1) continue;
-      const cur = keep.get(s.group);
-      if (!cur || s.created < cur.created) keep.set(s.group, s);
+      if (better(s, keep.get(s.group))) keep.set(s.group, s);
     }
     const kept = new Set([...keep.values()].map((s) => s.id));
     sessions = sessions.filter((s) => !s.group || s.groupSize <= 1 || kept.has(s.id));
