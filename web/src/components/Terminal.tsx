@@ -297,6 +297,11 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     const onKeyDown = (e: Event) => {
       const ev = e as KeyboardEvent;
       imeKey = ev.keyCode === 229 || ev.isComposing;
+      // compositionend のあとに input が来ないブラウザでは sent が残る。そのまま
+      // 通常キーへ移ると、xterm が keydown で送った文字を onInput でも送り直して
+      // 最初の英字・記号だけ二重になる。非 IME の keydown は新しい入力の開始なので、
+      // 直前の確定文字を捨てるためだけの印はここで失効させる。
+      if (!imeKey) sent = null;
       // xterm はこの keydown の時点の textarea を覚えておき、あとで増減を見て
       // 差分（減っていれば DEL）を送る。変換中でなければ空が正しい状態なので、
       // 書き戻しの取りこぼしが残っていてもここで必ず空に揃える。

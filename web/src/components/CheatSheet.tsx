@@ -31,17 +31,32 @@ const DESCRIPTIONS: Record<string, string> = {
 };
 
 const WEB_EQUIVALENTS: { task: string; tmuxKey: string; here: string }[] = [
-  { task: 'ウィンドウを作る', tmuxKey: 'prefix c', here: 'サイドバーのセッション行の ＋' },
-  { task: 'ウィンドウを切り替える', tmuxKey: 'prefix 0-9 / n / p', here: 'サイドバーのウィンドウ名をクリック' },
-  { task: 'ペインを縦に割る', tmuxKey: 'prefix %', here: 'ツールバーの「左右に分割」' },
-  { task: 'ペインを横に割る', tmuxKey: 'prefix "', here: 'ツールバーの「上下に分割」' },
-  { task: 'ペインを移動する', tmuxKey: 'prefix ←↑↓→', here: 'ペイン配置図のマスをクリック' },
-  { task: 'ペインをズーム', tmuxKey: 'prefix z', here: 'ペイン配置図の ⤢' },
-  { task: 'ペインを閉じる', tmuxKey: 'prefix x', here: 'ペイン配置図の ✕' },
+  { task: 'ウィンドウを作る', tmuxKey: 'prefix c', here: 'タブ列の ＋（Alt+T）' },
+  { task: 'ウィンドウを切り替える', tmuxKey: 'prefix 0-9 / n / p', here: 'タブをクリック（Alt+1〜9 / Alt+[ ]）' },
+  { task: 'ウィンドウを探す', tmuxKey: 'prefix w', here: '切り替えパレット（Alt+P）' },
+  { task: 'ウィンドウを閉じる', tmuxKey: 'prefix &', here: 'タブを右クリック →「ウィンドウを閉じる」' },
+  { task: '画面を割って並べる', tmuxKey: 'prefix % / prefix "', here: '上部バーの分割、またはタブを端末の端へドラッグ' },
+  { task: 'ペインを縦に割る', tmuxKey: 'prefix %', here: '端末を右クリック →「tmux のペインとして分割（左右）」' },
+  { task: 'ペインを移動する', tmuxKey: 'prefix ←↑↓→', here: '端末の中で移りたいペインをクリック' },
+  { task: 'ペインをズーム', tmuxKey: 'prefix z', here: '端末を右クリック →「ペインを全画面」' },
+  { task: 'ペインを閉じる', tmuxKey: 'prefix x', here: '端末を右クリック →「ペインを閉じる」' },
   { task: '名前を変える', tmuxKey: 'prefix , / prefix $', here: 'サイドバーで名前をダブルクリック' },
-  { task: 'レイアウトを変える', tmuxKey: 'prefix Space', here: 'ツールバーのレイアウトボタン' },
-  { task: '画面の中身をコピー', tmuxKey: 'prefix [ → 選択 → Enter', here: 'ツールバーの「本文をコピー」' },
+  { task: '画面の中身をコピー', tmuxKey: 'prefix [ → 選択 → Enter', here: 'ドラッグで選択（そのままクリップボードへ）' },
   { task: 'デタッチ', tmuxKey: 'prefix d', here: 'ブラウザのタブを閉じるだけ' },
+];
+
+/** ブラウザ側のショートカット。Alt 系は tmux に渡さずアプリが受け取る */
+const APP_KEYS: { key: string; what: string }[] = [
+  { key: 'Alt+1 〜 Alt+9', what: 'そのタイルの n 枚目のタブへ' },
+  { key: 'Alt+0', what: '右端のタブへ' },
+  { key: 'Alt+[ / Alt+]', what: '前 / 次のタブへ' },
+  { key: 'Alt+T', what: '新しい端末をタブで開く' },
+  { key: 'Alt+W', what: 'いまのタブを閉じる' },
+  { key: 'Alt+P', what: 'ウィンドウ切り替えパレット' },
+  { key: 'Alt+B', what: 'サイドバーの開閉' },
+  { key: 'Alt+/', what: 'このチートシート' },
+  { key: 'Ctrl+Shift+C', what: '選択部分をコピー（Ctrl+C は tmux に渡す）' },
+  { key: 'Shift+右クリック', what: 'ブラウザ本来のメニュー' },
 ];
 
 export function CheatSheet({ onClose, prefix }: { onClose(): void; prefix: string }) {
@@ -103,6 +118,22 @@ export function CheatSheet({ onClose, prefix }: { onClose(): void; prefix: strin
                       <code>{r.tmuxKey.replace(/prefix/g, prefix)}</code>
                     </td>
                     <td className="hl">{r.here}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          <section>
+            <h3>この画面のキーボードショートカット</h3>
+            <table className="sheet">
+              <tbody>
+                {APP_KEYS.map((r) => (
+                  <tr key={r.key}>
+                    <td className="keycell">
+                      <code>{r.key}</code>
+                    </td>
+                    <td>{r.what}</td>
                   </tr>
                 ))}
               </tbody>

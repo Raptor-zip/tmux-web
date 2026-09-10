@@ -1,5 +1,4 @@
 import { Fragment, type ReactElement } from 'react';
-import { LAYOUTS } from '../types';
 import { projectName, tildePath } from '../paths';
 import type { Pane, Session, TmuxWindow } from '../types';
 import { SEP, type MenuEntry } from './ContextMenu';
@@ -11,17 +10,21 @@ interface Props {
   /** ホームディレクトリ。パンくずのパスを `~` に畳むのに使う */
   home: string;
   tileCount: number;
+  tabCount: number;
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
-  showPaneMap: boolean;
   showKeyBar: boolean;
   connected: boolean;
   statusMessage?: string;
   onAction(action: string, params: Record<string, unknown>): void;
+  /** 新しいウィンドウを作って、いまのタイルにタブで足す */
+  onNewTab(): void;
   /** 新しいウィンドウを作って、その向きに並べる */
   onSplitNewWindow(side: 'right' | 'bottom'): void;
-  onToggle(key: 'mode' | 'showStatusBar' | 'showPaneMap' | 'showKeyBar'): void;
+  onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar'): void;
   onCopyPane(): void;
+  onKillPane(): void;
+  onOpenSwitcher(): void;
   onOpenCheatSheet(): void;
   onSendCommand(): void;
   /** 右端の「⋯」で開くメニュー。中身をここで組み立てて親に渡す */
@@ -39,16 +42,19 @@ export function Toolbar({
   activePane,
   home,
   tileCount,
+  tabCount,
   mode,
   showStatusBar,
-  showPaneMap,
   showKeyBar,
   connected,
   statusMessage,
   onAction,
+  onNewTab,
   onSplitNewWindow,
   onToggle,
   onCopyPane,
+  onKillPane,
+  onOpenSwitcher,
   onOpenCheatSheet,
   onSendCommand,
   onOpenMenu,
@@ -59,16 +65,17 @@ export function Toolbar({
   const project = projectName(activePane, home);
 
   const moreItems = (): MenuEntry[] => [
+    { label: 'ウィンドウを切り替える…', hint: 'Alt+P', run: onOpenSwitcher },
     { label: 'コマンドを送る…', run: onSendCommand, disabled: !pane },
     { label: '本文をコピー', run: onCopyPane, disabled: !pane },
     SEP,
-    ...LAYOUTS.map((l) => ({
-      label: `ペイン配置: ${l.label}`,
-      run: () => win && onAction('setLayout', { target: win.id, layout: l.id }),
-      disabled: !win,
-    })),
+    {
+      label: 'ペインを全画面 / 元に戻す',
+      run: () => pane && onAction('zoomPane', { target: pane }),
+      disabled: !pane,
+    },
+    { label: 'ペインを閉じる…', run: onKillPane, disabled: !pane },
     SEP,
-    { label: `ペイン配置図を${showPaneMap ? '隠す' : '表示'}`, run: () => onToggle('showPaneMap') },
     { label: `キーバーを${showKeyBar ? '隠す' : '表示'}`, run: () => onToggle('showKeyBar') },
     {
       label: `tmux のステータス行を${showStatusBar ? '隠す' : '表示'}`,
@@ -120,9 +127,10 @@ export function Toolbar({
               </Fragment>
             ))}
             {tileCount > 1 && <span className="tile-count">{tileCount} 分割</span>}
+            {tabCount > 1 && <span className="tile-count">{tabCount} タブ</span>}
           </>
         ) : (
-          <span className="dim">セッションが選択されていません</span>
+          <span className="dim">開いているタブがありません</span>
         )}
       </div>
 
@@ -130,8 +138,17 @@ export function Toolbar({
         {statusMessage && !connected && <span className="term-status">{statusMessage}</span>}
         <button
           className="icon-btn"
+          title="新しい端末をタブで開く (Alt+T)"
+          aria-label="新しい端末をタブで開く"
+          onClick={onNewTab}
+        >
+          ＋
+        </button>
+        <button
+          className="icon-btn"
           disabled={!win}
-          title="新しいウィンドウを右に並べる"
+          title="新しい端末を右に並べる"
+          aria-label="新しい端末を右に並べる"
           onClick={() => onSplitNewWindow('right')}
         >
           ▥
@@ -139,38 +156,24 @@ export function Toolbar({
         <button
           className="icon-btn"
           disabled={!win}
-          title="新しいウィンドウを下に並べる"
+          title="新しい端末を下に並べる"
+          aria-label="新しい端末を下に並べる"
           onClick={() => onSplitNewWindow('bottom')}
         >
           ⊟
         </button>
         <button
           className="icon-btn"
-          disabled={!win}
-          title="このセッションに新しいウィンドウを作る"
-          onClick={() => win && onAction('newWindow', { target: win.sessionId })}
+          title="ウィンドウを切り替える (Alt+P)"
+          aria-label="ウィンドウを切り替える"
+          onClick={onOpenSwitcher}
         >
-          ＋
-        </button>
-        <button
-          className="icon-btn"
-          disabled={!pane}
-          title="ペインを全画面 / 元に戻す"
-          onClick={() => onAction('zoomPane', { target: pane })}
-        >
-          ⤢
-        </button>
-        <button
-          className="icon-btn danger"
-          disabled={!pane}
-          title="このペインを閉じる（確認なし）"
-          onClick={() => onAction('killPane', { target: pane })}
-        >
-          ✕
+          ⇄
         </button>
         <button
           className="icon-btn"
           title="その他の操作"
+          aria-label="その他の操作"
           onClick={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
             onOpenMenu(moreItems(), r.right, r.bottom);

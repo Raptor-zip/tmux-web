@@ -107,17 +107,8 @@ export type ActionName =
   | 'swapPane'
   | 'breakPane'
   | 'joinPane'
-  | 'setLayout'
   | 'respawnPane'
   | 'sendKeys'
   | 'runCommand'
   | 'clearPane'
   | 'setOption';
-
-export const LAYOUTS = [
-  { id: 'even-horizontal', label: '横並び' },
-  { id: 'even-vertical', label: '縦並び' },
-  { id: 'main-horizontal', label: 'メイン上' },
-  { id: 'main-vertical', label: 'メイン左' },
-  { id: 'tiled', label: 'タイル' },
-] as const;
