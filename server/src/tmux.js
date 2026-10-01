@@ -283,6 +283,32 @@ export const actions = {
     return tmux(args);
   },
   killWindow: ({ target }) => tmux(['kill-window', '-t', target]),
+  /**
+   * 未使用（全ペインがシェルだけ）のウィンドウをまとめて閉じる。
+   * 画面が見ていた状態は数秒古いことがある。その間にエージェントを起こしたウィンドウを
+   * 巻き込まないよう、ここでプロセスを取り直して、いまも未使用のものだけを閉じる。
+   * 返り値は実際に閉じた数。
+   */
+  killIdleWindows: async ({ targets }) => {
+    if (!Array.isArray(targets) || targets.length === 0) return '0';
+    const wanted = new Set(targets.map(String));
+    const panes = await inspectPanes(
+      (await listPanes()).filter((p) => wanted.has(p.windowId)),
+      { fresh: true },
+    );
+    const byWindow = new Map();
+    for (const p of panes) {
+      if (!byWindow.has(p.windowId)) byWindow.set(p.windowId, []);
+      byWindow.get(p.windowId).push(p);
+    }
+    let killed = 0;
+    for (const [id, list] of byWindow) {
+      if (!list.every((p) => !p.dead && p.proc?.kind === 'idle')) continue;
+      // 途中で 1 つ消えていても残りは続ける
+      if ((await tmux(['kill-window', '-t', id], { allowFailure: true })) != null) killed++;
+    }
+    return String(killed);
+  },
   renameWindow: ({ target, name }) => tmux(['rename-window', '-t', target, name]),
   selectWindow: ({ target }) => tmux(['select-window', '-t', target]),
   /**

@@ -11,6 +11,8 @@ function prefixToBytes(prefix: string): string {
 }
 
 const KEYS: { label: string; data: string; title?: string; wide?: boolean }[] = [
+  { label: 'Enter', data: '\r' },
+  { label: '⌫', data: '\x7f', title: 'Backspace' },
   { label: 'Esc', data: '\x1b' },
   { label: 'Tab', data: '\t' },
   { label: '^C', data: '\x03', title: '中断 (Ctrl+C)' },
@@ -34,13 +36,20 @@ export function KeyBar({ onSend, prefix }: Props) {
       <button
         className="key prefix"
         title={`tmux prefix (${prefix}) を送る。素の tmux キー操作をしたいとき用。`}
+        onPointerDown={(e) => e.preventDefault()}
         onClick={() => onSend(prefixToBytes(prefix))}
       >
         {prefix}
       </button>
       <span className="key-sep" />
       {KEYS.map((k) => (
-        <button key={k.label} className="key" title={k.title ?? k.label} onClick={() => onSend(k.data)}>
+        <button
+          key={k.label}
+          className="key"
+          title={k.title ?? k.label}
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={() => onSend(k.data)}
+        >
           {k.label}
         </button>
       ))}

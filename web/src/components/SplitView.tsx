@@ -228,7 +228,7 @@ export function SplitView({
             key={leaf.id}
             className={`tile ${focused ? 'focused' : ''} ${tabDrop ? 'drop-tab' : ''}`}
             style={pct(rect)}
-            onMouseDown={() => onFocus(leaf.id)}
+            onPointerDown={() => onFocus(leaf.id)}
           >
             <TabStrip
               leaf={leaf}

@@ -94,6 +94,7 @@ export type ActionName =
   | 'mergeSession'
   | 'newWindow'
   | 'killWindow'
+  | 'killIdleWindows'
   | 'renameWindow'
   | 'selectWindow'
   | 'moveWindow'

@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/files': { target: BACKEND, changeOrigin: true },
       '/api': { target: BACKEND, changeOrigin: true },
       '/ws': { target: BACKEND.replace(/^http/, 'ws'), ws: true },
     },

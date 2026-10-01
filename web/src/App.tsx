@@ -1,3 +1,5 @@
+import { FileBrowser } from './components/FileBrowser';
+import { MobileInput } from './components/MobileInput';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, useTmuxState } from './api';
@@ -94,6 +96,22 @@ export default function App() {
   const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
   // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
   const [sidebarOpen, setSidebarOpen] = usePersisted('tw.sidebar', !isNarrow());
+  // iOS/Android のソフトキーボードで縮んだ表示領域に追従する。
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => {
+      if (viewport.scale !== 1) return;
+      document.documentElement.style.setProperty('--app-height', `${viewport.height}px`);
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      document.documentElement.style.removeProperty('--app-height');
+    };
+  }, []);
+  const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [cheatOpen, setCheatOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; leafId: string } | null>(null);
@@ -411,7 +429,11 @@ export default function App() {
   const doAction = useCallback(
     async (action: string, params: Record<string, unknown>) => {
       try {
-        await runAction(action as never, params);
+        const res = await runAction(action as never, params);
+        // まとめて閉じたときは、確認のあとで動き出して残ったぶんがあり得るので実数を出す
+        if (action === 'killIdleWindows') {
+          toast(`未使用のウィンドウを ${res.result ?? 0} 枚閉じました`, 'info');
+        }
         // セッションを消したときは、その場でタブも閉じる。最後の 1 つを消すと tmux は
         // サーバごと終わり、以降は「消えた」のか「まだ起きていない」のか区別できない。
         // 消えたものの後始末は、消した本人がここでやる。
@@ -750,7 +772,7 @@ export default function App() {
         run: async () => {
           try {
             const text = await navigator.clipboard.readText();
-            if (text) focusedTerm()?.send(text);
+            if (text) focusedTerm()?.paste(text);
           } catch {
             toast('クリップボードを読めませんでした（HTTPS で開いてください）');
           }
@@ -973,7 +995,7 @@ export default function App() {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      if (filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
       const key = e.key.toLowerCase();
       const digit = e.code.startsWith('Digit')
         ? Number(e.code.slice(5))
@@ -1026,7 +1048,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
+  }, [filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
@@ -1116,6 +1138,7 @@ export default function App() {
           onToggle={onToggle}
           onCopyPane={copyPane}
           onKillPane={killPane}
+          onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
           onOpenSwitcher={() => setSwitcherOpen(true)}
           onOpenCheatSheet={() => setCheatOpen(true)}
           onSendCommand={() =>
@@ -1207,8 +1230,15 @@ export default function App() {
           </div>
         </div>
 
+        <MobileInput
+          connected={!!focusedId && !!termStatuses[focusedId]?.connected}
+          onPaste={(text) => focusedTerm()?.paste(text)}
+          onSend={(data) => focusedTerm()?.send(data)}
+        />
         {showKeyBar && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
       </main>
+
+      {filesPaneId && <FileBrowser paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
 
       <footer className="statusbar">
         <span className="sb-item">

@@ -19,7 +19,15 @@ export interface WindowStatus {
   ports: number[];
   /** 最後に出力があってからの経過（ms）。idle の行だけ意味がある */
   idleFor: number;
+  /**
+   * 全ペインがシェルだけだと確かめられた。まとめて閉じる対象にしてよいのはこれだけ。
+   * kind の idle は「判定できなかった」ペイン（proc が null）も含むので、それとは分ける
+   */
+  vacant: boolean;
 }
+
+/** 状態がエージェントのもの（作業中・入力待ち） */
+export const isAgentKind = (k: StatusKind) => k === 'working' || k === 'waiting';
 
 export const STATUS_TEXT: Record<StatusKind, string> = {
   working: '作業中',
@@ -68,7 +76,9 @@ export function windowStatus(win: TmuxWindow, panes: Pane[], now: number): Windo
       ? `${STATUS_TEXT.idle}・${relTime(idleFor)}`
       : STATUS_TEXT[kind];
 
-  return { kind, label, chips, agent, ports, idleFor };
+  const vacant = panes.length > 0 && panes.every((p) => !p.dead && p.proc?.kind === 'idle');
+
+  return { kind, label, chips, agent, ports, idleFor, vacant };
 }
 
 /** 状態ごとの件数。プロジェクト見出しに出す要約 */

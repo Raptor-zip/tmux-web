@@ -14,6 +14,7 @@ import {
   isKnownAction,
   TmuxError,
 } from './tmux.js';
+import { installFiles } from './files.js';
 import { createAttachment, cleanupOrphanMirrors, isMirrorSession } from './attach.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -92,6 +93,8 @@ app.get('/api/keys', async (req, res) => {
     res.status(500).json({ error: String(err.message || err) });
   }
 });
+
+installFiles(app, async (id) => (await snapshot()).panes.find((pane) => pane.id === id));
 
 // 本番ビルドがあれば静的配信する（開発時は Vite が担当）
 if (fs.existsSync(WEB_DIST)) {

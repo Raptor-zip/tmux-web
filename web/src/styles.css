@@ -680,6 +680,143 @@ input {
   color: #fff;
 }
 
+/* 一覧の頭の要約。状態ごとの件数と、未使用をまとめて閉じるボタン */
+.overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.overview .ov {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--fg-dim);
+  cursor: pointer;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+.overview .ov:hover {
+  background: var(--bg-3);
+}
+.overview .ov.on {
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.overview .ov i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+}
+.overview .ov.working {
+  color: #7fc6ff;
+}
+.overview .ov.working i {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.overview .ov.waiting {
+  color: var(--green);
+}
+.overview .ov.waiting i {
+  background: var(--green);
+}
+.overview .ov.server i {
+  background: #c586c0;
+}
+.overview .ov.run i {
+  background: var(--yellow);
+}
+.overview .ov.idle {
+  color: var(--fg-faint);
+}
+.overview .ov.idle i {
+  background: none;
+  border: 1px solid var(--fg-faint);
+}
+.ov-clean {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--fg-dim);
+  cursor: pointer;
+  padding: 1px 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ov-clean:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* グループ末尾の「未使用 N 枚」。押すと畳んでいた行を出す */
+.fold-row {
+  min-height: 22px;
+}
+.fold-label {
+  gap: 4px;
+  padding: 2px 2px 2px 8px;
+  color: var(--fg-faint);
+  font-size: 11px;
+}
+.fold-label:hover {
+  color: var(--fg-dim);
+}
+.fold-twisty {
+  width: 12px;
+  flex: none;
+  color: var(--fg-faint);
+  font-size: 10px;
+}
+.fold-row .row-tools {
+  top: 0;
+}
+.row-tools button.text {
+  width: auto;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+/* 一覧の末尾。全部が未使用のプロジェクトをまとめて沈める */
+.rest {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.rest-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  color: var(--fg-dim);
+  cursor: pointer;
+  padding: 5px 4px;
+  font-size: 11.5px;
+  text-align: left;
+}
+.rest-head:hover {
+  background: var(--bg-3);
+}
+.rest-count {
+  margin-left: auto;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.rest .tree-session {
+  opacity: 0.8;
+}
+
 /* プロジェクト見出しの下に出すフルパス */
 .group-path {
   padding: 0 8px 4px 30px;
@@ -1715,4 +1852,103 @@ input:focus-visible,
   .crumbs .crumb.dim {
     display: none;
   }
+}
+
+/* 日本語の変換と貼り付けはスマホの標準入力欄で行う。 */
+.app { height: var(--app-height, 100dvh); }
+.mobile-input { display: none; }
+@media (max-width: 760px), (pointer: coarse) {
+  .mobile-input {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: none;
+    padding: 6px 8px;
+    background: var(--bg-1);
+    border-top: 1px solid var(--border);
+  }
+  .mobile-input textarea {
+    width: 100%;
+    min-height: 48px;
+    max-height: 100px;
+    resize: none;
+    padding: 6px 8px;
+    color: var(--fg);
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font: 16px/1.4 var(--sans);
+  }
+  .mobile-input textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .mobile-input-actions { display: flex; gap: 6px; }
+  .mobile-input-actions .key { flex: 1; }
+  .mobile-input-hint { color: var(--fg-dim); font-size: 12px; }
+  .key { min-width: 44px; min-height: 44px; }
+  .key:disabled { opacity: .45; cursor: default; }
+  .keybar { flex-shrink: 0; touch-action: pan-x; }
+  .terminal-host { touch-action: pinch-zoom; }
+  .terminal-host .xterm-helper-textarea { font-size: 16px; }
+  .icon-btn { min-width: 40px; min-height: 40px; }
+  .tab-close { min-width: 32px; min-height: 32px; }
+}
+
+/* 作業フォルダの一覧とメディアプレビュー */
+.file-browser {
+  width: min(1100px, 96vw);
+  height: min(820px, 92dvh);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.file-header { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); }
+.file-root { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-dim); }
+.file-columns { display: flex; flex: 1; min-height: 0; }
+.file-list-pane { display: flex; flex-direction: column; width: 40%; min-width: 280px; border-right: 1px solid var(--border); }
+.file-breadcrumbs { display: flex; gap: 4px; overflow-x: auto; padding: 8px; flex: none; }
+.file-breadcrumbs .btn { flex: none; }
+.file-controls { display: flex; gap: 6px; padding: 8px; flex: none; }
+.file-controls input, .file-controls select { color: var(--fg); background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; padding: 6px; min-width: 0; }
+.file-controls input { width: 100%; }
+.file-controls select { flex: none; }
+.file-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.file-list p, .file-preview p { padding: 12px; }
+.file-row { width: 100%; display: flex; align-items: center; text-align: left; gap: 10px; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 12px; cursor: pointer; }
+.file-row:hover, .file-row.selected { background: var(--bg-2); }
+.file-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.file-kind { flex: none; font-size: 20px; }
+.file-details { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.file-name { overflow-wrap: anywhere; }
+.file-meta, .file-note { color: var(--fg-dim); font-size: 11px; }
+.file-note { margin: 0; padding: 8px; border-top: 1px solid var(--border); }
+.file-preview { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.file-preview-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; border-bottom: 1px solid var(--border); }
+.file-preview-header strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.file-preview-header a, .file-preview-content a { text-decoration: none; }
+.file-preview-content { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; overflow: auto; }
+.file-preview-content img { max-width: 100%; height: auto; flex: none; }
+.file-preview-content video { width: 100%; max-height: 100%; }
+.file-preview-content audio { width: 100%; margin: auto 0; }
+.file-preview-content iframe { width: 100%; flex: 1; min-height: 240px; border: 0; background: white; }
+.file-empty { margin: auto; color: var(--fg-dim); }
+.file-back { display: none; }
+@media (max-width: 760px) {
+  .file-backdrop { padding: 0; }
+  .file-browser { width: 100%; height: var(--app-height, 100dvh); border: 0; border-radius: 0; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  .file-list-pane { width: 100%; min-width: 0; border: 0; }
+  .file-preview { display: none; }
+  .file-browser.has-preview .file-list-pane { display: none; }
+  .file-browser.has-preview .file-preview { display: flex; }
+  .file-back { display: inline-flex; }
+  .file-browser .btn, .file-controls select, .file-controls input { min-height: 44px; }
+  .file-controls input { font-size: 16px; }
+  .file-open-button { padding: 6px; flex: none; }
+}
+.file-open-button { padding: 3px 8px; }
+@media (max-width: 760px) {
+  .editorbar { min-height: 44px; height: auto; }
+  .file-open-button { min-height: 40px; }
 }
