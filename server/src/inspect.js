@@ -230,12 +230,13 @@ let cache = { at: 0, map: new Map() };
  * ペイン一覧に `proc` と `project` を足して返す。
  * ポーリングと REST が同時に来ても `ps` を二重に叩かないよう、少しだけ結果を持つ。
  */
-export async function inspectPanes(panes) {
+export async function inspectPanes(panes, { fresh = false } = {}) {
   const pids = [...new Set(panes.map((p) => p.pid).filter(Boolean))];
   if (pids.length === 0) return panes;
 
-  // 期限切れか、まだ見たことのない pid が混ざっていたら取り直す
-  if (NOW() - cache.at > 900 || pids.some((pid) => !cache.map.has(pid))) {
+  // 期限切れか、まだ見たことのない pid が混ざっていたら取り直す。
+  // 閉じる前の確認のように、1 秒前の結果でも困るときは fresh で必ず取り直す
+  if (fresh || NOW() - cache.at > 900 || pids.some((pid) => !cache.map.has(pid))) {
     const [{ procs, children }, listeners] = await Promise.all([readProcesses(), readListeners()]);
     const map = new Map();
     for (const pid of pids) map.set(pid, classify(pid, procs, children, listeners));

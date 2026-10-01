@@ -38,6 +38,7 @@ export interface TerminalHandle {
   selectWindow(index: number): void;
   /** 生のキー列を tmux に送る（ツールバー用） */
   send(data: string): void;
+  paste(data: string): void;
   focus(): void;
   fit(): void;
   /** xterm 側で選択されている文字列（tmux の選択はここには出ない） */
@@ -138,6 +139,9 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       sendInputRef.current(data);
       termRef.current?.focus();
     },
+    paste(data: string) {
+      if (wsRef.current?.readyState === WebSocket.OPEN) termRef.current?.paste(data);
+    },
     focus() {
       termRef.current?.focus();
     },
@@ -205,6 +209,38 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
      * ブラウザ本来のメニューが要るときは Shift を押しながら右クリック。
      */
     const host = hostRef.current;
+
+    // tmux の mouse on 時、xterm の標準タッチスクロールは無効になる。
+    // スワイプを wheel に変換し、tmux の履歴とアプリのスクロールに渡す。
+    let touch: { x: number; y: number; pending: number } | null = null;
+    const touchStart = (e: TouchEvent) => {
+      touch = e.touches.length === 1
+        ? { x: e.touches[0].clientX, y: e.touches[0].clientY, pending: 0 }
+        : null;
+    };
+    const touchMove = (e: TouchEvent) => {
+      if (!touch || e.touches.length !== 1) { touch = null; return; }
+      const point = e.touches[0];
+      const dy = touch.y - point.clientY;
+      if (Math.abs(point.clientX - touch.x) > 30 && Math.abs(dy) < 8) return;
+      touch.y = point.clientY;
+      touch.pending += dy;
+      if (Math.abs(touch.pending) < 12) return;
+      e.preventDefault();
+      e.stopPropagation();
+      term.element?.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true, cancelable: true,
+        clientX: point.clientX, clientY: point.clientY,
+        deltaY: touch.pending, deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      }));
+      touch.pending = 0;
+    };
+    const touchEnd = () => { touch = null; };
+    host.addEventListener('touchstart', touchStart, { capture: true, passive: true });
+    host.addEventListener('touchmove', touchMove, { capture: true, passive: false });
+    host.addEventListener('touchend', touchEnd, true);
+    host.addEventListener('touchcancel', touchEnd, true);
+
 
     /**
      * 選択したらそのままクリップボードに入れる（tmux のマウス選択と同じ感覚にする）。
@@ -361,6 +397,11 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     return () => {
       ro.disconnect();
+      cancelAnimationFrame(rafRef.current);
+      host.removeEventListener('touchstart', touchStart, true);
+      host.removeEventListener('touchmove', touchMove, true);
+      host.removeEventListener('touchend', touchEnd, true);
+      host.removeEventListener('touchcancel', touchEnd, true);
       host.removeEventListener('keydown', onKeyDown, true);
       host.removeEventListener('compositionstart', onCompositionStart, true);
       host.removeEventListener('compositionend', onCompositionEnd, true);

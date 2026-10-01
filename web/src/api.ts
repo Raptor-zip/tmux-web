@@ -114,3 +114,25 @@ export function useTmuxState() {
 
   return { state, connected, unauthorized, refresh };
 }
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  directory: boolean;
+  size: number;
+  modified: number;
+  mime: string;
+}
+export interface FileListing {
+  root: string;
+  path: string;
+  items: FileEntry[];
+}
+export function fetchFiles(pane: string, path = '', signal?: AbortSignal) {
+  return request<FileListing>(`/api/files?${new URLSearchParams({ pane, path })}`, { signal });
+}
+export function openFile(pane: string, path: string, root: string) {
+  return request<{ url: string }>('/api/files/open', {
+    method: 'POST', body: JSON.stringify({ pane, path, root }),
+  });
+}

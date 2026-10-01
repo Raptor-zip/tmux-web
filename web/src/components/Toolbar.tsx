@@ -24,6 +24,7 @@ interface Props {
   onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar'): void;
   onCopyPane(): void;
   onKillPane(): void;
+  onOpenFiles(): void;
   onOpenSwitcher(): void;
   onOpenCheatSheet(): void;
   onSendCommand(): void;
@@ -54,6 +55,7 @@ export function Toolbar({
   onToggle,
   onCopyPane,
   onKillPane,
+  onOpenFiles,
   onOpenSwitcher,
   onOpenCheatSheet,
   onSendCommand,
@@ -135,6 +137,8 @@ export function Toolbar({
       </div>
 
       <div className="editorbar-actions">
+        <button className="btn file-open-button" disabled={!activePane} onClick={onOpenFiles}
+          title="作業フォルダのファイル一覧とプレビュー">ファイル</button>
         {statusMessage && !connected && <span className="term-status">{statusMessage}</span>}
         <button
           className="icon-btn"
