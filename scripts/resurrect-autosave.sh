@@ -14,7 +14,8 @@
 
 set -euo pipefail
 
-tmux info >/dev/null 2>&1 || exit 0
+# info は接続中の client がないと失敗する。ブラウザを閉じていても保存する。
+tmux list-sessions >/dev/null 2>&1 || exit 0
 
 SAVE="$HOME/.tmux/plugins/tmux-resurrect/scripts/save.sh"
 [ -x "$SAVE" ] || { echo "tmux-resurrect が見つかりません: $SAVE" >&2; exit 1; }
