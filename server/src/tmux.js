@@ -61,7 +61,9 @@ async function query(args, fields) {
     .split('\n')
     .filter((line) => line.length > 0)
     .map((line) => {
-      const parts = line.split(SEP);
+      // tmux 3.4 は制御文字を文字列「\037」として出力する。
+      // 生の区切り文字を返すバージョンにも対応する。
+      const parts = line.split(/\x1f|\\037/);
       const row = {};
       fields.forEach((f, i) => {
         row[f] = parts[i] ?? '';
