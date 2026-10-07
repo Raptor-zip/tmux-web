@@ -1,3 +1,4 @@
+import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
 import { FileBrowser } from './components/FileBrowser';
 import { MobileInput } from './components/MobileInput';
@@ -125,6 +126,7 @@ export default function App() {
       document.documentElement.style.removeProperty('--app-height');
     };
   }, []);
+  const [screenOpen, setScreenOpen] = useState(false);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [cheatOpen, setCheatOpen] = useState(false);
   const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
@@ -1167,6 +1169,7 @@ export default function App() {
           onToggle={onToggle}
           onCopyPane={copyPane}
           onKillPane={killPane}
+          onOpenScreen={() => setScreenOpen(true)}
           onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
           onOpenSwitcher={() => setSwitcherOpen(true)}
           onOpenCheatSheet={() => setCheatOpen(true)}
@@ -1314,6 +1317,7 @@ export default function App() {
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 
+      {screenOpen && <ScreenViewer deviceName={device?.name} onClose={() => setScreenOpen(false)} />}
       {switcherOpen && (
         <Switcher
           items={switchItems}

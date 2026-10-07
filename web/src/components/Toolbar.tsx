@@ -29,6 +29,7 @@ interface Props {
   onCopyPane(): void;
   onKillPane(): void;
   onOpenFiles(): void;
+  onOpenScreen(): void;
   onOpenSwitcher(): void;
   onOpenCheatSheet(): void;
   onSendCommand(): void;
@@ -63,6 +64,7 @@ export function Toolbar({
   onCopyPane,
   onKillPane,
   onOpenFiles,
+  onOpenScreen,
   onOpenSwitcher,
   onOpenCheatSheet,
   onSendCommand,
@@ -74,6 +76,7 @@ export function Toolbar({
   const project = projectName(activePane, home);
 
   const moreItems = (): MenuEntry[] => [
+    { label: 'デバイスの画面を見る', run: onOpenScreen },
     { label: 'ウィンドウを切り替える…', hint: 'Alt+P', run: onOpenSwitcher },
     { label: 'コマンドを送る…', run: onSendCommand, disabled: !pane },
     { label: '新しい端末を右に並べる', run: () => onSplitNewWindow('right'), disabled: !win },
@@ -150,6 +153,8 @@ export function Toolbar({
           aria-label="セッション一覧の開閉" title="セッション一覧"><Icon name="menu" /></button>
         <button className="icon-btn file-open-button" disabled={!activePane} onClick={onOpenFiles}
           aria-label="作業フォルダーを開く" title="作業フォルダのファイル一覧とプレビュー"><Icon name="folder" /></button>
+        <button className="icon-btn" aria-label="デバイスの画面を見る" title="デバイスのデスクトップ画面を見る"
+          onClick={onOpenScreen}><Icon name="screen" /></button>
         {(['claude', 'codex'] as const).map((agent) => (
           <button key={agent} className="btn agent-launch" disabled={!session || launchingAgent !== null}
             aria-label={`${agent === 'claude' ? 'Claude' : 'Codex'} を新しいタブで起動`}
@@ -186,7 +191,7 @@ export function Toolbar({
           <Icon name="splitBottom" />
         </button>
         <button
-          className="icon-btn"
+          className="icon-btn toolbar-switcher"
           title="ウィンドウを切り替える (Alt+P)"
           aria-label="ウィンドウを切り替える"
           onClick={onOpenSwitcher}

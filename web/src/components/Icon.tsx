@@ -1,6 +1,7 @@
 import type { SVGProps } from 'react';
 
 const paths = {
+  screen: 'M3 4h18v13H3z M8 21h8 M12 17v4',
   folder: 'M3 7V5a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v2H6l-3 11h15l3-11 M3 7v13',
   plus: 'M12 5v14 M5 12h14',
   close: 'm6 6 12 12 M18 6 6 18',
