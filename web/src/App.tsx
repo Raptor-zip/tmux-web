@@ -38,7 +38,7 @@ import {
   setRatio,
   type LayoutNode,
 } from './layout';
-import { buildWindowViews } from './windows';
+import { buildWindowViews, paneCommand, windowName } from './windows';
 import { STATUS_ORDER } from './status';
 import type { TmuxWindow } from './types';
 
@@ -746,7 +746,7 @@ export default function App() {
     const last = panes.filter((p) => p.windowId === activePane.windowId).length <= 1;
     confirmThen(
       `ペイン ${activePane.index} を閉じますか？`,
-      `${activePane.command} が ${activePane.path} で動いています。` +
+      `${paneCommand(activePane)} が ${activePane.path} で動いています。` +
         (last ? '\nこのウィンドウ最後のペインなので、ウィンドウごと無くなります。' : ''),
       () => doAction('killPane', { target: activePane.id }),
     );
@@ -1177,7 +1177,7 @@ export default function App() {
             activePane &&
             setDialog({
               kind: 'prompt',
-              title: `ペイン ${activePane.index} (${activePane.command}) にコマンドを送る`,
+              title: `ペイン ${activePane.index} (${paneCommand(activePane)}) にコマンドを送る`,
               placeholder: 'コマンド',
               confirmLabel: '送信',
               onSubmit: (cmd) =>
@@ -1276,7 +1276,7 @@ export default function App() {
         {device && <span className="sb-item device-name" title={device.name}>{device.name}</span>}
         <span className="sb-item">
           {currentSession ? currentSession.name : 'セッションなし'}
-          {currentWindow && ` / ${currentWindow.index}:${currentWindow.name}`}
+          {currentWindow && ` / ${currentWindow.index}:${windowName(currentWindow, activePane)}`}
         </span>
         {!connected && <span className="sb-item sb-bad">サーバと切断</span>}
         {termStatus.message && !termStatus.connected && (

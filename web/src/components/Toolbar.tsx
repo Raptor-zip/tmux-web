@@ -1,3 +1,4 @@
+import { paneCommand, windowName } from '../windows';
 import { Icon } from './Icon';
 import { Fragment, type ReactElement } from 'react';
 import { projectName, tildePath } from '../paths';
@@ -119,12 +120,12 @@ export function Toolbar({
       ) : null,
       win ? (
         <span className="crumb">
-          {win.index}:{win.name}
+          {win.index}:{windowName(win, activePane)}
         </span>
       ) : null,
       activePane ? (
         <span className="crumb dim">
-          pane {activePane.index} · {activePane.command}
+          pane {activePane.index} · {paneCommand(activePane)}
         </span>
       ) : null,
     ].filter((node): node is ReactElement => node !== null);

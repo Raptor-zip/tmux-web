@@ -43,12 +43,22 @@ const RUNTIMES = new Set([
 const base = (s) => (s || '').split('/').pop() || '';
 
 /** argv からコマンド名を決める。ログインシェルの `-` と実行系のラッパーを剥がす */
-function commandName(args) {
+export function commandName(args) {
   const parts = args.trim().split(/\s+/);
   let name = base(parts[0].replace(/^-/, ''));
   if (RUNTIMES.has(name)) {
     // `node --flag foo.js` のようにフラグが挟まることがある
-    const next = parts.slice(1).find((a) => !a.startsWith('-'));
+    const takesValue = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '--inspect-port', '--conditions', '-C']);
+    let next;
+    for (let i = 1; i < parts.length; i++) {
+      const arg = parts[i];
+      // -e の本文や -p の式をエージェントの実行ファイルと誤認しない。
+      if (['-e', '--eval', '-p', '--print', '-c'].includes(arg)) break;
+      if (arg === '-m') { next = parts[i + 1]; break; }
+      if (takesValue.has(arg)) { i++; continue; }
+      if (arg === '--') { next = parts[i + 1]; break; }
+      if (!arg.startsWith('-')) { next = arg; break; }
+    }
     if (next) name = base(next).replace(/\.(js|mjs|cjs|ts|py|rb)$/, '') || name;
   }
   return name;
@@ -130,15 +140,16 @@ async function readListeners() {
 /** 自分を含む子孫。暴走したプロセス木で固まらないよう上限を付ける */
 function descendants(rootPid, procs, children) {
   const out = [];
-  const stack = [rootPid];
+  const queue = [rootPid];
+  let at = 0;
   const seen = new Set();
-  while (stack.length && out.length < 400) {
-    const pid = stack.pop();
+  while (at < queue.length && seen.size < 400) {
+    const pid = queue[at++];
     if (seen.has(pid)) continue;
     seen.add(pid);
     const p = procs.get(pid);
     if (p) out.push(p);
-    for (const c of children.get(pid) ?? []) stack.push(c);
+    for (const c of children.get(pid) ?? []) queue.push(c);
   }
   return out;
 }
@@ -153,18 +164,22 @@ const NOW = () => Date.now();
  *   run    … シェル以外の何かが動いている
  *   idle   … シェルしかいない＝もう使われていない
  */
-function classify(rootPid, procs, children, listeners) {
-  const tree = descendants(rootPid, procs, children);
+export function classify(rootPid, procs, children, listeners) {
+  const tree = descendants(rootPid, procs, children).filter(p => !/[ZX]/.test(p.stat));
   if (tree.length === 0) return { kind: 'idle', agent: null, command: '', ports: [], since: null };
 
   const ports = new Set();
   for (const p of tree) for (const port of listeners.get(p.pid) ?? []) ports.add(port);
 
   const work = tree.filter((p) => !SHELLS.has(p.name));
-  const agentProc = work.find((p) => AGENTS[p.name]) ?? null;
+  const foreground = work.filter(p => p.stat.includes('+'));
+  // 同じ前景グループにエージェントの子プロセスがいても、外側の対話 CLI を選ぶ。
+  // 前景に別の作業がある場合、背後のエージェントを操作中とは表示しない。
+  const candidates = foreground.length ? foreground : work;
+  const agentProc = candidates.find((p) => AGENTS[p.name]) ?? null;
   // 前景プロセスグループ（stat の `+`）にいるものを優先する。裏で動いている
   // 一時的な子プロセスより、ユーザーが向き合っている相手のほうが知りたい
-  const lead = agentProc ?? work.find((p) => p.stat.includes('+')) ?? work[0] ?? null;
+  const lead = agentProc ?? foreground[0] ?? work[0] ?? null;
 
   // シェルスクリプトを流している最中はシェルしかいないが、空きではない
   const nestedShell = !lead && tree.some((p) => p.pid !== rootPid);
