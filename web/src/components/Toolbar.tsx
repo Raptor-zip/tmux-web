@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import { Fragment, type ReactElement } from 'react';
 import { projectName, tildePath } from '../paths';
 import type { Pane, Session, TmuxWindow } from '../types';
@@ -19,6 +20,9 @@ interface Props {
   onAction(action: string, params: Record<string, unknown>): void;
   /** 新しいウィンドウを作って、いまのタイルにタブで足す */
   onNewTab(): void;
+  onLaunchAgent(agent: 'claude' | 'codex'): void;
+  launchingAgent: 'claude' | 'codex' | null;
+  onToggleSidebar(): void;
   /** 新しいウィンドウを作って、その向きに並べる */
   onSplitNewWindow(side: 'right' | 'bottom'): void;
   onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar'): void;
@@ -51,6 +55,9 @@ export function Toolbar({
   statusMessage,
   onAction,
   onNewTab,
+  onLaunchAgent,
+  launchingAgent,
+  onToggleSidebar,
   onSplitNewWindow,
   onToggle,
   onCopyPane,
@@ -69,6 +76,8 @@ export function Toolbar({
   const moreItems = (): MenuEntry[] => [
     { label: 'ウィンドウを切り替える…', hint: 'Alt+P', run: onOpenSwitcher },
     { label: 'コマンドを送る…', run: onSendCommand, disabled: !pane },
+    { label: '新しい端末を右に並べる', run: () => onSplitNewWindow('right'), disabled: !win },
+    { label: '新しい端末を下に並べる', run: () => onSplitNewWindow('bottom'), disabled: !win },
     { label: '本文をコピー', run: onCopyPane, disabled: !pane },
     SEP,
     {
@@ -137,34 +146,44 @@ export function Toolbar({
       </div>
 
       <div className="editorbar-actions">
-        <button className="btn file-open-button" disabled={!activePane} onClick={onOpenFiles}
-          title="作業フォルダのファイル一覧とプレビュー">ファイル</button>
+        <button className="icon-btn mobile-sidebar-button" onClick={onToggleSidebar}
+          aria-label="セッション一覧の開閉" title="セッション一覧"><Icon name="menu" /></button>
+        <button className="icon-btn file-open-button" disabled={!activePane} onClick={onOpenFiles}
+          aria-label="作業フォルダーを開く" title="作業フォルダのファイル一覧とプレビュー"><Icon name="folder" /></button>
+        {(['claude', 'codex'] as const).map((agent) => (
+          <button key={agent} className="btn agent-launch" disabled={!session || launchingAgent !== null}
+            aria-label={`${agent === 'claude' ? 'Claude' : 'Codex'} を新しいタブで起動`}
+            title={`現在の作業フォルダーで ${agent === 'claude' ? 'Claude' : 'Codex'} を新しいタブで起動`}
+            onClick={() => onLaunchAgent(agent)}>
+            {launchingAgent === agent ? '起動中…' : agent === 'claude' ? 'Claude' : 'Codex'}
+          </button>
+        ))}
         {statusMessage && !connected && <span className="term-status">{statusMessage}</span>}
         <button
-          className="icon-btn"
+          className="icon-btn toolbar-new-tab"
           title="新しい端末をタブで開く (Alt+T)"
           aria-label="新しい端末をタブで開く"
           onClick={onNewTab}
         >
-          ＋
+          <Icon name="plus" />
         </button>
         <button
-          className="icon-btn"
+          className="icon-btn split-button"
           disabled={!win}
           title="新しい端末を右に並べる"
           aria-label="新しい端末を右に並べる"
           onClick={() => onSplitNewWindow('right')}
         >
-          ▥
+          <Icon name="splitRight" />
         </button>
         <button
-          className="icon-btn"
+          className="icon-btn split-button"
           disabled={!win}
           title="新しい端末を下に並べる"
           aria-label="新しい端末を下に並べる"
           onClick={() => onSplitNewWindow('bottom')}
         >
-          ⊟
+          <Icon name="splitBottom" />
         </button>
         <button
           className="icon-btn"
@@ -172,7 +191,7 @@ export function Toolbar({
           aria-label="ウィンドウを切り替える"
           onClick={onOpenSwitcher}
         >
-          ⇄
+          <Icon name="switch" />
         </button>
         <button
           className="icon-btn"
@@ -183,7 +202,7 @@ export function Toolbar({
             onOpenMenu(moreItems(), r.right, r.bottom);
           }}
         >
-          ⋯
+          <Icon name="more" />
         </button>
       </div>
     </div>

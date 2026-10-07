@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TmuxWindow } from '../types';
 import type { WindowView } from '../windows';
@@ -70,9 +71,10 @@ export function Switcher({ items, onPick, onClose }: Props) {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="switcher" role="dialog" aria-modal="true" aria-label="ウィンドウを切り替える">
+        <div className="sw-header">
         <input
           className="sw-input"
-          autoFocus
+          autoFocus={!window.matchMedia('(pointer: coarse)').matches}
           value={query}
           placeholder="ウィンドウを切り替える… プロジェクト名・作業内容・パスで絞り込む"
           onChange={(e) => setQuery(e.target.value)}
@@ -85,6 +87,8 @@ export function Switcher({ items, onPick, onClose }: Props) {
             e.preventDefault();
           }}
         />
+        <button className="icon-btn sw-dismiss" aria-label="ウィンドウ一覧を閉じる" onClick={onClose}><Icon name="close" /></button>
+        </div>
 
         <div className="sw-list" ref={listRef}>
           {rows.length === 0 && <p className="sw-empty">一致するウィンドウはありません。</p>}

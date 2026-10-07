@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Icon } from './Icon';
 import type { DragPayload } from './SplitView';
 import type { LeafNode, TabRef } from '../layout';
 import type { Session } from '../types';
@@ -50,15 +51,24 @@ export function TabStrip({
 
   // 前面のタブが隠れていたら見える位置まで送る（キーボードで切り替えたときに要る）
   useEffect(() => {
-    const el = listRef.current?.querySelector<HTMLElement>('.tab.active');
-    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const list = listRef.current;
+    const el = list?.querySelector<HTMLElement>('.tab.active');
+    if (!list || !el) return;
+    const box = list.getBoundingClientRect();
+    const tabBox = el.getBoundingClientRect();
+    if (tabBox.left < box.left) list.scrollLeft -= box.left - tabBox.left;
+    else if (tabBox.right > box.right) list.scrollLeft += tabBox.right - box.right;
   }, [leaf.activeId, leaf.tabs.length]);
 
   /** 押してから 6px 動いたらドラッグ開始。押しただけで動き出すと切り替えられない */
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
   const pending = useRef<{ x: number; y: number; payload: DragPayload } | null>(null);
 
   const armDrag = (e: React.PointerEvent, payload: DragPayload) => {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    // タッチは標準の横スクロールを使う。並べ替えはマウスで行う。
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    dragCleanup.current?.();
     pending.current = { x: e.clientX, y: e.clientY, payload };
 
     const move = (ev: PointerEvent) => {
@@ -70,10 +80,12 @@ export function TabStrip({
     };
     const cleanup = () => {
       pending.current = null;
+      dragCleanup.current = null;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', cleanup);
       window.removeEventListener('pointercancel', cleanup);
     };
+    dragCleanup.current = cleanup;
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', cleanup);
     window.addEventListener('pointercancel', cleanup);
@@ -126,7 +138,7 @@ export function TabStrip({
                   // 中クリックはブラウザのオートスクロールが始まってしまう
                   if (e.button === 1) e.preventDefault();
                   if ((e.target as HTMLElement).closest('.tab-close')) return;
-                  onActivate(tab.id);
+                  if (e.pointerType === 'mouse' && e.button === 0) onActivate(tab.id);
                   armDrag(e, {
                     kind: 'window',
                     sessionId: tab.sessionId,
@@ -134,6 +146,9 @@ export function TabStrip({
                     label,
                     fromTabId: tab.id,
                   });
+                }}
+                onClick={(e) => {
+                  if (!(e.target as HTMLElement).closest('.tab-close')) onActivate(tab.id);
                 }}
                 onAuxClick={(e) => {
                   if (e.button === 1) {
@@ -146,7 +161,8 @@ export function TabStrip({
                   onContextMenu(tab.id, e.clientX, e.clientY);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'ArrowLeft') step(i, -1);
+                  if (e.key === 'Enter' || e.key === ' ') onActivate(tab.id);
+                  else if (e.key === 'ArrowLeft') step(i, -1);
                   else if (e.key === 'ArrowRight') step(i, 1);
                   else if (e.key === 'Delete' || e.key === 'Backspace') onClose(tab.id);
                   else return;
@@ -165,7 +181,7 @@ export function TabStrip({
                     onClose(tab.id);
                   }}
                 >
-                  ✕
+                  <Icon name="close" />
                 </button>
               </div>
             </div>
@@ -175,13 +191,23 @@ export function TabStrip({
       </div>
 
       <div className="strip-tools">
+        <select className="tab-picker" aria-label="このタイルのタブを選ぶ"
+          title={`タブ一覧（${leaf.tabs.length} タブ）`} value={leaf.activeId}
+          onChange={(e) => onActivate(e.target.value)}>
+          {leaf.tabs.map((tab, i) => {
+            const { view, session } = viewOf(tab);
+            return <option key={tab.id} value={tab.id}>
+              {i + 1}/{leaf.tabs.length} · {view?.project || tab.sessionName || '端末'} · {view?.primary || ''} · {view ? whereWithSession(view, session) : ''}
+            </option>;
+          })}
+        </select>
         <button
           className="strip-btn"
           title="新しい端末をタブで開く (Alt+T)"
           aria-label="新しい端末をタブで開く"
           onClick={onNewTab}
         >
-          ＋
+          <Icon name="plus" />
         </button>
         {closableTile && (
           <button
@@ -190,7 +216,7 @@ export function TabStrip({
             aria-label="このタイルを閉じる"
             onClick={onCloseTile}
           >
-            ⨯
+            <Icon name="close" />
           </button>
         )}
       </div>

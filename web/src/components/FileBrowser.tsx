@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchFiles, openFile, type FileEntry, type FileListing } from '../api';
 
@@ -115,7 +116,7 @@ export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): vo
               {items.map((entry) => (
                 <button key={entry.path} className={`file-row ${selected?.path === entry.path ? 'selected' : ''}`}
                   onClick={() => entry.directory ? navigate(entry.path) : preview(entry)}>
-                  <span className="file-kind" aria-hidden="true">{entry.directory ? '📁' : entry.mime.startsWith('image/') ? '▧' : entry.mime.startsWith('video/') ? '▶' : entry.mime.startsWith('audio/') ? '♪' : '▤'}</span>
+                  <span className="file-kind" aria-hidden="true">{entry.directory ? <Icon name="folder" /> : entry.mime.startsWith('image/') ? '▧' : entry.mime.startsWith('video/') ? '▶' : entry.mime.startsWith('audio/') ? '♪' : '▤'}</span>
                   <span className="file-details"><span className="file-name">{entry.name}</span>
                     <span className="file-meta">{entry.directory ? 'フォルダ' : formatSize(entry.size)} · {new Date(entry.modified).toLocaleString('ja-JP')}</span>
                   </span>
