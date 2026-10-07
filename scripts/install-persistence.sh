@@ -9,6 +9,7 @@
 #   3. ~/.tmux.conf にその 1 行を source-file として追記（既にあれば何もしない）
 #   4. systemd --user があれば、15 分ごとに保存するタイマーを登録する
 #      （continuum の自動保存は status バー頼みで、tmux-web のミラーは status off なので動かない）
+#   5. 起動時に tmux を立ち上げ、停止時に保存するサービスを登録する
 #
 # 何度実行しても同じ結果になる。
 
@@ -81,6 +82,12 @@ else
 fi
 
 # --- 4. 保存タイマー --------------------------------------------------------
+# 自動起動の前に反映する。起動直後に再読込すると continuum の復元が二重に走る。
+if tmux list-sessions >/dev/null 2>&1; then
+  tmux source-file "$TMUX_CONF" >/dev/null 2>&1 && say "動作中の tmux に反映しました" \
+    || say "tmux への反映に失敗しました。手動で tmux source-file $TMUX_CONF を実行してください"
+fi
+
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 if [ "$USE_TIMER" = 1 ]; then
   mkdir -p "$UNIT_DIR"
@@ -107,12 +114,27 @@ EOF
   systemctl --user daemon-reload
   systemctl --user enable --now tmux-web-resurrect-save.timer >/dev/null
   say "保存タイマーを登録しました : tmux-web-resurrect-save.timer（15 分ごと）"
-fi
 
-# --- 反映 -------------------------------------------------------------------
-if tmux info >/dev/null 2>&1; then
-  tmux source-file "$TMUX_CONF" >/dev/null 2>&1 && say "動作中の tmux に反映しました" \
-    || say "tmux への反映に失敗しました。手動で tmux source-file $TMUX_CONF を実行してください"
+  cat > "$UNIT_DIR/tmux-web-tmux.service" <<EOF
+[Unit]
+Description=tmux を起動し、保存済みセッションを復元する
+Before=tmux-web.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart="$REPO_DIR/scripts/start-tmux.sh"
+ExecStop="$REPO_DIR/scripts/resurrect-autosave.sh"
+# サービス停止時も、作業中の tmux とその子プロセスは終了させない。
+KillMode=process
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target
+EOF
+  systemctl --user daemon-reload
+  systemctl --user enable --now tmux-web-tmux.service >/dev/null
+  say "tmux の自動起動・停止時保存を登録しました : tmux-web-tmux.service"
 fi
 
 cat <<EOS
@@ -120,9 +142,10 @@ cat <<EOS
   これで:
     ・15 分ごとに構成が自動保存されます（$HOME/.local/share/tmux/resurrect/）
     ・tmux サーバが次に起動したとき、自動で復元されます
+    ・systemd があれば、PC 起動時に tmux も立ち上がり、停止時にも保存します
 
   今すぐ保存    : $REPO_DIR/scripts/resurrect-autosave.sh
-  手動で復元    : ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh
+  手動で復元    : tmux run-shell ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh
   保存の状況    : systemctl --user list-timers tmux-web-resurrect-save.timer
 
 EOS

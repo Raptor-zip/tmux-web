@@ -21,8 +21,25 @@
 
 ## 使い方
 
+Linux では Node.js 20 以上、npm、tmux、git が必要。自動起動には
+`systemd --user` と `loginctl` が使えるユーザーセッションが必要。
+Ubuntu 24.04 で tmux / git がなければ `sudo apt install tmux git` で導入する。
+
+この PC に常用環境をまとめて導入するには:
+
 ```bash
-npm install
+./scripts/setup.sh      # 依存関係・ビルド・Web/tmux 自動起動・保存/復元を導入
+                       # ブラウザで http://127.0.0.1:7654
+```
+
+起動用の tmux セッション `0` を作り、保存があれば構成を復元する。
+既に動作中の tmux セッションはそのまま使う。設定はユーザー単位で導入する。
+再起動前には `./scripts/resurrect-autosave.sh` で最新の構成を保存できる。
+
+一時的に手動で起動するなら:
+
+```bash
+npm ci
 npm run serve          # ビルドして起動 → http://127.0.0.1:7654
 ```
 
@@ -371,8 +388,11 @@ view のほうを個別に見たいときは `TMUX_WEB_SHOW_GROUP_VIEWS=1` で�
 ./scripts/install-service.sh
 ```
 
-やること: フロントエンドをビルド → `~/.config/systemd/user/tmux-web.service` を生成
-→ `enable --now` → linger を有効化（ログアウトしても動き続ける）。
+やること: `npm ci` で依存関係を同期 → フロントエンドをビルド
+→ `~/.config/systemd/user/tmux-web.service` を生成
+→ linger を有効化 → サービスを有効化・再起動。
+linger によってログアウト後も動き、PC 起動時にはログイン前から起動する。
+tmux 自体の自動起動・保存・復元は `install-persistence.sh` が導入する。
 ポートやトークンは環境変数で渡すとユニットに焼き込まれる:
 
 ```bash
@@ -388,7 +408,28 @@ PORT=8080 TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
 | 消す | `./scripts/uninstall-service.sh` |
 
 コードを更新したら `./scripts/install-service.sh` をもう一度実行すれば、
-再ビルドしてサービスを再起動する。
+依存関係を同期して再ビルドし、サービスを再起動する。
+既存のポート・待ち受けアドレス・トークンは、環境変数を明示しなければ引き継ぐ。
+Node.js を更新して古い実行ファイルを削除した場合も、再実行してパスを更新する。
+保存・復元側も更新するなら `./scripts/setup.sh` を再実行する。
+
+導入後の確認:
+
+```bash
+systemctl --user is-enabled tmux-web tmux-web-tmux tmux-web-resurrect-save.timer
+systemctl --user is-active tmux-web tmux-web-tmux tmux-web-resurrect-save.timer
+loginctl show-user "$USER" -p Linger     # Linger=yes
+curl -fsS http://127.0.0.1:7654/api/state # トークン認証時はヘッダーを付ける
+npm test -w server
+```
+
+2026-10-03 に Ubuntu 24.04.4 LTS / ARM64、Node.js 24.15.0、npm 11.12.1、
+tmux 3.4 で導入・ビルド・API・保存を確認。
+tmux 3.4 が一覧の制御文字を `\037` として返す形式にも対応する。
+ARM64 の PTY / WebSocket 接続、接続 client がない状態での保存、
+隔離した tmux サーバでのペイン構成・作業ディレクトリの復元、
+サービス再起動時の tmux サーバ維持も確認済み。
+実機の再起動は実施していない。
 
 ## 再起動をまたいでセッションを残す
 
@@ -397,7 +438,11 @@ tmux はサーバプロセスが死ぬとセッションを失う。何も仕込
 
 tmux-resurrect と tmux-continuum を使う（TPM は使わず `~/.tmux/plugins/` に直接 clone）。
 15 分ごとに自動保存し、tmux サーバの起動時に自動復元する。
+systemd があれば PC 起動時に tmux サーバも起動し、サービス停止時にも保存する。
 保存先は `~/.local/share/tmux/resurrect/`。
+
+復元するのはセッション・ウィンドウ・ペイン構成、作業ディレクトリ、画面内容など。
+実行中のプロセスのメモリ状態や、エージェントの会話をそのまま再開する機能ではない。
 
 クローンした端末で有効にするには:
 
@@ -405,7 +450,7 @@ tmux-resurrect と tmux-continuum を使う（TPM は使わず `~/.tmux/plugins/
 ./scripts/install-persistence.sh
 ```
 
-やることは 5 つで、何度実行しても同じ結果になる。
+何度実行しても設定の取り込み行は重複しない。
 
 1. tmux-resurrect / tmux-continuum を `~/.tmux/plugins/` に clone（既にあれば更新）
 2. `tmux/persistence.conf` のクローン先パスと保存間隔を埋めて
@@ -413,6 +458,8 @@ tmux-resurrect と tmux-continuum を使う（TPM は使わず `~/.tmux/plugins/
 3. `~/.tmux.conf` に `source-file ~/.config/tmux-web/persistence.conf` を 1 行追記
 4. systemd --user があれば `tmux-web-resurrect-save.timer` を登録（15 分ごとに保存）
 5. 動作中の tmux があれば設定を読み直す
+6. systemd --user があれば `tmux-web-tmux.service` を登録・起動する。
+   未起動のときだけ tmux を起動し、停止時に保存する。サービスを止めても tmux の作業は終了しない。
 
 既に自分で resurrect / continuum を書いている `~/.tmux.conf` には追記しない
 （`run-shell` が二重になると保存フックがぶつかるため）。その場合は手書きの行を消して
@@ -432,8 +479,16 @@ set -g @resurrect-hook-post-save-all 'claude-sessions --save >/dev/null 2>&1; @@
 
 ```bash
 ./scripts/resurrect-autosave.sh                         # 今すぐ保存（電源を切る前など）
-~/.tmux/plugins/tmux-resurrect/scripts/restore.sh       # 手動で復元
+tmux run-shell ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh # 手動で復元（tmux 外からも可）
 systemctl --user list-timers tmux-web-resurrect-save.timer   # 次の保存はいつか
+systemctl --user status tmux-web-tmux.service              # tmux 自動起動（active (exited) が正常）
+```
+
+Web アプリの削除スクリプトは保存・復元サービスを残す。
+それらの自動起動も止める場合は、次を実行する（tmux の構成・保存ファイルは残る）:
+
+```bash
+systemctl --user disable --now tmux-web-resurrect-save.timer tmux-web-tmux.service
 ```
 
 #### 自動保存を status バーに依存させない
@@ -450,6 +505,8 @@ attach 中のクライアントは全部 status off のミラーになり、自�
 そのため systemd がある環境では continuum の自動保存を切り（`@continuum-save-interval` を
 `0`）、`scripts/resurrect-autosave.sh` を `tmux-web-resurrect-save.timer` から 15 分ごとに
 回す。tmux サーバが動いていなければ何もせず終わる。
+接続中の client がなくても `list-sessions` でサーバの稼働を判定するため、
+ブラウザを閉じた状態でも保存される（`tmux info` は client 不在で失敗するため使わない）。
 サーバ起動時の自動復元（`@continuum-restore`）は status バーと無関係なので、そのまま
 continuum に任せる。
 
@@ -643,6 +700,10 @@ tmux に繋ぎ直してしまうため。端末はタイルに 1 つで、タブ
 
 ### スマホでの入力
 
+- iPhone でホーム画面に追加して起動した場合も、上部ボタン・サイドバー・下部の操作を
+  `safe-area-inset-*` の内側に配置する。Dynamic Island、横向きの切り欠き、ホームバーとの重なりを避ける。
+  余白は [WebKit の safe area の説明](https://webkit.org/blog/7929/designing-websites-for-iphone-x/) に沿って設定する。
+  更新後はホーム画面のアプリをアプリ切り替え画面から終了し、開き直す。
 - 端末の上を上下にスワイプすると、tmux の履歴や端末内のアプリをスクロールできます。
 - 下部の入力欄で日本語を入力・変換し、「端末に挿入」で確定した文章を端末へ渡します。「Enter」は別操作なので、挿入後に内容を確認できます。
 - 「貼り付け」は入力欄へ取り込みます。ブラウザがクリップボードへのアクセスを許可しない場合（HTTP 接続など）は、入力欄を長押しして貼り付けてください。
