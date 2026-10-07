@@ -136,3 +136,19 @@ export function openFile(pane: string, path: string, root: string) {
     method: 'POST', body: JSON.stringify({ pane, path, root }),
   });
 }
+
+export interface ScreenStatus {
+  available: boolean;
+  width?: number;
+  height?: number;
+  fps?: number;
+  viewers: number;
+  streaming: boolean;
+  error?: string | null;
+}
+export function fetchScreenStatus(signal?: AbortSignal) {
+  return request<ScreenStatus>('/api/screen/status', { signal });
+}
+export function screenStreamUrl(attempt: number) {
+  return withToken(`/api/screen/stream?attempt=${attempt}`);
+}

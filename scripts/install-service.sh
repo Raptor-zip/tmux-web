@@ -110,6 +110,14 @@ if [ "$(loginctl show-user "$USER" --property=Linger --value 2>/dev/null || echo
   loginctl enable-linger "$USER" || die "linger の有効化に失敗しました（sudo loginctl enable-linger $USER を実行してから再実行してください）"
 fi
 
+# デスクトップ画面の配信に使う。未ログイン・ヘッドレス環境でも通常機能は起動する。
+if [ -n "${DISPLAY:-}" ]; then
+  systemctl --user import-environment DISPLAY
+fi
+if [ -n "${XAUTHORITY:-}" ]; then
+  systemctl --user import-environment XAUTHORITY
+fi
+
 # --- 有効化と起動 ------------------------------------------------------------
 systemctl --user daemon-reload
 systemctl --user enable "$SERVICE_NAME"
