@@ -77,6 +77,9 @@ export function Toolbar({
   const project = projectName(activePane, home);
 
   const moreItems = (): MenuEntry[] => [
+    { label: 'Claude を新しいタブで起動', run: () => onLaunchAgent('claude'), disabled: !session || launchingAgent !== null },
+    { label: 'Codex を新しいタブで起動', run: () => onLaunchAgent('codex'), disabled: !session || launchingAgent !== null },
+    SEP,
     { label: 'デバイスの画面を見る', run: onOpenScreen },
     { label: 'ウィンドウを切り替える…', hint: 'Alt+P', run: onOpenSwitcher },
     { label: 'コマンドを送る…', run: onSendCommand, disabled: !pane },
@@ -156,14 +159,18 @@ export function Toolbar({
           aria-label="作業フォルダーを開く" title="作業フォルダのファイル一覧とプレビュー"><Icon name="folder" /></button>
         <button className="icon-btn" aria-label="デバイスの画面を見る" title="デバイスのデスクトップ画面を見る"
           onClick={onOpenScreen}><Icon name="screen" /></button>
+        <div className="agent-launchers" role="group" aria-label="エージェントを起動">
         {(['claude', 'codex'] as const).map((agent) => (
-          <button key={agent} className="btn agent-launch" disabled={!session || launchingAgent !== null}
+          <button key={agent} className="icon-btn agent-launch" data-agent={agent}
+            disabled={!session || launchingAgent !== null} aria-busy={launchingAgent === agent}
             aria-label={`${agent === 'claude' ? 'Claude' : 'Codex'} を新しいタブで起動`}
             title={`現在の作業フォルダーで ${agent === 'claude' ? 'Claude' : 'Codex'} を新しいタブで起動`}
             onClick={() => onLaunchAgent(agent)}>
-            {launchingAgent === agent ? '起動中…' : agent === 'claude' ? 'Claude' : 'Codex'}
+            <Icon name={launchingAgent === agent ? 'loading' : agent}
+              className={launchingAgent === agent ? 'agent-launch-spinner' : undefined} />
           </button>
         ))}
+        </div>
         {statusMessage && !connected && <span className="term-status">{statusMessage}</span>}
         <button
           className="icon-btn toolbar-new-tab"
