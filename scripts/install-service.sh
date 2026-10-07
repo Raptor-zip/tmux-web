@@ -14,6 +14,12 @@ SERVICE_NAME="tmux-web.service"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT_PATH="$UNIT_DIR/$SERVICE_NAME"
 
+# 更新時も、明示しなかった待ち受け設定は引き継ぐ。
+unit_env() { sed -n "s/^Environment=$1=//p" "$UNIT_PATH" | tail -1; }
+if [ -f "$UNIT_PATH" ]; then
+  PORT="${PORT-$(unit_env PORT)}"
+  HOST="${HOST-$(unit_env HOST)}"
+fi
 PORT="${PORT:-7654}"
 HOST="${HOST:-127.0.0.1}"
 
@@ -38,6 +44,8 @@ NODE_BIN="$(command -v node || true)"
 [ -n "$NODE_BIN" ] || die "node が見つかりません"
 NODE_BIN="$(readlink -f "$NODE_BIN")"
 NODE_DIR="$(dirname "$NODE_BIN")"
+"$NODE_BIN" -e 'if (Number(process.versions.node.split(".")[0]) < 20) process.exit(1)' \
+  || die "Node.js 20 以上が必要です"
 
 NPM_BIN="$(command -v npm || true)"
 [ -n "$NPM_BIN" ] || die "npm が見つかりません"
@@ -47,10 +55,8 @@ say "node       : $NODE_BIN ($("$NODE_BIN" -v))"
 say "待ち受け   : http://$HOST:$PORT"
 
 # --- 依存関係とフロントエンドのビルド ---------------------------------------
-if [ ! -d "$REPO_DIR/node_modules" ]; then
-  say "依存関係をインストールします (npm install)"
-  (cd "$REPO_DIR" && "$NPM_BIN" install)
-fi
+say "ロックファイルに従って依存関係をインストールします (npm ci)"
+(cd "$REPO_DIR" && "$NPM_BIN" ci)
 
 say "フロントエンドをビルドします (npm run build)"
 (cd "$REPO_DIR" && "$NPM_BIN" run build)
@@ -101,7 +107,7 @@ fi
 # --- ログアウト後も動かすための linger -------------------------------------
 if [ "$(loginctl show-user "$USER" --property=Linger --value 2>/dev/null || echo no)" != "yes" ]; then
   say "linger を有効化します（ログアウト後・再起動後も起動させるため）"
-  loginctl enable-linger "$USER" || say "linger の有効化に失敗しました（sudo loginctl enable-linger $USER を手動で実行してください）"
+  loginctl enable-linger "$USER" || die "linger の有効化に失敗しました（sudo loginctl enable-linger $USER を実行してから再実行してください）"
 fi
 
 # --- 有効化と起動 ------------------------------------------------------------
