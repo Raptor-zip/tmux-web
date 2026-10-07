@@ -1,3 +1,4 @@
+import { Icon } from './components/Icon';
 import { FileBrowser } from './components/FileBrowser';
 import { MobileInput } from './components/MobileInput';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -113,6 +114,8 @@ export default function App() {
   }, []);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [cheatOpen, setCheatOpen] = useState(false);
+  const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
+  const launchInFlight = useRef(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; leafId: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
@@ -498,7 +501,7 @@ export default function App() {
 
   /** そのタブと同じディレクトリに、新しい tmux ウィンドウを作ってタブで開く */
   const newTerminal = useCallback(
-    async (leafId?: string | null) => {
+    async (leafId?: string | null, agent?: 'claude' | 'codex') => {
       const tree = layoutRef.current;
       const anchor = tree ? anchorLeaf(tree, leafId) : null;
       const tab = anchor ? activeTab(anchor) : null;
@@ -507,7 +510,7 @@ export default function App() {
       const cwd =
         panes.find((p) => p.windowId === tab?.windowId && p.active)?.path ?? activePane?.path;
       try {
-        const { result } = await runAction('newWindow', { target: session, after: true, cwd });
+        const { result } = await runAction(agent ? 'launchAgent' : 'newWindow', { target: session, after: true, cwd, ...(agent ? { agent } : {}) });
         if (!result) return;
         pendingWindows.current.add(result);
         const cur = layoutRef.current;
@@ -524,12 +527,20 @@ export default function App() {
         }
         refresh();
       } catch (err) {
-        toast(`newWindow: ${(err as Error).message}`);
+        toast(`${agent || "newWindow"}: ${(err as Error).message}`);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [focusedTab, sessions, panes, activePane, setLayout, refresh, toast],
   );
+
+  const launchAgent = async (agent: 'claude' | 'codex') => {
+    if (launchInFlight.current) return;
+    launchInFlight.current = true;
+    setLaunchingAgent(agent);
+    try { await newTerminal(focusedIdRef.current, agent); }
+    finally { launchInFlight.current = false; setLaunchingAgent(null); }
+  };
 
   /**
    * 「分割」= tmux のペインを増やすのではなく、新しいウィンドウを隣のタイルに開く。
@@ -1060,7 +1071,7 @@ export default function App() {
           aria-pressed={sidebarOpen}
           onClick={() => setSidebarOpen((v) => !v)}
         >
-          ☰
+          <Icon name="menu" />
         </button>
         <button
           className={`act-btn ${switcherOpen ? 'on' : ''}`}
@@ -1068,7 +1079,7 @@ export default function App() {
           aria-label="ウィンドウを切り替える"
           onClick={() => setSwitcherOpen(true)}
         >
-          ⇄
+          <Icon name="switch" />
         </button>
         <span className="spacer" />
         <button
@@ -1077,10 +1088,12 @@ export default function App() {
           aria-label="tmux チートシート"
           onClick={() => setCheatOpen(true)}
         >
-          ？
+          <Icon name="help" />
         </button>
       </nav>
 
+      {sidebarOpen && <button className="sidebar-backdrop" aria-label="セッション一覧を閉じる"
+        onClick={() => setSidebarOpen(false)} />}
       <Sidebar
         sessions={sessions}
         windows={windows}
@@ -1134,6 +1147,9 @@ export default function App() {
           statusMessage={termStatus.message}
           onAction={doAction}
           onNewTab={() => newTerminal(focusedIdRef.current)}
+          onLaunchAgent={launchAgent}
+          launchingAgent={launchingAgent}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onSplitNewWindow={splitIntoNewWindow}
           onToggle={onToggle}
           onCopyPane={copyPane}

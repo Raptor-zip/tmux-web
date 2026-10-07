@@ -282,6 +282,15 @@ export const actions = {
     if (cwd) args.push('-c', cwd);
     return tmux(args);
   },
+  // 固定した CLI だけを新しいウィンドウで起動する。終了・未インストール時もシェルを残す。
+  launchAgent: ({ target, cwd, agent }) => {
+    if (agent !== 'claude' && agent !== 'codex') throw new TmuxError('起動できるのは Claude / Codex です');
+    if (!target) throw new TmuxError('起動先のセッションがありません');
+    const args = ['new-window', '-P', '-F', '#{window_id}', '-t', target, '-n', agent];
+    if (cwd) args.push('-c', cwd);
+    args.push(`${agent}; exec "$SHELL" -l`);
+    return tmux(args);
+  },
   killWindow: ({ target }) => tmux(['kill-window', '-t', target]),
   /**
    * 未使用（全ペインがシェルだけ）のウィンドウをまとめて閉じる。

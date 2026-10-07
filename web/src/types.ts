@@ -93,6 +93,7 @@ export type ActionName =
   | 'renameSession'
   | 'mergeSession'
   | 'newWindow'
+  | 'launchAgent'
   | 'killWindow'
   | 'killIdleWindows'
   | 'renameWindow'
