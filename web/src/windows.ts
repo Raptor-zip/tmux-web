@@ -25,6 +25,28 @@ export interface WindowView {
   status: WindowStatus;
 }
 
+/** CLI 名やランタイム名は古くなり得るため、動作中のプロセスから表示名を決める。 */
+const TOOL_NAME = /^(?:claude(?: code)?|codex|aider|gemini|qwen|kimi|crush|goose|opencode|cursor-agent|copilot|droid|amp|node|bun|python3?|bash|zsh|fish|sh)(?:\.(?:js|mjs|cjs))?$/i;
+const TITLE_AGENT = /^(claude(?: code)?|codex|aider|gemini|qwen|kimi|crush|goose|opencode|cursor-agent|copilot|droid|amp)(?=$|\s*[:·—–-]|\s+v\d)/i;
+
+export function paneCommand(pane: Pane | null): string {
+  return pane?.proc?.agent || pane?.proc?.command || pane?.command || '';
+}
+
+export function windowName(win: TmuxWindow, pane: Pane | null): string {
+  const name = win.name.trim();
+  return TOOL_NAME.test(name) ? paneCommand(pane) || name : name;
+}
+
+export function windowTitle(win: TmuxWindow, pane: Pane | null): string {
+  const title = pane?.title?.trim() || '';
+  const oldAgent = title.match(TITLE_AGENT)?.[1]?.replace(/ code$/i, '').toLowerCase();
+  const currentAgent = pane?.proc?.agent?.toLowerCase();
+  // 古い CLI が残したタイトルは、別の CLI やシェルへ切り替わったら使わない。
+  if (oldAgent && pane?.proc && oldAgent !== currentAgent) return paneCommand(pane) || windowName(win, pane);
+  return title || windowName(win, pane);
+}
+
 /** ウィンドウ id → そのウィンドウのペイン（セッションをまたいで重複して届くので id で畳む） */
 export function groupPanes(panes: Pane[]): Map<string, Pane[]> {
   const map = new Map<string, Map<string, Pane>>();
@@ -57,10 +79,10 @@ export function buildWindowViews(
       lead,
       project: lead?.project?.name || shortPath(full, home),
       rel: lead?.project ? subPath(full, lead.project.root) : '',
-      primary: lead?.title?.trim() || win.name,
-      where: `${win.index}:${win.name}`,
+      primary: windowTitle(win, lead),
+      where: `${win.index}:${windowName(win, lead)}`,
       fullPath: full,
-      command: lead?.command ?? '',
+      command: paneCommand(lead),
       status: windowStatus(win, list, now),
     });
   }

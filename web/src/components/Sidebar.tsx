@@ -126,7 +126,7 @@ export function Sidebar({
     setPreview({
       paneId: pane.id,
       title: d?.primary ?? label,
-      subtitle: [label, win ? `${win.index}: ${win.name}` : null, d?.status?.label]
+      subtitle: [label, win ? views.get(win.id)?.where : null, d?.status?.label]
         .filter(Boolean)
         .join(' · '),
       anchor: e.currentTarget.getBoundingClientRect(),

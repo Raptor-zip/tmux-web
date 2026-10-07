@@ -52,7 +52,8 @@ export function relTime(ms: number): string {
 
 /** ウィンドウに属するペインをまとめて 1 つの状態にする */
 export function windowStatus(win: TmuxWindow, panes: Pane[], now: number): WindowStatus {
-  const agentPane = panes.find((p) => p.proc?.kind === 'agent');
+  const agentPanes = panes.filter(p => p.proc?.kind === 'agent');
+  const agentPane = agentPanes.find(p => p.active) ?? agentPanes[0];
   const ports = [...new Set(panes.flatMap((p) => p.proc?.ports ?? []))].sort((a, b) => a - b);
   const running = panes.find((p) => p.proc && p.proc.kind !== 'idle');
 
@@ -65,6 +66,10 @@ export function windowStatus(win: TmuxWindow, panes: Pane[], now: number): Windo
   const agent = agentPane?.proc?.agent ?? null;
   const chips: string[] = [];
   if (agent) chips.push(agent);
+  for (const p of agentPanes) {
+    const other = p.proc?.agent;
+    if (other && !chips.includes(other)) chips.push(other);
+  }
   for (const port of ports.slice(0, 2)) chips.push(`:${port}`);
   if (!agent && !ports.length && kind === 'run' && running?.proc?.command) {
     chips.push(running.proc.command);
