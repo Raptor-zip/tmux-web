@@ -79,6 +79,19 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
 
 export default function App() {
   const { state, connected, unauthorized, refresh } = useTmuxState();
+  const device = state?.server?.device;
+  useEffect(() => {
+    if (!device) return;
+    document.documentElement.style.setProperty('--status', device.color);
+    document.documentElement.style.setProperty('--accent', device.accent);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', device.color);
+    document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', device.name);
+    // ホスト変更や設定変更の後も同じ URL の古いアイコンを使わせない。
+    for (const rel of ['icon', 'apple-touch-icon', 'manifest']) {
+      const link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+      if (link) link.href = `${new URL(link.href).pathname}?device=${device.fingerprint}`;
+    }
+  }, [device?.fingerprint]);
 
   /** タイル id → ターミナル操作ハンドル。ツールバーやキーバーはフォーカス中のタイルに送る */
   const termRefs = useRef(new Map<string, TerminalHandle>());
@@ -397,8 +410,8 @@ export default function App() {
    */
   useEffect(() => {
     const name = activePane?.project?.name;
-    document.title = name ? `${name} — tmux web` : 'tmux web';
-  }, [activePane]);
+    document.title = [name, device?.name, 'tmux web'].filter(Boolean).join(' — ');
+  }, [activePane, device?.name]);
 
   /** 直前に見ていた順。切り替えパレットの並びに使う（ref だと並びが古いまま残る） */
   const [recent, setRecent] = useState<string[]>([]);
@@ -1257,6 +1270,7 @@ export default function App() {
       {filesPaneId && <FileBrowser paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
 
       <footer className="statusbar">
+        {device && <span className="sb-item device-name" title={device.name}>{device.name}</span>}
         <span className="sb-item">
           {currentSession ? currentSession.name : 'セッションなし'}
           {currentWindow && ` / ${currentWindow.index}:${currentWindow.name}`}

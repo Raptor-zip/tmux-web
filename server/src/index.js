@@ -14,6 +14,7 @@ import {
   isKnownAction,
   TmuxError,
 } from './tmux.js';
+import { installDevice } from './device.js';
 import { installFiles } from './files.js';
 import { createAttachment, cleanupOrphanMirrors, isMirrorSession } from './attach.js';
 
@@ -95,6 +96,8 @@ app.get('/api/keys', async (req, res) => {
 });
 
 installFiles(app, async (id) => (await snapshot()).panes.find((pane) => pane.id === id));
+
+installDevice(app);
 
 // 本番ビルドがあれば静的配信する（開発時は Vite が担当）
 if (fs.existsSync(WEB_DIST)) {

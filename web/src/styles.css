@@ -1989,3 +1989,5 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
   .sw-foot { display: none; }
   .switcher { max-height: min(80dvh, calc(var(--app-height, 100dvh) - 32px)); }
 }
+
+.device-name { flex: none; max-width: 32vw; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }

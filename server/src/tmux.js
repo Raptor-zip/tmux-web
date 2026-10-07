@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
+import { deviceIdentity } from './device.js';
 
 import { inspectPanes } from './inspect.js';
 
@@ -259,6 +260,7 @@ export async function serverInfo() {
     prefix,
     socketName: process.env.TMUX_WEB_SOCKET_NAME || 'default',
     home: os.homedir(),
+    device: deviceIdentity(),
   };
 }
 

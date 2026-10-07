@@ -78,7 +78,7 @@ export interface TmuxState {
   ts: number;
   /** tmux サーバのプロセス id。変わったら再起動＝id が振り直されたということ */
   serverPid?: number | null;
-  server?: { version: string; prefix: string; socketName: string; home: string };
+  server?: { version: string; prefix: string; socketName: string; home: string; device?: { name: string; color: string; accent: string; fingerprint: string } };
 }
 
 export interface KeyBinding {
