@@ -36,6 +36,18 @@ Ubuntu 24.04 で tmux / git がなければ `sudo apt install tmux git` で導�
 既に動作中の tmux セッションはそのまま使う。設定はユーザー単位で導入する。
 再起動前には `./scripts/resurrect-autosave.sh` で最新の構成を保存できる。
 
+`setup.sh` は bash / zsh の対話シェルにも tmux の自動起動を設定する。
+Terminator、GNOME Terminal、VS Code などで開く新しい端末・タブ・分割が、それぞれ
+独立した tmux セッションになり、tmux-web の一覧に表示される。開始フォルダーは引き継ぐ。
+既存のシェル設定は残し、変更前のバックアップを起動ファイルの隣に作成する。
+tmux 内や非対話のスクリプト、`bash -ic 'command'` などの明示的なコマンドでは起動しない。
+
+端末の設定だけ導入・更新する場合は `./scripts/install-terminal-tmux.sh` を実行する。
+開いたままの通常の bash 端末は `source ~/.bashrc` で tmux に入れる
+（実行中のコマンドは先に終了する）。一時的に素のシェルを使うには
+`TMUX_WEB_AUTO_START=0 bash`、自動起動を無効にするには起動ファイルの
+`# tmux-web: terminal auto-start` から始まるブロックを削除する。
+
 一時的に手動で起動するなら:
 
 ```bash

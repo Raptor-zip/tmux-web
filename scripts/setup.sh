@@ -9,4 +9,5 @@ done
 
 "$REPO_DIR/scripts/install-service.sh"
 "$REPO_DIR/scripts/install-persistence.sh"
+"$REPO_DIR/scripts/install-terminal-tmux.sh"
 "$REPO_DIR/scripts/resurrect-autosave.sh"
