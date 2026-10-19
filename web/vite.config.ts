@@ -5,6 +5,7 @@ const BACKEND = process.env.TMUX_WEB_BACKEND || 'http://127.0.0.1:7654';
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: { esbuildOptions: { target: 'es2022' } },
   server: {
     port: 5173,
     proxy: {
@@ -16,6 +17,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: 'es2022',
     outDir: 'dist',
     sourcemap: false,
   },

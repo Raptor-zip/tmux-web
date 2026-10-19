@@ -15,6 +15,7 @@ import {
   TmuxError,
 } from './tmux.js';
 import { installScreen } from './screen.js';
+import { createDesktop, readDesktopClipboard, writeDesktopClipboard } from './desktop.js';
 import { installDevice } from './device.js';
 import { installFiles } from './files.js';
 import { createAttachment, cleanupOrphanMirrors, isMirrorSession } from './attach.js';
@@ -100,6 +101,17 @@ installFiles(app, async (id) => (await snapshot()).panes.find((pane) => pane.id 
 
 installDevice(app);
 const screenCapture = installScreen(app);
+const desktop = createDesktop();
+app.get('/api/desktop/status', async (_req, res) => res.json(await desktop.status()));
+app.get('/api/desktop/clipboard', async (_req, res) => {
+  try { res.json({ text: await readDesktopClipboard() }); }
+  catch (err) { res.status(503).json({ error: err.message }); }
+});
+app.post('/api/desktop/clipboard', async (req, res) => {
+  if (typeof req.body?.text !== 'string') return res.status(400).json({ error: 'text is required' });
+  try { await writeDesktopClipboard(req.body.text); res.json({ ok: true }); }
+  catch (err) { res.status(503).json({ error: err.message }); }
+});
 
 // 本番ビルドがあれば静的配信する（開発時は Vite が担当）
 if (fs.existsSync(WEB_DIST)) {
@@ -309,7 +321,9 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy();
     return;
   }
-  if (url.pathname === '/ws/events') {
+  if (url.pathname === '/ws/desktop') {
+    desktop.upgrade(req, socket, head);
+  } else if (url.pathname === '/ws/events') {
     eventsWss.handleUpgrade(req, socket, head, (ws) => eventsWss.emit('connection', ws, req));
   } else if (url.pathname === '/ws/terminal') {
     terminalWss.handleUpgrade(req, socket, head, (ws) =>
@@ -344,6 +358,7 @@ server.listen(PORT, HOST, () => {
 const shutdown = async () => {
   clearInterval(pollTimer);
   screenCapture.dispose();
+  desktop.dispose();
   await cleanupOrphanMirrors().catch(() => {});
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 1500).unref();

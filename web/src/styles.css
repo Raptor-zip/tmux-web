@@ -2023,3 +2023,23 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
   .splitview .tile.focused { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; }
   .ctxmenu button { min-height: 44px; }
 }
+
+/* Remote desktop: preserve the source pixels; scaling is a client-side choice. */
+.desktop-backdrop { padding: 0; }
+.desktop-viewer .screen-head strong span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desktop-viewer { width: 98vw; height: 96dvh; max-width: none; }
+.desktop-viewer:fullscreen { width: 100%; height: 100%; border: 0; border-radius: 0; }
+.desktop-stage { flex: 1; min-height: 0; position: relative; overflow: hidden; background: #111; }
+.desktop-viewport { width: 100%; height: 100%; }
+.desktop-viewport canvas { outline: none; }
+.desktop-viewport canvas:focus-visible { outline: 2px solid var(--accent, #3794ff); outline-offset: -2px; }
+.desktop-message { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; pointer-events: none; }
+.desktop-clipboard { flex: none; padding: 0 8px; }
+.desktop-clipboard label { display: block; font-size: 12px; padding-bottom: 4px; }
+.desktop-clipboard textarea { width: 100%; min-height: 64px; max-height: 20dvh; resize: vertical; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--border-strong); padding: 8px; }
+.desktop-hint { display: block; }
+@media (max-width: 767px) {
+  .desktop-viewer { width: 100%; height: 100dvh; border-radius: 0; }
+  .desktop-viewer .screen-controls { gap: 4px; padding: 4px; }
+  .desktop-viewer .screen-foot { padding: 4px 8px; }
+}
