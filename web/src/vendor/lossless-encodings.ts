@@ -9,3 +9,12 @@ export function losslessEncodings(depth: number, compression: number): number[] 
     ...(depth === 24 ? [0x574d5664, -239] : []), // Cursor shapes
   ];
 }
+
+export function desktopEncodings(depth: number, compression: number, quality: number | null): number[] {
+  const encodings = losslessEncodings(depth, compression);
+  if (quality === null || depth !== 24) return encodings;
+  // Tight handles JPEG images and lossless text/solid rectangles in one stream.
+  encodings.splice(1, 0, 7);
+  encodings.push(-32 + quality);
+  return encodings;
+}

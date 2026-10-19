@@ -9,6 +9,13 @@ import { WebSocketServer } from 'ws';
 const exec = promisify(execFile);
 const MAX_BUFFER = 8 * 1024 * 1024;
 
+export function desktopOptions(url) {
+  const params = new URL(url, 'http://localhost').searchParams;
+  const scale = ['1', '0.75', '0.5'].includes(params.get('scale')) ? params.get('scale') : '1';
+  const interval = ['16', '33', '66', '100'].includes(params.get('interval')) ? params.get('interval') : '33';
+  return { scale, interval };
+}
+
 export async function probeDesktop() {
   const display = process.env.TMUX_WEB_DISPLAY || process.env.DISPLAY;
   if (!display) throw new Error('X11 にログインし、DISPLAY / XAUTHORITY をサービスに引き継いでください。Wayland は未対応です。');
@@ -31,7 +38,7 @@ export function createDesktop({ probe = probeDesktop, spawnVnc = spawn } = {}) {
   let disposed = false;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024, perMessageDeflate: false });
 
-  async function connect(ws) {
+  async function connect(ws, options) {
     let child, tcp, directory, retry, timer, closed = false;
     const cleanup = () => {
       if (closed) return;
@@ -70,7 +77,11 @@ export function createDesktop({ probe = probeDesktop, spawnVnc = spawn } = {}) {
         '-norc', '-display', config.display, '-unixsock', socketPath,
         '-rfbport', '0', '-timeout', '15', '-no6', '-nopw', '-once', '-shared', '-quiet', '-safer',
         '-xkb', '-repeat', '-xrandr', 'resize',
-        '-nowf', '-noscr', '-wait', '20', '-defer', '10',
+        // Avoid the automatic overload sleep (up to 1.5 s), and prioritize
+        // input without adding a second batching delay after each screen poll.
+        '-nowf', '-noscr', '-nowait_bog', '-input_eagerly',
+        '-wait', options.interval, '-defer', '5', '-setdefer', '0',
+        '-scale', options.scale,
       ], { env: config.env, stdio: ['ignore', 'ignore', 'pipe'] });
       child.stderr.resume();
       child.once('error', () => fail('x11vnc を起動できませんでした'));
@@ -109,7 +120,8 @@ export function createDesktop({ probe = probeDesktop, spawnVnc = spawn } = {}) {
     },
     upgrade(req, socket, head) {
       if (disposed) return socket.destroy();
-      wss.handleUpgrade(req, socket, head, ws => { void connect(ws); });
+      const options = desktopOptions(req.url);
+      wss.handleUpgrade(req, socket, head, ws => { void connect(ws, options); });
     },
     dispose() { disposed = true; for (const close of [...sessions]) close(); wss.close(); },
   };

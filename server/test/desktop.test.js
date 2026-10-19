@@ -7,7 +7,7 @@ import { PassThrough } from 'node:stream';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import WebSocket from 'ws';
-import { createDesktop } from '../src/desktop.js';
+import { createDesktop, desktopOptions } from '../src/desktop.js';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
@@ -86,4 +86,25 @@ test('server disposal stops a connected desktop process', async t => {
   const ws = new WebSocket(f.url + '?token=qa'); await once(ws, 'message');
   const closed = once(ws, 'close'); f.desktop.dispose(); await closed;
   assert.equal(f.kills, 1);
+});
+
+test('desktop tuning accepts only bounded scale and polling options', () => {
+  assert.deepEqual(desktopOptions('/ws/desktop'), { scale: '1', interval: '33' });
+  assert.deepEqual(desktopOptions('/ws/desktop?scale=0.5&interval=16'), { scale: '0.5', interval: '16' });
+  for (const value of ['0', '-1', '999999', 'NaN', '0.5:in', '1%20-rfbport%205900']) {
+    assert.deepEqual(desktopOptions(`/ws/desktop?scale=${value}&interval=${value}`), { scale: '1', interval: '33' });
+  }
+});
+
+test('desktop applies per-connection scaling and avoids overload sleep without exposing TCP', async t => {
+  const f = await fixture(t);
+  const ws = new WebSocket(f.url + '?token=qa&scale=0.75&interval=66');
+  await once(ws, 'message');
+  assert.equal(f.args[f.args.indexOf('-scale') + 1], '0.75');
+  assert.equal(f.args[f.args.indexOf('-wait') + 1], '66');
+  assert.ok(f.args.includes('-nowait_bog'));
+  assert.ok(f.args.includes('-input_eagerly'));
+  assert.equal(f.args[f.args.indexOf('-rfbport') + 1], '0');
+  ws.close(); await once(ws, 'close');
+  await until(() => f.kills === 1);
 });

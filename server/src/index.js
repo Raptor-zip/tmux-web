@@ -102,6 +102,7 @@ installFiles(app, async (id) => (await snapshot()).panes.find((pane) => pane.id 
 installDevice(app);
 const screenCapture = installScreen(app);
 const desktop = createDesktop();
+app.get('/api/desktop/ping', (_req, res) => res.set('Cache-Control', 'no-store').json({ ok: true }));
 app.get('/api/desktop/status', async (_req, res) => res.json(await desktop.status()));
 app.get('/api/desktop/clipboard', async (_req, res) => {
   try { res.json({ text: await readDesktopClipboard() }); }
