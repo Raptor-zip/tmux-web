@@ -43,6 +43,18 @@ Terminator、GNOME Terminal、VS Code などで開く新しい端末・タブ・
 tmux 内や非対話のスクリプト、`bash -ic 'command'` などの明示的なコマンドでは起動しない。
 
 端末の設定だけ導入・更新する場合は `./scripts/install-terminal-tmux.sh` を実行する。
+このスクリプトはマウス操作とホイールでの履歴スクロールも設定し、動作中の tmux に即時反映する。
+既存の tmux 設定はバックアップして残し、`~/.config/tmux-web/terminal.conf` の読み込みを追記する
+（`XDG_CONFIG_HOME` を指定している場合はその配下）。履歴は新しいペインから最大 50,000 行保持する。
+マウス対応アプリにはホイールを渡し、それ以外では tmux の履歴を表示する。履歴表示は `q` で戻る。
+
+別 PC で導入済みなのにホイールが上矢印キーのように動く場合は、その PC のリポジトリで更新する:
+
+```bash
+git pull --ff-only
+./scripts/install-terminal-tmux.sh
+```
+
 開いたままの通常の bash 端末は `source ~/.bashrc` で tmux に入れる
 （実行中のコマンドは先に終了する）。一時的に素のシェルを使うには
 `TMUX_WEB_AUTO_START=0 bash`、自動起動を無効にするには起動ファイルの

@@ -15,6 +15,88 @@ const waitFor = async (check) => {
   assert.fail('terminal did not reach the expected state');
 };
 
+for (const useXdg of [false, true]) {
+  test(`terminal scrolling installs and updates live tmux (${useXdg ? 'XDG' : 'home'} config)`, { timeout: 20000 }, async (t) => {
+    try { execFileSync('tmux', ['-V']); } catch { t.skip('tmux unavailable'); return; }
+    const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'tw-scroll-'));
+    const home = path.join(temp, 'home with spaces');
+    const xdg = path.join(home, '.config');
+    const conf = useXdg ? path.join(xdg, 'tmux', 'tmux.conf') : path.join(home, '.tmux.conf');
+    const socket = path.join(temp, 'socket');
+    await fs.mkdir(path.dirname(conf), { recursive: true });
+    const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: xdg, ZDOTDIR: home,
+      TMUX: '', TMUX_PANE: '', TMUX_WEB_SOCKET_PATH: socket, TMUX_WEB_SOCKET_NAME: '',
+      TERM: 'xterm-256color', SHELL: '/bin/bash', TMUX_WEB_AUTO_START: '0' };
+    const run = args => execFileSync('tmux', ['-S', socket, ...args], { env, encoding: 'utf8' }).trim();
+    let client;
+    t.after(async () => {
+      try { client?.kill(); } catch {}
+      try { run(['kill-server']); } catch {}
+      await fs.rm(temp, { recursive: true, force: true });
+    });
+    const oldConf = 'set -g mouse off\nset -g prefix C-a\n';
+    await fs.writeFile(conf, oldConf);
+    execFileSync('bash', [installer], { env });
+    const installed = await fs.readFile(conf, 'utf8');
+    assert.ok(installed.startsWith(oldConf));
+    const backup = (await fs.readdir(path.dirname(conf))).find(name => name.startsWith(`${path.basename(conf)}.tmux-web-backup-`));
+    assert.equal(await fs.readFile(path.join(path.dirname(conf), backup), 'utf8'), oldConf);
+
+    // 新規サーバにも設定が読み込まれ、既存の個人設定は残る。
+    run(['-f', conf, 'new-session', '-d', '-s', 'scroll', '/bin/bash --noprofile --norc']);
+    assert.equal(run(['show-options', '-gv', 'mouse']), 'on');
+    assert.equal(run(['show-options', '-gv', 'prefix']), 'C-a');
+    assert.equal(run(['show-options', '-gv', 'history-limit']), '50000');
+    // 導入前から起動中のサーバにも、再起動なしで設定を反映する。
+    run(['set-option', '-g', 'mouse', 'off']);
+    run(['bind-key', '-n', 'WheelUpPane', 'send-keys', 'Up']);
+    execFileSync('bash', [installer], { env });
+    assert.equal(await fs.readFile(conf, 'utf8'), installed);
+    assert.equal(run(['show-options', '-gv', 'mouse']), 'on');
+    assert.equal(run(['show-options', '-gv', 'prefix']), 'C-a');
+
+    client = pty.spawn('tmux', ['-S', socket, 'attach-session', '-t', 'scroll'], {
+      env, cwd: home, cols: 80, rows: 24,
+    });
+    let output = '';
+    client.onData(data => { output += data; });
+    await waitFor(() => output.includes('\x1b[?1006h'));
+    client.write("printf 'history-%s\\n' {1..100}\r");
+    await waitFor(() => run(['capture-pane', '-p']).includes('history-100'));
+    const wheelUp = '\x1b[<64;5;5M';
+    client.write(wheelUp);
+    await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '1');
+    client.write(wheelUp);
+    await waitFor(() => Number(run(['display-message', '-p', '#{scroll_position}'])) > 0);
+    client.write('q');
+    await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '0');
+
+    // マウス非対応の alternate screen でも、上矢印を送らず履歴表示に入る。
+    client.write("printf '\\033[?1049h'\r");
+    await waitFor(() => run(['display-message', '-p', '#{alternate_on}']) === '1');
+    client.write(wheelUp);
+    await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '1');
+    client.write('q');
+    await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '0');
+    client.write("printf '\\033[?1049l'\r");
+    await waitFor(() => run(['display-message', '-p', '#{alternate_on}']) === '0');
+
+    // アプリがマウス入力を要求している場合は、ホイールをそのまま届ける。
+    const app = path.join(temp, 'mouse-app.cjs');
+    const report = path.join(temp, 'mouse-input');
+    await fs.writeFile(app, `const fs = require('node:fs');
+process.stdin.setRawMode(true);
+process.stdout.write('\\x1b[?1000h\\x1b[?1006h');
+process.stdin.on('data', data => fs.appendFileSync(${JSON.stringify(report)}, data));
+`);
+    client.write(`'${process.execPath}' '${app}'\r`);
+    await waitFor(() => run(['display-message', '-p', '#{mouse_any_flag}']) === '1');
+    client.write(wheelUp);
+    await waitFor(async () => { try { return (await fs.readFile(report, 'utf8')).includes(wheelUp); } catch { return false; } });
+    assert.equal(run(['display-message', '-p', '#{pane_in_mode}']), '0');
+  });
+}
+
 test('terminal setup preserves settings and starts independent, visible tmux sessions', { timeout: 20000 }, async (t) => {
   try { execFileSync('tmux', ['-V']); } catch { t.skip('tmux unavailable'); return; }
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'tw-terminal-'));
