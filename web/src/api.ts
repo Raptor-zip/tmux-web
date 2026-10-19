@@ -152,3 +152,21 @@ export function fetchScreenStatus(signal?: AbortSignal) {
 export function screenStreamUrl(attempt: number) {
   return withToken(`/api/screen/stream?attempt=${attempt}`);
 }
+
+export interface DesktopStatus {
+  available: boolean;
+  width?: number;
+  height?: number;
+  viewers: number;
+  error?: string;
+}
+export function fetchDesktopStatus(signal?: AbortSignal) {
+  return request<DesktopStatus>('/api/desktop/status', { signal });
+}
+
+export function readDesktopClipboard() {
+  return request<{ text: string }>('/api/desktop/clipboard');
+}
+export function writeDesktopClipboard(text: string) {
+  return request<{ ok: true }>('/api/desktop/clipboard', { method: 'POST', body: JSON.stringify({ text }) });
+}
