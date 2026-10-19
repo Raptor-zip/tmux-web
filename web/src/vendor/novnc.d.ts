@@ -6,6 +6,7 @@ declare module '@novnc/novnc' {
     resizeSession: boolean;
     viewOnly: boolean;
     compressionLevel: number;
+    qualityLevel: number;
     focusOnClick: boolean;
     protected _sock: unknown;
     protected _fbDepth: number;

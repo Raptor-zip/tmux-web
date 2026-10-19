@@ -164,6 +164,12 @@ export function fetchDesktopStatus(signal?: AbortSignal) {
   return request<DesktopStatus>('/api/desktop/status', { signal });
 }
 
+export async function measureDesktopRoundTrip(signal?: AbortSignal) {
+  const start = performance.now();
+  await request<{ ok: boolean }>('/api/desktop/ping', { signal, cache: 'no-store' });
+  return Math.round(performance.now() - start);
+}
+
 export function readDesktopClipboard() {
   return request<{ text: string }>('/api/desktop/clipboard');
 }
