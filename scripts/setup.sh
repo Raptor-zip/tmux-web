@@ -7,7 +7,7 @@ for cmd in node npm tmux git systemctl loginctl; do
   command -v "$cmd" >/dev/null || { echo "$cmd が必要です。README.md の導入手順を確認してください" >&2; exit 1; }
 done
 
+"$REPO_DIR/scripts/install-terminal-tmux.sh"
 "$REPO_DIR/scripts/install-service.sh"
 "$REPO_DIR/scripts/install-persistence.sh"
-"$REPO_DIR/scripts/install-terminal-tmux.sh"
 "$REPO_DIR/scripts/resurrect-autosave.sh"
