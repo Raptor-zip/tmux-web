@@ -32,7 +32,8 @@ for (const useXdg of [false, true]) {
     t.after(async () => {
       try { client?.kill(); } catch {}
       try { run(['kill-server']); } catch {}
-      await fs.rm(temp, { recursive: true, force: true });
+      // 終了中のシェルが履歴ファイルを書き終えるまで待つ。
+      await fs.rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     });
     const oldConf = 'set -g mouse off\nset -g prefix C-a\n';
     await fs.writeFile(conf, oldConf);
@@ -71,14 +72,37 @@ for (const useXdg of [false, true]) {
     client.write('q');
     await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '0');
 
-    // マウス非対応の alternate screen でも、上矢印を送らず履歴表示に入る。
-    client.write("printf '\\033[?1049h'\r");
+    // 全画面CLIの履歴は tmux に存在しない。ホイールはアプリに
+    // PageUp/PageDown として渡し、入力欄の Up/Down 履歴操作を避ける。
+    const alternateApp = path.join(temp, 'alternate-app.cjs');
+    const alternateReport = path.join(temp, 'alternate-input');
+    await fs.writeFile(alternateApp, `const fs = require('node:fs');
+process.stdin.setRawMode(true);
+process.stdout.write('\\x1b[?1049h');
+process.stdin.on('data', data => {
+  fs.appendFileSync(${JSON.stringify(alternateReport)}, data);
+  if (data.includes(3)) { process.stdout.write('\\x1b[?1049l'); process.exit(); }
+});
+`);
+    client.write(`'${process.execPath}' '${alternateApp}'\r`);
     await waitFor(() => run(['display-message', '-p', '#{alternate_on}']) === '1');
+    const wheelDown = '\x1b[<65;5;5M';
     client.write(wheelUp);
-    await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '1');
+    await waitFor(async () => { try { return (await fs.readFile(alternateReport, 'utf8')).includes('\x1b[5~'); } catch { return false; } });
+    client.write(wheelDown);
+    await waitFor(async () => (await fs.readFile(alternateReport, 'utf8')).includes('\x1b[6~'));
+    assert.equal(run(['display-message', '-p', '#{pane_in_mode}']), '0');
+    const received = await fs.readFile(alternateReport, 'utf8');
+    assert.ok(!received.includes('\x1b[A') && !received.includes('\x1b[B'), 'do not recall composer input history');
+
+    // 明示的に copy-mode に入った場合は、全画面CLIへ PageUp を送らない。
+    run(['copy-mode']);
+    client.write(wheelUp);
+    await waitFor(() => Number(run(['display-message', '-p', '#{scroll_position}'])) > 0);
+    assert.equal(await fs.readFile(alternateReport, 'utf8'), received);
     client.write('q');
     await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '0');
-    client.write("printf '\\033[?1049l'\r");
+    client.write('\x03');
     await waitFor(() => run(['display-message', '-p', '#{alternate_on}']) === '0');
 
     // アプリがマウス入力を要求している場合は、ホイールをそのまま届ける。
@@ -94,6 +118,17 @@ process.stdin.on('data', data => fs.appendFileSync(${JSON.stringify(report)}, da
     client.write(wheelUp);
     await waitFor(async () => { try { return (await fs.readFile(report, 'utf8')).includes(wheelUp); } catch { return false; } });
     assert.equal(run(['display-message', '-p', '#{pane_in_mode}']), '0');
+    client.write(wheelDown);
+    await waitFor(async () => (await fs.readFile(report, 'utf8')).includes(wheelDown));
+
+    // 分割画面では、アクティブなペインではなくポインター下のアプリへ渡す。
+    const mousePane = run(['display-message', '-p', '#{pane_id}']);
+    run(['split-window', '-h', '/bin/bash --noprofile --norc']);
+    assert.equal(run(['display-message', '-p', '-t', mousePane, '#{pane_active}']), '0');
+    const previousSize = (await fs.stat(report)).size;
+    client.write(wheelUp);
+    await waitFor(async () => (await fs.stat(report)).size > previousSize);
+    assert.equal(run(['display-message', '-p', '#{pane_id}']), mousePane);
   });
 }
 
@@ -115,7 +150,7 @@ test('terminal setup preserves settings and starts independent, visible tmux ses
   t.after(async () => {
     for (const client of clients) { try { client.kill(); } catch {} }
     try { run(['kill-server']); } catch {}
-    await fs.rm(temp, { recursive: true, force: true });
+    await fs.rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   });
   const oldRc = '# user settings\nexport USER_SETTING=preserved\n';
   await fs.writeFile(path.join(home, '.bashrc'), oldRc);
