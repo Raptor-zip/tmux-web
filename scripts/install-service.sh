@@ -118,6 +118,18 @@ if [ -n "${XAUTHORITY:-}" ]; then
   systemctl --user import-environment XAUTHORITY
 fi
 
+# linger で GUI より先に起動したサービスにも、ログイン後に画面情報を渡す。
+AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+mkdir -p "$AUTOSTART_DIR"
+cat > "$AUTOSTART_DIR/tmux-web-desktop.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=tmux-web desktop environment
+Exec=/bin/bash "$REPO_DIR/scripts/import-desktop-environment.sh"
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+DESKTOP
+
 # --- 有効化と起動 ------------------------------------------------------------
 systemctl --user daemon-reload
 systemctl --user enable "$SERVICE_NAME"
