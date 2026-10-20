@@ -19,6 +19,12 @@ else
   say "ユニットは見つかりませんでした : $UNIT_PATH"
 fi
 
+AUTOSTART_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/tmux-web-desktop.desktop"
+if [ -f "$AUTOSTART_PATH" ]; then
+  rm -f "$AUTOSTART_PATH"
+  say "削除しました : $AUTOSTART_PATH"
+fi
+
 systemctl --user daemon-reload
 systemctl --user reset-failed "$SERVICE_NAME" 2>/dev/null || true
 say "完了"
