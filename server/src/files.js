@@ -1,4 +1,6 @@
 import path from 'node:path';
+import express from 'express';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { promises as fsp } from 'node:fs';
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
@@ -92,6 +94,37 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
     } catch (error) { handleError(res, error); }
   });
 
+  app.post('/api/files/upload', express.raw({ type: 'application/octet-stream', limit: '50mb' }), async (req, res) => {
+    try {
+      const root = await rootFor(req.query.pane);
+      if (req.query.root !== root) throw fail(409, '作業フォルダが変わりました。一覧を開き直してください');
+      const directory = await resolveFile(root, req.query.path || '');
+      const name = req.query.name;
+      if (typeof name !== 'string' || !name || name.length > 240 || /[/\\\x00-\x1f\x7f]/.test(name) || hidden(name)) throw fail(400, '通常のファイル名を指定してください');
+      if (!Buffer.isBuffer(req.body)) throw fail(400, 'ファイルがありません');
+      if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'アップロード先はフォルダを選んでください');
+      let index = 1;
+      while (true) {
+        const ext = path.extname(name);
+        const saved = index === 1 ? name : `${path.basename(name, ext)}-${index}${ext}`;
+        try {
+          await fsp.writeFile(path.join(directory, saved), req.body, { flag: 'wx' });
+          res.json({ name: saved }); return;
+        } catch (error) { if (error.code !== 'EEXIST') throw error; index++; }
+      }
+    } catch (error) { handleError(res, error); }
+  });
+  app.post('/api/files/archive', async (req, res) => {
+    try {
+      const root = await rootFor(req.body?.pane);
+      if (req.body?.root !== root) throw fail(409, '作業フォルダが変わりました。一覧を開き直してください');
+      const relative = req.body?.path || '';
+      const directory = await resolveFile(root, relative);
+      if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'フォルダを選んでください');
+      res.json({ url: `/files/content?ticket=${issue({ root, path: relative, archive: true })}` });
+    } catch (error) { handleError(res, error); }
+  });
+
   app.post('/api/files/open', async (req, res) => {
     try {
       const root = await rootFor(req.body?.pane);
@@ -110,6 +143,18 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
     try {
       const data = verify(req.query.ticket);
       const file = await resolveFile(data.root, data.path);
+      if (data.archive) {
+        if (!(await fsp.stat(file)).isDirectory()) throw fail(400, 'フォルダを選んでください');
+        const child = spawn('tar', ['-czf', '-', '--exclude=.*', '--exclude=node_modules', '--exclude=__pycache__', '-C', path.dirname(file), '--', path.basename(file)], { stdio: ['ignore', 'pipe', 'pipe'] });
+        res.set({ 'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(file))}.tar.gz`, 'Cache-Control': 'private, no-store' });
+        child.on('error', error => handleError(res, error));
+        child.stderr.resume();
+        child.stdout.pipe(res, { end: false });
+        child.on('close', code => { if (code === 0) res.end(); else if (!res.destroyed) res.destroy(); });
+        res.on('close', () => child.kill());
+        return;
+      }
+
       handle = await fsp.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
       // Linux: パス解決から open までにリンクが差し替わっても、実際の FD を確認する。
       if (process.platform === 'linux') {

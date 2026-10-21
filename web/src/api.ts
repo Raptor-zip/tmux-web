@@ -176,3 +176,27 @@ export function readDesktopClipboard() {
 export function writeDesktopClipboard(text: string) {
   return request<{ ok: true }>('/api/desktop/clipboard', { method: 'POST', body: JSON.stringify({ text }) });
 }
+
+export interface RecentProject { name: string; cwd: string; sessionId: string; modified: number; summary: string }
+export interface StartedProject { sessionId: string; windowId: string; paneId: string; cwd: string }
+export interface StartProjectOptions {
+  mode: 'new' | 'existing'; name?: string; parent?: string; dir?: string;
+  template?: 'none' | 'node' | 'python'; agent?: 'claude' | 'codex' | 'shell';
+  prompt?: string; resumeId?: string; remoteControl?: boolean;
+}
+export const recentProjects = (signal?: AbortSignal) => request<{ projects: RecentProject[] }>('/api/projects/recent', { signal });
+export const startProject = (options: StartProjectOptions) => request<StartedProject>('/api/projects/start', { method: 'POST', body: JSON.stringify(options) });
+export const remoteControl = (pane: string, connect = true) => request<{ url?: string; pending?: boolean }>('/api/claude/remote-control', { method: 'POST', body: JSON.stringify({ pane, connect }) });
+export async function uploadFile(pane: string, path: string, root: string, file: File, signal?: AbortSignal) {
+  const res = await fetch(withToken(`/api/files/upload?${new URLSearchParams({ pane, path, root, name: file.name })}`), {
+    method: 'POST', body: file, signal, headers: { 'Content-Type': 'application/octet-stream', ...(TOKEN ? { 'x-tmux-web-token': TOKEN } : {}) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(res.status === 413 ? '1ファイルは50MBまでです。' : body.error || 'アップロードできませんでした');
+  return body as { name: string };
+}
+export const archiveFiles = (pane: string, path: string, root: string) => request<{ url: string }>('/api/files/archive', { method: 'POST', body: JSON.stringify({ pane, path, root }) });
+export interface Approval { id: string; cmd: string; cwd: string; detail: string; attempt: number; expiresAt: number }
+export const fetchApproval = (signal?: AbortSignal) => request<{ pending: Approval | null; secure: boolean }>('/api/approvals', { signal, cache: 'no-store' });
+export const answerApproval = (id: string, password: string) => request('/api/approvals/answer', { method: 'POST', body: JSON.stringify({ id, password }) });
+export const cancelApproval = (id: string) => request('/api/approvals/cancel', { method: 'POST', body: JSON.stringify({ id }) });

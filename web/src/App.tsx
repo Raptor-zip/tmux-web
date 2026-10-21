@@ -1,11 +1,13 @@
-import { ProjectManager, SudoNotice } from './components/ProjectManager';
+import { ProjectStart } from './components/ProjectStart';
+import { ApprovalDialog, ApprovalNotice, useApproval } from './components/Approval';
+import { RemoteControl } from './components/RemoteControl';
 import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
 import { FileBrowser } from './components/FileBrowser';
 import { MobileInput } from './components/MobileInput';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { fetchCapture, runAction, useTmuxState } from './api';
+import { fetchCapture, runAction, useTmuxState, type StartedProject } from './api';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { KeyBar } from './components/KeyBar';
@@ -127,7 +129,12 @@ export default function App() {
       document.documentElement.style.removeProperty('--app-height');
     };
   }, []);
-  const [projectsOpen, setProjectsOpen] = useState(false);
+  const pendingWindows = useRef<Set<string>>(new Set());
+  const pendingSessions = useRef<Set<string>>(new Set());
+  const [projectMode, setProjectMode] = useState<'new' | 'existing' | null>(null);
+  const approval = useApproval();
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [remotePane, setRemotePane] = useState<string | null>(null);
   const [screenOpen, setScreenOpen] = useState(false);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [cheatOpen, setCheatOpen] = useState(false);
@@ -229,7 +236,7 @@ export default function App() {
     if (serverDown || !layout) return false;
     const list = allTabs(layout);
     return (
-      list.length > 0 && list.every(({ tab }) => !sessions.some((s) => s.id === tab.sessionId))
+      list.length > 0 && list.every(({ tab }) => !pendingSessions.current.has(tab.sessionId) && !sessions.some((s) => s.id === tab.sessionId))
     );
   }, [serverDown, layout, sessions]);
   const needsRemap = !serverDown && (savedPid !== serverPid || idsUnknown);
@@ -313,7 +320,8 @@ export default function App() {
     if (serverDown) return;
     // 繋ぎ直しが済むまでは古い id で判定してしまうので触らない
     if (needsRemap) return;
-    const valid = new Set(sessions.map((s) => s.id));
+    for (const session of sessions) pendingSessions.current.delete(session.id);
+    const valid = new Set([...sessions.map((s) => s.id), ...pendingSessions.current]);
     setLayout((prev) => {
       const pruned = prev ? pruneStale(prev, valid) : null;
       if (pruned) return pruned === prev ? prev : pruned;
@@ -331,8 +339,6 @@ export default function App() {
   const leaves = useMemo(() => (layout ? allLeaves(layout) : []), [layout]);
   const tabs = useMemo(() => (layout ? allTabs(layout) : []), [layout]);
 
-  /** これから作られる／作ったばかりで、まだ状態に現れていないウィンドウ */
-  const pendingWindows = useRef<Set<string>>(new Set());
 
   // フォーカスが実在するタイルを指すようにする
   useEffect(() => {
@@ -511,6 +517,15 @@ export default function App() {
     [setLayout, setSidebarOpen],
   );
 
+  const projectStarted = (project: StartedProject) => {
+    pendingSessions.current.add(project.sessionId);
+    setTimeout(() => { pendingSessions.current.delete(project.sessionId); pendingWindows.current.delete(project.windowId); refresh(); }, 10000);
+    pendingWindows.current.add(project.windowId);
+    setProjectMode(null);
+    openTab(project.sessionId, project.windowId);
+    refresh();
+  };
+
   const openWindow = useCallback(
     (win: TmuxWindow) => openTab(win.sessionId, win.id),
     [openTab],
@@ -523,7 +538,7 @@ export default function App() {
       const anchor = tree ? anchorLeaf(tree, leafId) : null;
       const tab = anchor ? activeTab(anchor) : null;
       const session = tab?.sessionId ?? focusedTab?.sessionId ?? sessions[0]?.id;
-      if (!session) return;
+      if (!session) { setProjectMode('existing'); return; }
       const cwd =
         panes.find((p) => p.windowId === tab?.windowId && p.active)?.path ?? activePane?.path;
       try {
@@ -1023,7 +1038,7 @@ export default function App() {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (projectsOpen || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
+      if (projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
       const key = e.key.toLowerCase();
       const digit = e.code.startsWith('Digit')
         ? Number(e.code.slice(5))
@@ -1076,7 +1091,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [projectsOpen, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
+  }, [projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
@@ -1132,6 +1147,10 @@ export default function App() {
         }}
         onSelectWindow={openWindow}
         onAction={doAction}
+        onClose={() => setSidebarOpen(false)}
+        onNewProject={() => setProjectMode('new')}
+        onOpenFolder={() => setProjectMode('existing')}
+        onProjectStarted={projectStarted}
         onNewSession={() =>
           setDialog({
             kind: 'prompt',
@@ -1171,7 +1190,8 @@ export default function App() {
           onToggle={onToggle}
           onCopyPane={copyPane}
           onKillPane={killPane}
-          onOpenProjects={() => setProjectsOpen(true)}
+          onNewProject={() => setProjectMode('new')}
+          onRemoteControl={() => activePane && setRemotePane(activePane.id)}
           onOpenScreen={() => setScreenOpen(true)}
           onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
           onOpenSwitcher={() => setSwitcherOpen(true)}
@@ -1189,6 +1209,8 @@ export default function App() {
           }
           onOpenMenu={(items, x, y) => setMenu({ x, y, items })}
         />
+
+        {approval.pending && <ApprovalNotice pending={approval.pending} onOpen={() => setApprovalOpen(true)} />}
 
         <div className="workspace">
           <div className="terminal-wrap">
@@ -1320,8 +1342,9 @@ export default function App() {
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 
-      {projectsOpen && <ProjectManager onClose={() => setProjectsOpen(false)} />}
-      <SudoNotice onOpen={() => setProjectsOpen(true)} />
+      {projectMode && <ProjectStart home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
+      {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure} onClose={() => setApprovalOpen(false)} onDone={() => { setApprovalOpen(false); approval.refresh(); }} />}
+      {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}
       {screenOpen && <ScreenViewer deviceName={device?.name} onClose={() => setScreenOpen(false)} />}
       {switcherOpen && (
         <Switcher

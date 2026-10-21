@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SUDO_ASKPASS ヘルパー。パスワードを、この PC の画面ではなくスマホから受け取る。
 
-sudo が呼ぶ  →  tmux-web のプロジェクト管理に「いま何に sudo が要るか」を登録  →  スマホに出る
+sudo が呼ぶ  →  tmux-webに「いま何に sudo が要るか」を登録  →  スマホに出る
            →  入力されたものを標準出力へ  →  sudo が直接読む
 
 取り扱いの原則（変更するときは必ず守ること）:
@@ -22,8 +22,8 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = os.environ.get("TMUX_WEB_PROJECTS_URL", "http://127.0.0.1:7654/projects")
-TIMEOUT = 180  # tmux-web のプロジェクト管理側の期限(150秒)より少しだけ長く待つ
+BASE = os.environ.get("TMUX_WEB_URL", "http://127.0.0.1:7654")
+TIMEOUT = 180  # tmux-web側の期限(150秒)より少しだけ長く待つ
 
 
 def note(msg: str) -> None:
@@ -70,7 +70,7 @@ def main() -> int:
 
     try:
         created = post_json(
-            "/api/askpass/request",
+            "/api/approvals/request",
             {
                 "cmd": os.environ.get("SUDO_GUI_CMD", "(不明)"),
                 "cwd": os.environ.get("SUDO_GUI_CWD", os.getcwd()),
@@ -79,18 +79,18 @@ def main() -> int:
             },
         )
     except urllib.error.URLError as e:
-        note(f"tmux-web のプロジェクト管理に繋がりません（{BASE}）: {e}")
+        note(f"tmux-webに繋がりません（{BASE}）: {e}")
         note("systemctl --user status tmux-web を確認してください。")
         return 1
 
     note("")
-    note("  tmux-web のプロジェクト管理に sudo のパスワード要求を出しました。")
-    note("  スマホでtmux-web のプロジェクト管理を開き、上部のバナーから承認してください。")
+    note("  tmux-webに sudo のパスワード要求を出しました。")
+    note("  スマホでtmux-webを開き、「sudo 承認待ち」の通知から承認してください。")
     if attempt > 1:
         note(f"  （{attempt} 回目。前回のパスワードは違っていました）")
     note("")
 
-    url = f"{BASE}/api/askpass/wait?id={created['id']}&claim={created['claim']}"
+    url = f"{BASE}/api/approvals/wait?id={created['id']}&claim={created['claim']}"
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT) as res:
             if res.status != 200:
@@ -101,7 +101,7 @@ def main() -> int:
         note("取り消されたか、期限切れです。")
         return 1
     except urllib.error.URLError as e:
-        note(f"待っている間にtmux-web のプロジェクト管理との通信が切れました: {e}")
+        note(f"待っている間にtmux-webとの通信が切れました: {e}")
         return 1
 
     if not secret:

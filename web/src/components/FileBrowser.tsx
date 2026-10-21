@@ -1,6 +1,6 @@
 import { Icon } from './Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchFiles, openFile, type FileEntry, type FileListing } from '../api';
+import { fetchFiles, openFile, uploadFile, archiveFiles, type FileEntry, type FileListing } from '../api';
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -10,6 +10,13 @@ function formatSize(bytes: number) {
 }
 
 export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): void }) {
+  const [transfer, setTransfer] = useState<{ done: number; total: number; name: string } | null>(null);
+  const [notice, setNotice] = useState('');
+  const [archiving, setArchiving] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const uploadController = useRef<AbortController | null>(null);
+  const uploadLock = useRef(false);
   const [directory, setDirectory] = useState('');
   const [listing, setListing] = useState<FileListing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,7 +34,7 @@ export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): vo
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     closeButton.current?.focus();
-    return () => { previous?.focus(); requestId.current++; };
+    return () => { previous?.focus(); requestId.current++; uploadController.current?.abort(); };
   }, []);
 
   useEffect(() => {
@@ -68,6 +75,37 @@ export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): vo
       if (id === requestId.current) setPreviewError((err as Error).message);
     }
   };
+  const upload = async (files: File[]) => {
+    if (!listing || uploadLock.current || !files.length) return;
+    uploadLock.current = true;
+    const controller = new AbortController(); uploadController.current = controller;
+    setNotice(''); setError('');
+    let done = 0;
+    try {
+      for (const file of files) {
+        setTransfer({ done, total: files.length, name: file.name });
+        if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name} は50MBを超えています。`);
+        await uploadFile(paneId, directory, listing.root, file, controller.signal);
+        done++;
+      }
+      setNotice(`${done}件のファイルをアップロードしました。同名のファイルは連番で保存します。`);
+    } catch (error) { if (!controller.signal.aborted) setNotice(`${done}件を保存済み。${(error as Error).message}`); }
+    finally {
+      uploadLock.current = false;
+      if (!controller.signal.aborted) { setTransfer(null); setRevision(v => v + 1); }
+      if (input.current) input.current.value = '';
+    }
+  };
+  const downloadFolder = async () => {
+    if (!listing || archiving) return;
+    setArchiving(true); setNotice('');
+    try {
+      const { url } = await archiveFiles(paneId, directory, listing.root);
+      const link = document.createElement('a'); link.href = url; link.download = ''; document.body.append(link); link.click(); link.remove();
+      setNotice('フォルダーのダウンロードを開始しました。');
+    } catch (error) { setNotice((error as Error).message); }
+    finally { setArchiving(false); }
+  };
   const mediaError = () => setPreviewError('この形式はブラウザで表示できないか、リンクの期限が切れています。ダウンロードするか、一覧から開き直してください。');
 
   return (
@@ -95,13 +133,23 @@ export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): vo
           <button ref={closeButton} className="btn" onClick={onClose}>閉じる</button>
         </header>
         <div className="file-columns">
-          <section className="file-list-pane" aria-label="ファイル一覧">
+          <section className={`file-list-pane ${dragOver ? 'file-drop-active' : ''}`} aria-label="ファイル一覧"
+            onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); if (!transfer) setDragOver(true); } }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+            onDrop={e => { e.preventDefault(); setDragOver(false); if ([...e.dataTransfer.items].some(item => item.webkitGetAsEntry?.()?.isDirectory)) setNotice('フォルダーの中のファイルを選んでアップロードしてください。'); else void upload([...e.dataTransfer.files]); }}>
             <nav className="file-breadcrumbs" aria-label="フォルダ">
-              <button className="btn" onClick={() => navigate('')}>ルート</button>
+              <button className="btn" disabled={transfer !== null} onClick={() => navigate('')}>ルート</button>
               {directory.split('/').filter(Boolean).map((part, i, parts) => (
                 <button className="btn" key={i} onClick={() => navigate(parts.slice(0, i + 1).join('/'))}>{part}</button>
               ))}
             </nav>
+            <div className="file-transfer-actions">
+              <input ref={input} type="file" multiple hidden aria-label="アップロードするファイル" onChange={e => void upload([...(e.target.files || [])])} />
+              <button className="btn" disabled={!listing || loading || transfer !== null} onClick={() => input.current?.click()}><Icon name="upload" />アップロード</button>
+              <button className="btn" disabled={!listing || loading || transfer !== null || archiving} onClick={() => void downloadFolder()}><Icon name="download" />{archiving ? '準備中…' : 'フォルダーを保存'}</button>
+            </div>
+            {transfer && <div className="file-transfer-status" role="status"><span>{transfer.done + 1} / {transfer.total}：{transfer.name}</span><progress max={transfer.total} value={transfer.done} /></div>}
+            {notice && <p className="file-transfer-status" role="status">{notice}</p>}
             <div className="file-controls">
               <input aria-label="ファイル名で絞り込む" placeholder="ファイル名で絞り込む" value={filter} onChange={(e) => setFilter(e.target.value)} />
               <select aria-label="並び順" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
@@ -115,7 +163,7 @@ export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): vo
               {!loading && !error && items.length === 0 && <p>ファイルがありません。</p>}
               {items.map((entry) => (
                 <button key={entry.path} className={`file-row ${selected?.path === entry.path ? 'selected' : ''}`}
-                  onClick={() => entry.directory ? navigate(entry.path) : preview(entry)}>
+                  disabled={entry.directory && transfer !== null} onClick={() => entry.directory ? navigate(entry.path) : preview(entry)}>
                   <span className="file-kind" aria-hidden="true">{entry.directory ? <Icon name="folder" /> : entry.mime.startsWith('image/') ? '▧' : entry.mime.startsWith('video/') ? '▶' : entry.mime.startsWith('audio/') ? '♪' : '▤'}</span>
                   <span className="file-details"><span className="file-name">{entry.name}</span>
                     <span className="file-meta">{entry.directory ? 'フォルダ' : formatSize(entry.size)} · {new Date(entry.modified).toLocaleString('ja-JP')}</span>
@@ -124,7 +172,7 @@ export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): vo
                 </button>
               ))}
             </div>
-            <p className="file-note">隠しファイル・node_modules は省略しています。更新順はこのフォルダ内の並び順です。</p>
+            <p className="file-note">ファイルをドロップして追加できます（1件50MBまで）。隠しファイル・node_modules は表示と一括保存の対象外です。</p>
           </section>
           <section className="file-preview" aria-label="プレビュー">
             {selected ? <>

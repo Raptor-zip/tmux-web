@@ -105,3 +105,24 @@ test('invalid, tampered and expired links, and symlink replacement after issuanc
   advance();
   assert.equal((await fetch(base + url)).status, 401);
 });
+
+test('native uploads avoid overwrites and folder downloads preserve input assets while excluding secrets', async t => {
+  const {root,base,api}=await fixture(t);
+  const upload=(name,body)=>api(`/api/files/upload?${new URLSearchParams({pane:'%1',root,path:'out',name})}`,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body});
+  assert.equal((await upload('new.txt','first')).status,200);
+  assert.deepEqual(await (await upload('new.txt','second')).json(),{name:'new-2.txt'});
+  assert.equal(await fs.readFile(path.join(root,'out','new.txt'),'utf8'),'first');
+  assert.equal((await upload('../outside.txt','blocked')).status,400);
+  assert.equal((await upload('.env','blocked')).status,400);
+  await fs.symlink('/etc/passwd',path.join(root,'out','link.txt'));
+  assert.deepEqual(await (await upload('link.txt','safe')).json(),{name:'link-2.txt'});
+  assert.equal(await fs.readFile(path.join(root,'out','link-2.txt'),'utf8'),'safe');
+  const archive=await api('/api/files/archive',{method:'POST',body:JSON.stringify({pane:'%1',root,path:''})});
+  const {url}=await archive.json();const data=await fetch(base+url);
+  assert.equal(data.status,200);
+  const {execFileSync}=await import('node:child_process');
+  const names=execFileSync('tar',['-tzf','-'],{input:Buffer.from(await data.arrayBuffer()),encoding:'utf8'});
+  assert.match(names,/new-2.txt/);assert.doesNotMatch(names,/\.env/);
+  const rejected=await api('/api/files/archive',{method:'POST',body:JSON.stringify({pane:'%1',root,path:'..'})});
+  assert.equal(rejected.status,403);
+});

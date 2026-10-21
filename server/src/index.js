@@ -18,7 +18,8 @@ import { installScreen } from './screen.js';
 import { createDesktop, readDesktopClipboard, writeDesktopClipboard } from './desktop.js';
 import { installDevice } from './device.js';
 import { installFiles } from './files.js';
-import { installProjects } from './projects/index.js';
+import { installWorkspaces } from './workspaces.js';
+import { createApprovals } from './approvals.js';
 import { createAttachment, cleanupOrphanMirrors, isMirrorSession } from './attach.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,8 +30,9 @@ const HOST = process.env.HOST || '127.0.0.1';
 const TOKEN = process.env.TMUX_WEB_TOKEN || null;
 
 const app = express();
-installProjects(app, TOKEN);
 app.use(express.json({ limit: '1mb' }));
+const approvals = createApprovals();
+approvals.installHelpers(app);
 
 // ---------------------------------------------------------------------------
 // 認証（TMUX_WEB_TOKEN を設定したときだけ有効）
@@ -98,6 +100,9 @@ app.get('/api/keys', async (req, res) => {
     res.status(500).json({ error: String(err.message || err) });
   }
 });
+
+approvals.install(app);
+installWorkspaces(app, async (id) => (await snapshot()).panes.find(pane => pane.id === id));
 
 installFiles(app, async (id) => (await snapshot()).panes.find((pane) => pane.id === id));
 
@@ -360,6 +365,7 @@ server.listen(PORT, HOST, () => {
 
 const shutdown = async () => {
   clearInterval(pollTimer);
+  approvals.dispose();
   screenCapture.dispose();
   desktop.dispose();
   await cleanupOrphanMirrors().catch(() => {});
