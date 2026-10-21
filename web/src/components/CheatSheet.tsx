@@ -47,6 +47,8 @@ const WEB_EQUIVALENTS: { task: string; tmuxKey: string; here: string }[] = [
 
 /** ブラウザ側のショートカット。Alt 系は tmux に渡さずアプリが受け取る */
 const APP_KEYS: { key: string; what: string }[] = [
+  { key: 'Alt+Shift+← / →', what: '前 / 次の仮想デスクトップへ' },
+  { key: 'Alt+Shift+N', what: '仮想デスクトップを追加' },
   { key: 'Alt+1 〜 Alt+9', what: 'そのタイルの n 枚目のタブへ' },
   { key: 'Alt+0', what: '右端のタブへ' },
   { key: 'Alt+[ / Alt+]', what: '前 / 次のタブへ' },

@@ -109,7 +109,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     rafRef.current = requestAnimationFrame(() => {
       const term = termRef.current;
       const fit = fitRef.current;
-      if (!term || !fit) return;
+      if (!term || !fit || !hostRef.current?.offsetWidth || !hostRef.current?.offsetHeight) return;
       try {
         const dims = fit.proposeDimensions();
         if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return;

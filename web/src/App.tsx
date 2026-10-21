@@ -1,3 +1,4 @@
+import { desktopKey } from './desktops';
 import { Devices } from './components/Devices';
 import { deviceOf } from './devices';
 import { ProjectStart } from './components/ProjectStart';
@@ -83,15 +84,20 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
   return [value, setValue] as const;
 }
 
-export default function App() {
-  const { state, devices, connected, unauthorized, refresh, reloadDevices } = useTmuxState();
-  const [selectedDevice, setSelectedDevice] = usePersisted('tw.device', 'local');
+export default function App({ workspaceId, workspaceName, active, connection }: {
+  workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
+}) {
+  const { state, devices, connected, unauthorized, refresh, reloadDevices } = connection;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const key = (name: string) => desktopKey(workspaceId, name);
+  const [selectedDevice, setSelectedDevice] = usePersisted(key('tw.device'), 'local');
   const [devicesOpen, setDevicesOpen] = useState(false);
   const activeDevice = devices.find(d => d.id === selectedDevice) ?? devices[0];
   const device = activeDevice?.server?.device;
   const unavailable = useMemo(() => new Set(devices.filter(d => !d.connected || !d.serverPid).map(d => d.id)), [devices]);
   useEffect(() => {
-    if (!device) return;
+    if (!active || !device) return;
     document.documentElement.style.setProperty('--status', device.color);
     document.documentElement.style.setProperty('--accent', device.accent);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', device.color);
@@ -101,13 +107,13 @@ export default function App() {
       const link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
       if (link) link.href = `${new URL(link.href).pathname}?device=${device.fingerprint}`;
     }
-  }, [device?.fingerprint]);
+  }, [active, device?.fingerprint]);
 
   /** タイル id → ターミナル操作ハンドル。ツールバーやキーバーはフォーカス中のタイルに送る */
   const termRefs = useRef(new Map<string, TerminalHandle>());
 
-  const [layout, setLayout] = usePersisted<LayoutNode | null>('tw.layout', null, migrate);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [layout, setLayout] = usePersisted<LayoutNode | null>(key('tw.layout'), null, migrate);
+  const [focusedId, setFocusedId] = usePersisted<string | null>(key('tw.focusedLeaf'), null);
   const [mode, setMode] = usePersisted<'mirror' | 'direct'>('tw.mode', 'mirror');
   const [showStatusBar, setShowStatusBar] = usePersisted('tw.statusBar', false);
   const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar', true);
@@ -120,25 +126,10 @@ export default function App() {
   const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
   // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
   const [sidebarOpen, setSidebarOpen] = usePersisted('tw.sidebar', !isNarrow());
-  // iOS/Android のソフトキーボードで縮んだ表示領域に追従する。
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const update = () => {
-      if (viewport.scale !== 1) return;
-      document.documentElement.style.setProperty('--app-height', `${viewport.height}px`);
-    };
-    update();
-    viewport.addEventListener('resize', update);
-    return () => {
-      viewport.removeEventListener('resize', update);
-      document.documentElement.style.removeProperty('--app-height');
-    };
-  }, []);
   const pendingWindows = useRef<Set<string>>(new Set());
   const pendingSessions = useRef<Set<string>>(new Set());
   const [projectMode, setProjectMode] = useState<'new' | 'existing' | null>(null);
-  const approval = useApproval();
+  const approval = useApproval(active);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [remotePane, setRemotePane] = useState<string | null>(null);
   const [screenOpen, setScreenOpen] = useState<string | null>(null);
@@ -235,7 +226,7 @@ export default function App() {
    * 開いていたタブが消えてしまう。サーバが入れ替わったのを見て、
    * そのときだけ名前で繋ぎ直す。同じサーバのまま消えたウィンドウは今まで通り閉じる。
    */
-  const [savedPid, setSavedPid] = usePersisted<string | number | null>('tw.serverPid', null);
+  const [savedPid, setSavedPid] = usePersisted<string | number | null>(key('tw.serverPid'), null);
   const serverPid = devices.map(d => `${d.id}:${d.serverPid ?? '?'}`).join('|');
 
   /**
@@ -319,7 +310,7 @@ export default function App() {
   }, [serverDown, needsRemap, sessions, windows, setLayout]);
 
   // 一度でもタイルを開いたか。閉じきったあとに勝手に開き直さないための目印
-  const opened = useRef(false);
+  const opened = useRef(workspaceId !== 'main');
   useEffect(() => {
     if (layout) opened.current = true;
   }, [layout]);
@@ -433,8 +424,9 @@ export default function App() {
    */
   useEffect(() => {
     const name = activePane?.project?.name;
-    document.title = [name, device?.name, 'tmux web'].filter(Boolean).join(' — ');
-  }, [activePane, device?.name]);
+    if (!active) return;
+    document.title = [workspaceName, name, device?.name, 'tmux web'].filter(Boolean).join(' — ');
+  }, [active, workspaceName, activePane, device?.name]);
 
   /** 直前に見ていた順。切り替えパレットの並びに使う（ref だと並びが古いまま残る） */
   const [recent, setRecent] = useState<string[]>([]);
@@ -447,7 +439,7 @@ export default function App() {
   const focusedTerm = () => (focusedIdRef.current ? termRefs.current.get(focusedIdRef.current) : undefined);
   /** 新しく開いたタイルはこの時点ではまだ描かれていないので、次のフレームで掴む */
   const focusSoon = (leafId: string) =>
-    requestAnimationFrame(() => termRefs.current.get(leafId)?.focus());
+    requestAnimationFrame(() => { if (activeRef.current) termRefs.current.get(leafId)?.focus(); });
 
   const registerTerm = useCallback((id: string, handle: TerminalHandle | null) => {
     if (handle) termRefs.current.set(id, handle);
@@ -462,6 +454,14 @@ export default function App() {
   );
 
   const termStatus = (focusedId && termStatuses[focusedId]) || { connected: false };
+  useEffect(() => {
+    if (!active) return;
+    const frame = requestAnimationFrame(() => {
+      for (const term of termRefs.current.values()) term.fit();
+      if (focusedIdRef.current) termRefs.current.get(focusedIdRef.current)?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active]);
 
   // ------------------------------------------------------------------- 操作
 
@@ -1054,7 +1054,7 @@ export default function App() {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
+      if (!active || e.shiftKey || projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
       const key = e.key.toLowerCase();
       const digit = e.code.startsWith('Digit')
         ? Number(e.code.slice(5))
@@ -1107,7 +1107,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
+  }, [active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
