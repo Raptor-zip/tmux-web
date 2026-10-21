@@ -2177,3 +2177,9 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
   .desktop-close, .desktop-add, .desktop-rename { min-width: 36px; min-height: 44px; }
   .desktop-panel .sidebar { top: calc(44px + var(--safe-top)); }
 }
+
+.app-install { display: flex; gap: 6px; align-items: center; justify-content: center; flex: none; min-width: 34px; padding: 0 10px; border: 0; border-left: 1px solid var(--border); background: transparent; color: var(--fg-dim); cursor: pointer; }
+.app-install:hover { background: var(--bg-3); color: #fff; }
+.app-install:disabled { opacity: .5; cursor: wait; }
+.install-help { padding: 4px 20px 20px; line-height: 1.7; }
+@media (max-width: 760px) { .app-install { min-width: 40px; min-height: 44px; padding: 0 10px; } .install-label { display: none; } }

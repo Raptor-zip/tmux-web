@@ -1,3 +1,4 @@
+import { InstallApp } from './components/InstallApp';
 import { useEffect, useRef, useState } from 'react';
 import App from './App';
 import { newId } from './layout';
@@ -89,6 +90,7 @@ export default function Desktops() {
         </div>)}
       </div>
       <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}>＋</button>
+      <InstallApp />
       <button className="desktop-rename" aria-label="現在のデスクトップの名前を変更" title="デスクトップの名前を変更" onClick={() => rename()}>✎</button>
     </header>
     <div className="desktop-panels">
