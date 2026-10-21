@@ -1,6 +1,8 @@
 import type { SVGProps } from 'react';
 
 const paths = {
+  expand: 'M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5',
+  grid: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   claude: 'M12 3v5 M12 16v5 M3 12h5 M16 12h5 M5.6 5.6l3.5 3.5 M14.9 14.9l3.5 3.5 M5.6 18.4l3.5-3.5 M14.9 9.1l3.5-3.5 M8.6 3.9l1.8 4.6 M13.6 15.5l1.8 4.6 M3.9 15.4l4.6-1.8 M15.5 10.4l4.6-1.8',
   codex: 'm8 6-6 6 6 6 M16 6l6 6-6 6 M14 7l-4 10',
   loading: 'M20 12a8 8 0 1 1-8-8',

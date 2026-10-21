@@ -1,0 +1,234 @@
+[
+  {
+    "screen": "desktop-four",
+    "width": 1920,
+    "height": 1080,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 468,
+        "headerWidth": 184
+      },
+      {
+        "width": 468,
+        "headerWidth": 184
+      },
+      {
+        "width": 468,
+        "headerWidth": 184
+      },
+      {
+        "width": 468,
+        "headerWidth": 184
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "laptop-four",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 308,
+        "headerWidth": 24
+      },
+      {
+        "width": 308,
+        "headerWidth": 24
+      },
+      {
+        "width": 308,
+        "headerWidth": 24
+      },
+      {
+        "width": 308,
+        "headerWidth": 24
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "tablet-two",
+    "width": 900,
+    "height": 1024,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 296,
+        "headerWidth": 12
+      },
+      {
+        "width": 296,
+        "headerWidth": 12
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "mobile-panels",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 111
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "mobile-landscape",
+    "width": 740,
+    "height": 390,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 740,
+        "headerWidth": 461
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "many-tabs",
+    "width": 1100,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1052,
+        "headerWidth": 793
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "focus-panel",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 308,
+        "headerWidth": 24
+      },
+      {
+        "width": 308,
+        "headerWidth": 24
+      },
+      {
+        "width": 308,
+        "headerWidth": 24
+      },
+      {
+        "width": 308,
+        "headerWidth": 24
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "devices-modal",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 155
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "デバイス接続",
+        "width": 358
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "project-modal",
+    "width": 390,
+    "height": 640,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 155
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "ThinkPad · プロジェクトを開く",
+        "width": 358
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "desktop-modal",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 155
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 390
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "files-modal",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 155
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "ファイル一覧とプレビュー",
+        "width": 390
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "offline-panel",
+    "width": 900,
+    "height": 700,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 426,
+        "headerWidth": 142
+      },
+      {
+        "width": 426,
+        "headerWidth": 142
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  }
+]

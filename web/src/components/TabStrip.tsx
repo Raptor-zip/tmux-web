@@ -1,5 +1,6 @@
+import { ContextMenu, SEP, type MenuEntry } from './ContextMenu';
 import type { Device } from '../devices';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import type { DragPayload } from './SplitView';
 import type { LeafNode, TabRef } from '../layout';
@@ -21,6 +22,8 @@ interface Props {
    * null = 末尾、文字列 = そのタブの手前
    */
   caret?: string | null;
+  onOverview(): void;
+  onToggleFocus(): void;
   onActivate(tabId: string): void;
   onClose(tabId: string): void;
   onCloseTile(): void;
@@ -43,6 +46,8 @@ export function TabStrip({
   closableTile,
   draggingTabId,
   caret,
+  onOverview,
+  onToggleFocus,
   onActivate,
   onClose,
   onCloseTile,
@@ -50,6 +55,7 @@ export function TabStrip({
   onStartDrag,
   onContextMenu,
 }: Props) {
+  const [menu, setMenu] = useState<{x:number;y:number;items:MenuEntry[]} | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   // 前面のタブが隠れていたら見える位置まで送る（キーボードで切り替えたときに要る）
@@ -96,7 +102,10 @@ export function TabStrip({
 
   const step = (from: number, delta: number) => {
     const next = leaf.tabs[from + delta];
-    if (next) onActivate(next.id);
+    if (next) {
+      onActivate(next.id);
+      requestAnimationFrame(() => listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]')[from + delta]?.focus());
+    }
   };
 
   const mark = caret === undefined ? undefined : <span key="caret" className="tab-caret" />;
@@ -106,6 +115,7 @@ export function TabStrip({
       <div
         className="tablist"
         role="tablist"
+        aria-label="このパネルの端末"
         ref={listRef}
         // 横に長いタブ列は、縦ホイールでも送れたほうが早い
         onWheel={(e) => {
@@ -134,7 +144,7 @@ export function TabStrip({
                 role="tab"
                 tabIndex={active ? 0 : -1}
                 aria-selected={active}
-                title={[view?.primary, where, view?.fullPath, view?.status.label]
+                title={[device?.name, view?.primary, where, view?.fullPath, view?.status.label]
                   .filter(Boolean)
                   .join('\n')}
                 onPointerDown={(e) => {
@@ -164,17 +174,20 @@ export function TabStrip({
                   onContextMenu(tab.id, e.clientX, e.clientY);
                 }}
                 onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
                   if (e.key === 'Enter' || e.key === ' ') onActivate(tab.id);
                   else if (e.key === 'ArrowLeft') step(i, -1);
                   else if (e.key === 'ArrowRight') step(i, 1);
+                  else if (e.key === 'Home') step(i, -i);
+                  else if (e.key === 'End') step(i, leaf.tabs.length - 1 - i);
                   else if (e.key === 'Delete' || e.key === 'Backspace') onClose(tab.id);
                   else return;
                   e.preventDefault();
                 }}
               >
                 <span className={`state-dot ${kind}`} />
-                <span className="tab-device" style={{ color: device?.server?.device?.accent }} title={device?.error}>{device?.name || "このPC"}{device && !device.connected ? " · 切断" : ""}</span>
-                <span className="tab-name">{label}</span>
+                <span className="tab-device" style={{ color: device?.server?.device?.accent }} title={device?.error}><span className="device-full">{device?.name || "このPC"}</span><span className="device-short" aria-hidden="true">{device?.local ? "PC" : (device?.name || "接続先").replace(/[^A-Za-z0-9一-龯ぁ-んァ-ヶ]/g, "").slice(0,2).toUpperCase()}</span>{device && !device.connected ? " · 切断" : ""}</span>
+                <span className="tab-caption"><span className="tab-name">{label}</span><span className="tab-task">{view?.primary || tab.windowName || "端末"}</span></span>
                 <span className="tab-where">{where}</span>
                 <button
                   className="tab-close"
@@ -195,39 +208,21 @@ export function TabStrip({
       </div>
 
       <div className="strip-tools">
-        {devices.length > 1 && <select className="device-tab-picker" aria-label="別のデバイスで新しいタブを開く" value="" onChange={e => { if (e.target.value) onNewTab(e.target.value); }}>
-          <option value="" disabled>デバイス ＋</option>
-          {devices.map(d => <option key={d.id} value={d.id} disabled={!d.connected}>{d.name}{d.connected ? '' : '（未接続）'}</option>)}
-        </select>}
-        <select className="tab-picker" aria-label="このタイルのタブを選ぶ"
-          title={`タブ一覧（${leaf.tabs.length} タブ）`} value={leaf.activeId}
-          onChange={(e) => onActivate(e.target.value)}>
-          {leaf.tabs.map((tab, i) => {
-            const { view, session, device } = viewOf(tab);
-            return <option key={tab.id} value={tab.id}>
-              {i + 1}/{leaf.tabs.length} · {device?.name} · {view?.project || tab.sessionName || '端末'} · {view?.primary || ''} · {view ? whereWithSession(view, session) : ''}
-            </option>;
-          })}
-        </select>
-        <button
-          className="strip-btn"
-          title="新しい端末をタブで開く (Alt+T)"
-          aria-label="新しい端末をタブで開く"
-          onClick={() => onNewTab()}
-        >
-          <Icon name="plus" />
-        </button>
-        {closableTile && (
-          <button
-            className="strip-btn danger"
-            title="このタイルを閉じる（中のタブも全部閉じます）"
-            aria-label="このタイルを閉じる"
-            onClick={onCloseTile}
-          >
-            <Icon name="close" />
-          </button>
-        )}
+        {leaf.tabs.length > 1 && <button className="strip-btn tab-count" title="このパネルのタブを一覧で見る" aria-label={`このパネルの${leaf.tabs.length}タブを一覧で見る`} onClick={onOverview}>{leaf.tabs.length}</button>}
+        <button className="strip-btn" title="新しい端末を開く" aria-label="新しい端末をタブで開く" aria-haspopup="menu"
+          onClick={e => { const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.left,y:r.bottom,items:[
+            {label:'現在のデバイスで端末を開く',hint:'Alt+T',run:()=>onNewTab()},
+            ...devices.map(d=>({label:`${d.name} で端末を開く`,disabled:!d.connected,run:()=>onNewTab(d.id)})),
+          ]}); }}><Icon name="plus" /></button>
+        <button className="strip-btn" title="パネルの操作" aria-label="パネルの操作" aria-haspopup="menu"
+          onClick={e => {const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.right,y:r.bottom,items:[
+            {label:'タブ・パネルの一覧',run:onOverview},
+            {label:'このパネルを広げる / 元に戻す',hint:'Alt+Enter',run:onToggleFocus},
+            {label:'選択中のタブの操作…',run:()=>onContextMenu(leaf.activeId,r.right,r.bottom)},
+            ...(closableTile ? [SEP,{label:`このパネルを閉じる（${leaf.tabs.length}タブ）`,run:onCloseTile}] : []),
+          ]}); }}><Icon name="more" /></button>
       </div>
+      {menu && <ContextMenu {...menu} onClose={()=>setMenu(null)} />}
     </div>
   );
 }

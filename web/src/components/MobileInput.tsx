@@ -8,6 +8,7 @@ interface Props {
 
 /** 通常の textarea に変換・選択・長押し貼り付けを任せ、確定後だけ端末へ渡す。 */
 export function MobileInput({ connected, onPaste, onSend }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState('');
   const [composing, setComposing] = useState(false);
   const [message, setMessage] = useState('');
@@ -20,6 +21,8 @@ export function MobileInput({ connected, onPaste, onSend }: Props) {
   };
   return (
     <div className="mobile-input">
+      <div className="mobile-input-toggle-row"><button className="input-toggle" aria-expanded={expanded} onClick={()=>{setExpanded(v=>!v); if (!expanded) requestAnimationFrame(()=>input.current?.focus());}}>⌨ {expanded ? '入力欄を閉じる' : text ? '下書きを開く' : '日本語入力・貼り付け'}</button><button className="input-enter" disabled={!connected || composing} onClick={()=>onSend('\r')}>Enter ↵</button></div>
+      <div className="mobile-input-draft" hidden={!expanded}>
       <textarea
         ref={input}
         aria-label="日本語入力・貼り付け用の下書き"
@@ -50,7 +53,8 @@ export function MobileInput({ connected, onPaste, onSend }: Props) {
         <button type="button" className="key" disabled={!connected || composing || !text} onClick={insert}>端末に挿入</button>
         <button type="button" className="key" disabled={!connected || composing} onClick={() => onSend('\r')}>Enter</button>
       </div>
-      {message && <div className="mobile-input-hint" role="status">{message}</div>}
+      </div>
+      {expanded && message && <div className="mobile-input-hint" role="status">{message}</div>}
     </div>
   );
 }

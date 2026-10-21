@@ -47,6 +47,7 @@ export interface TerminalHandle {
 }
 
 interface Props {
+  retryToken?: number;
   sessionId: string | null;
   windowId: string | null;
   /** 表示したいウィンドウの番号。ミラーセッション側だけを切り替える */
@@ -64,6 +65,7 @@ interface Props {
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
   {
+    retryToken,
     sessionId,
     windowId,
     windowIndex,
@@ -542,7 +544,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       wsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, mode, showStatusBar]);
+  }, [sessionId, mode, showStatusBar, retryToken]);
 
   // 同じセッション内のウィンドウ切り替えは、再接続せずミラー側の表示だけ変える
   useEffect(() => {

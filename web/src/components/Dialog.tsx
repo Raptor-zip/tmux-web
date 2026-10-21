@@ -1,3 +1,4 @@
+import { Modal } from './Modal';
 import { useEffect, useRef, useState } from 'react';
 
 export interface DialogSpec {
@@ -33,26 +34,8 @@ export function Dialog({ spec, onClose }: { spec: DialogSpec; onClose(): void })
   };
 
   return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className="dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={spec.title}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            onClose();
-          }
-          if (e.key === 'Enter' && spec.kind === 'confirm') submit();
-        }}
-      >
-        <h2 className="dialog-title">{spec.title}</h2>
+    <Modal title={spec.title} onClose={onClose} className="prompt-dialog">
+      <div className="dialog-content">
         {spec.detail && <p className="dialog-detail">{spec.detail}</p>}
 
         {spec.kind === 'prompt' && (
@@ -63,7 +46,7 @@ export function Dialog({ spec, onClose }: { spec: DialogSpec; onClose(): void })
             placeholder={spec.placeholder}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') submit();
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
             }}
           />
         )}
@@ -81,6 +64,6 @@ export function Dialog({ spec, onClose }: { spec: DialogSpec; onClose(): void })
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

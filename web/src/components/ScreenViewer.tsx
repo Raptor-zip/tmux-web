@@ -41,7 +41,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
       if (viewport.current?.contains(e.target as Node)) return;
       if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); }
       if (e.key === 'Tab') {
-        const elements = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), textarea, select, input:not(:disabled), canvas') ?? [])];
+        const elements = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), summary, textarea, select, input:not(:disabled), canvas') ?? [])].filter(el=>el.getClientRects().length);
         const first = elements[0], last = elements[elements.length - 1];
         if (e.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { e.preventDefault(); last?.focus(); }
         else if (!e.shiftKey && (document.activeElement === last || document.activeElement === panel.current)) { e.preventDefault(); first?.focus(); }
@@ -167,12 +167,15 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
         </label>}
         <button className="btn" aria-pressed={!fit} onClick={() => setFit(v => !v)}>{fit ? '原寸表示' : '画面に合わせる'}</button>
         <button className="btn" onClick={() => void fullscreen()}>{full ? '全画面を終了' : '全画面'}</button>
-        <button className="btn" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>画質・遅延設定</button>
         <button className="btn" aria-pressed={viewOnly} onClick={() => setViewOnly(v => !v)}>{viewOnly ? '閲覧のみ' : '操作有効'}</button>
+        <details className="desktop-more"><summary className="btn">その他の操作</summary><div className="desktop-more-content">        <button className="btn" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>画質・遅延設定</button>
+
         <button className="btn" aria-expanded={clipboardOpen} onClick={() => setClipboardOpen(v => !v)}>文字・クリップボード</button>
         <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendKey(0xff1b, 'Escape'); client.current?.focus(); }}>Esc</button>
         <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendCtrlAltDel(); client.current?.focus(); }}>Ctrl+Alt+Del</button>
         <button className="btn" onClick={() => setAttempt(v => v + 1)}>再接続</button>
+
+        </div></details>
       </div>
       {settingsOpen && <div className="desktop-settings">
         <div className="screen-controls" role="group" aria-label="配信プリセット">
