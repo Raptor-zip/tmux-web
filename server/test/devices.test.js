@@ -58,6 +58,10 @@ test('registration is authenticated, validates URLs and keeps remote credentials
   assert.ok(list.includes('Spark')); assert.ok(!list.includes('remote-secret'));
   assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
   const reloaded = createDevices({ file }); reloaded.dispose();
+  const saved = JSON.parse(await fs.readFile(file, 'utf8'))[0];
+  assert.equal((await api(`/api/devices/${id}`, { method: 'PUT', body: JSON.stringify({ name: 'DGX Spark', url: saved.url }) })).status, 200);
+  assert.equal(JSON.parse(await fs.readFile(file, 'utf8'))[0].token, 'remote-secret');
+  assert.equal(JSON.parse(await fs.readFile(file, 'utf8'))[0].id, id);
   for (const url of ['file:///etc/passwd', 'http://user:pass@host', 'https://host?token=secret', 'http://host/api', 'http://host/#hash']) assert.throws(() => validateDevice({ name: 'Spark', url }));
   assert.equal((await api(`/api/devices/${id}`, { method: 'DELETE' })).status, 200);
   assert.equal((await api(`/api/devices/${id}/proxy/api/state`)).status, 404);

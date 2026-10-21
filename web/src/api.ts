@@ -70,6 +70,7 @@ export function wsUrl(path: string, params: Record<string, string | number> = {}
 
 export const listDevices = () => request<{ devices: Device[] }>('/api/devices');
 export const addDevice = (device: { name: string; url: string; token: string }) => request<{ id: string }>('/api/devices', { method: 'POST', body: JSON.stringify(device) });
+export const updateDevice = (id: string, device: { name: string; url: string; token?: string }) => request('/api/devices/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(device) });
 export const removeDevice = (id: string) => request('/api/devices/' + encodeURIComponent(id), { method: 'DELETE' });
 
 /** デバイスごとに状態と接続を保持する。一台の切断で他の端末を巻き込まない。 */
