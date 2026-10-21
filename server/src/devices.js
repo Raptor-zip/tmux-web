@@ -67,6 +67,16 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
         res.status(201).json({ id: device.id });
       } catch (err) { error(res, err); }
     });
+    app.put('/api/devices/:id', (req, res) => {
+      try {
+        const previous = get(req.params.id);
+        const next = { id: previous.id, ...validateDevice({ ...req.body, token: req.body?.token === undefined ? previous.token : req.body.token }) };
+        if (devices.some(d => d.id !== previous.id && d.url === next.url)) throw fail(409, 'この接続先は登録済みです');
+        save(devices.map(d => d.id === next.id ? next : d));
+        for (const ws of sockets.get(next.id) || []) ws.terminate();
+        res.json({ ok: true });
+      } catch (err) { error(res, err); }
+    });
     app.delete('/api/devices/:id', (req, res) => {
       try {
         get(req.params.id);
