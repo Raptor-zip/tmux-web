@@ -1,3 +1,4 @@
+import { auth, headers as identityHeaders, fetch } from './helpers/tailscale.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -5,11 +6,11 @@ import { createApprovals } from '../src/approvals.js';
 
 async function fixture(t) {
   const app=express();app.use(express.json());const service=createApprovals();service.installHelpers(app);
-  app.use('/api',(req,res,next)=>req.headers['x-tmux-web-token']==='test'?next():res.status(401).end());service.install(app);
+  app.use('/api',auth().middleware);service.install(app);
   const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
   t.after(async()=>{service.dispose();server.closeAllConnections();await new Promise(r=>server.close(r));});
   const base=`http://127.0.0.1:${server.address().port}`;
-  const post=(url,body,headers={})=>fetch(base+url,{method:'POST',headers:{'Content-Type':'application/json','x-tmux-web-token':'test',...headers},body:JSON.stringify(body)});
+  const post=(url,body,headers={})=>fetch(base+url,{method:'POST',headers:{'Content-Type':'application/json',...(url==='/api/approvals/request'?{}:identityHeaders),...headers},body:JSON.stringify(body)});
   return {service,base,post};
 }
 
@@ -19,10 +20,10 @@ test('local helper bypass is narrow, UI uses normal auth and browser-origin regi
  assert.equal((await post('/api/approvals/request',{}, {'Sec-Fetch-Site':'same-origin'})).status,403);
  assert.equal((await post('/api/approvals/request',{}, {'X-Forwarded-For':'100.64.0.1'})).status,403);
  const created=await (await post('/api/approvals/request',{cmd:'test-only'})).json();
- const view=await (await fetch(base+'/api/approvals',{headers:{'x-tmux-web-token':'test'}})).json();
+ const view=await (await fetch(base+'/api/approvals',{headers:identityHeaders})).json();
  assert.equal(view.pending.cmd,'test-only');assert.equal(view.pending.claim,undefined);
  assert.equal((await post('/api/approvals/answer',{id:created.id,password:'dummy'},{'Sec-Fetch-Site':'cross-site'})).status,403);
- assert.equal((await post('/api/approvals/answer',{id:created.id,password:'dummy'},{'X-Forwarded-For':'100.64.0.1'})).status,403);
+ assert.equal((await post('/api/approvals/answer',{id:created.id,password:'dummy'},{'Origin':'https://attacker.example'})).status,403);
 });
 
 test('answers may precede helper polling, claims are single use and cancellation unblocks waiters',async t=>{

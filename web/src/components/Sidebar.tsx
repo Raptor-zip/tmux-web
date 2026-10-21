@@ -827,9 +827,9 @@ export function Sidebar({
               <>「{filter}」に一致するウィンドウはありません。</>
             ) : unauthorized ? (
               <>
-                認証されていません（401）。
+                Tailscale認証を確認してください。
                 <br />
-                <code>?token=...</code> 付きの URL で開き直してください。
+                Tailscaleに接続し、このPCのTailscale Serve URLで開いてください。
               </>
             ) : (
               <>

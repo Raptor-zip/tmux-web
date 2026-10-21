@@ -3,7 +3,7 @@
 #
 #   ./scripts/install-service.sh              # インストールして起動
 #   PORT=8080 ./scripts/install-service.sh    # ポートを変えて登録
-#   TMUX_WEB_TOKEN=xxx ./scripts/install-service.sh  # トークン認証を有効にして登録
+#   TMUX_WEB_ALLOWED_USERS=you@example.com ./scripts/install-service.sh  # 許可ユーザーを指定
 #
 # アンインストールは ./scripts/uninstall-service.sh
 
@@ -23,14 +23,12 @@ fi
 PORT="${PORT:-7654}"
 HOST="${HOST:-127.0.0.1}"
 
-# 再実行でトークンを取りこぼすと認証なしで公開されてしまうので、
-# 明示的に渡されなければ既存ユニットの値を引き継ぐ。
-# 意図的に外したいときは TMUX_WEB_TOKEN= （空）を明示する。
-if [ -z "${TMUX_WEB_TOKEN+x}" ] && [ -f "$UNIT_PATH" ]; then
-  TMUX_WEB_TOKEN="$(sed -n 's/^Environment=TMUX_WEB_TOKEN=//p' "$UNIT_PATH" | tail -1)"
-  [ -n "$TMUX_WEB_TOKEN" ] && echo "既存のトークンを引き継ぎます" >/dev/null
+# 更新時は許可ユーザーを維持。未指定なら起動時にTailscaleのデバイス所有者を確認する。
+if [ -f "$UNIT_PATH" ]; then
+  TMUX_WEB_ALLOWED_USERS="${TMUX_WEB_ALLOWED_USERS-$(unit_env TMUX_WEB_ALLOWED_USERS)}"
 fi
-TMUX_WEB_TOKEN="${TMUX_WEB_TOKEN:-}"
+TMUX_WEB_ALLOWED_USERS="${TMUX_WEB_ALLOWED_USERS:-}"
+case "$HOST" in 127.0.0.1|::1|localhost) ;; *) echo "Tailscale認証ではHOSTをループバックにしてください" >&2; exit 1 ;; esac
 
 say() { printf '\033[36m[install]\033[0m %s\n' "$*"; }
 die() { printf '\033[31m[install] %s\033[0m\n' "$*" >&2; exit 1; }
@@ -96,13 +94,12 @@ SyslogIdentifier=tmux-web
 WantedBy=default.target
 UNIT
 
-if [ -n "$TMUX_WEB_TOKEN" ]; then
-  say "トークン認証を有効にします"
-  sed -i "/^Environment=HOST=/a Environment=TMUX_WEB_TOKEN=$TMUX_WEB_TOKEN" "$UNIT_PATH"
-  chmod 600 "$UNIT_PATH"
-else
-  say "警告: トークン未設定。tailnet に公開するなら TMUX_WEB_TOKEN を設定すること"
+if [ -n "$TMUX_WEB_ALLOWED_USERS" ]; then
+  TMUX_WEB_ALLOWED_USERS="$TMUX_WEB_ALLOWED_USERS" "$NODE_BIN" -e 'if (!/^[A-Za-z0-9@._+,%-]+$/.test(process.env.TMUX_WEB_ALLOWED_USERS)) process.exit(1)' || die "許可ユーザーはログイン名をカンマ区切りで指定してください"
+  sed -i "/^Environment=HOST=/a Environment=TMUX_WEB_ALLOWED_USERS=$TMUX_WEB_ALLOWED_USERS" "$UNIT_PATH"
 fi
+chmod 600 "$UNIT_PATH"
+say "Tailscale認証を有効にします（未指定ならデバイス所有者だけを許可）"
 
 # --- ログアウト後も動かすための linger -------------------------------------
 if [ "$(loginctl show-user "$USER" --property=Linger --value 2>/dev/null || echo no)" != "yes" ]; then
@@ -137,7 +134,7 @@ systemctl --user restart "$SERVICE_NAME"
 
 sleep 2
 if systemctl --user is-active --quiet "$SERVICE_NAME"; then
-  say "起動しました -> http://$HOST:$PORT"
+  say "起動しました。アクセスにはTailscale ServeのHTTPS URLを使ってください"
 else
   systemctl --user status "$SERVICE_NAME" --no-pager -l || true
   die "起動に失敗しました。上のログを確認してください"

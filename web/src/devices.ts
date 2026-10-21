@@ -5,7 +5,6 @@ export interface Device {
   name: string;
   local: boolean;
   url?: string;
-  hasToken?: boolean;
   connected?: boolean;
   error?: string;
   server?: TmuxState['server'];

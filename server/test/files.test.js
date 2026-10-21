@@ -1,3 +1,4 @@
+import { auth, headers as identityHeaders, fetch } from './helpers/tailscale.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
@@ -20,8 +21,7 @@ async function fixture(t) {
   let clock = Date.now();
   const app = express();
   app.use(express.json());
-  app.use('/api', (req, res, next) => req.headers['x-tmux-web-token'] === 'test-token'
-    ? next() : res.status(401).json({ error: 'unauthorized' }));
+  app.use(['/api', '/files'], auth().middleware);
   installFiles(app, async (id) => id === '%1' ? { project: { root } } : null, { now: () => clock });
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
@@ -31,7 +31,7 @@ async function fixture(t) {
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   const api = (url, init = {}) => fetch(base + url, { ...init, headers: {
-    'x-tmux-web-token': 'test-token', 'Content-Type': 'application/json', ...init.headers,
+    ...identityHeaders, 'Content-Type': 'application/json', ...init.headers,
   } });
   const open = async (file) => {
     const res = await api('/api/files/open', { method: 'POST', body: JSON.stringify({ pane: '%1', root, path: file }) });
@@ -59,31 +59,31 @@ test('authenticated listing, navigation, missing panes and confined paths', asyn
 test('scoped media URLs, Unicode download names, HEAD and byte ranges', async (t) => {
   const { base, open } = await fixture(t);
   const url = await open('out/日本語 image.png');
-  const full = await fetch(base + url);
+  const full = await fetch(base + url, { headers: identityHeaders });
   assert.equal(full.status, 200);
   assert.equal(full.headers.get('content-type'), 'image/png');
   assert.equal(await full.text(), '0123456789');
   assert.match(full.headers.get('content-disposition'), /inline.*filename\*=UTF-8''/);
-  const download = await fetch(base + url + '&download=1');
+  const download = await fetch(base + url + '&download=1', { headers: identityHeaders });
   assert.match(download.headers.get('content-disposition'), /^attachment/);
   await download.arrayBuffer();
-  const head = await fetch(base + url, { method: 'HEAD' });
+  const head = await fetch(base + url, { method: 'HEAD', headers: identityHeaders });
   assert.equal(head.headers.get('content-length'), '10');
   assert.equal(await head.text(), '');
   for (const [range, expected] of [['bytes=2-5', '2345'], ['bytes=-3', '789'], ['bytes=8-', '89']]) {
-    const res = await fetch(base + url, { headers: { Range: range } });
+    const res = await fetch(base + url, { headers: { ...identityHeaders, Range: range } });
     assert.equal(res.status, 206);
     assert.equal(await res.text(), expected);
   }
   for (const range of ['bytes=20-', 'bytes=5-2', 'bytes=-0', 'bytes=0-1,3-4']) {
-    const res = await fetch(base + url, { headers: { Range: range } });
+    const res = await fetch(base + url, { headers: { ...identityHeaders, Range: range } });
     assert.equal(res.status, 416);
     assert.equal(res.headers.get('content-range'), 'bytes */10');
   }
-  const empty = await fetch(base + await open('empty.txt'));
+  const empty = await fetch(base + await open('empty.txt'), { headers: identityHeaders });
   assert.equal(await empty.text(), '');
   assert.equal(empty.headers.get('content-length'), '0');
-  const html = await fetch(base + await open('page.html'));
+  const html = await fetch(base + await open('page.html'), { headers: identityHeaders });
   assert.equal(html.headers.get('content-type'), 'application/octet-stream');
   assert.match(html.headers.get('content-disposition'), /^attachment/);
   await html.arrayBuffer();
@@ -98,12 +98,12 @@ test('invalid, tampered and expired links, and symlink replacement after issuanc
   const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
   data.path = '../outside.txt';
   const tampered = Buffer.from(JSON.stringify(data)).toString('base64url') + '.' + signature;
-  assert.equal((await fetch(base + '/files/content?ticket=' + tampered)).status, 401);
+  assert.equal((await fetch(base + '/files/content?ticket=' + tampered, { headers: identityHeaders })).status, 401);
   await fs.unlink(path.join(root, 'out', '日本語 image.png'));
   await fs.symlink(path.join(root, '..', 'outside.txt'), path.join(root, 'out', '日本語 image.png'));
-  assert.equal((await fetch(base + url)).status, 403);
+  assert.equal((await fetch(base + url, { headers: identityHeaders })).status, 403);
   advance();
-  assert.equal((await fetch(base + url)).status, 401);
+  assert.equal((await fetch(base + url, { headers: identityHeaders })).status, 401);
 });
 
 test('native uploads avoid overwrites and folder downloads preserve input assets while excluding secrets', async t => {
@@ -118,7 +118,7 @@ test('native uploads avoid overwrites and folder downloads preserve input assets
   assert.deepEqual(await (await upload('link.txt','safe')).json(),{name:'link-2.txt'});
   assert.equal(await fs.readFile(path.join(root,'out','link-2.txt'),'utf8'),'safe');
   const archive=await api('/api/files/archive',{method:'POST',body:JSON.stringify({pane:'%1',root,path:''})});
-  const {url}=await archive.json();const data=await fetch(base+url);
+  const {url}=await archive.json();const data=await fetch(base+url, { headers: identityHeaders });
   assert.equal(data.status,200);
   const {execFileSync}=await import('node:child_process');
   const names=execFileSync('tar',['-tzf','-'],{input:Buffer.from(await data.arrayBuffer()),encoding:'utf8'});

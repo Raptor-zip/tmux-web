@@ -1,3 +1,4 @@
+import { auth, headers as identityHeaders, fetch } from './helpers/tailscale.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -8,7 +9,7 @@ import { installScreen } from '../src/screen.js';
 async function fixture(t, probeError = false) {
   let spawns = 0, kills = 0, proc;
   const app = express();
-  app.use('/api', (req,res,next) => req.headers.authorization === 'qa' ? next() : res.status(401).json({error:'unauthorized'}));
+  app.use('/api', auth().middleware);
   const capture = installScreen(app, {
     probe: async () => { if (probeError) throw new Error('desktop unavailable'); return {display:':99',width:640,height:400,env:{}}; },
     spawnCapture: () => {
@@ -31,11 +32,11 @@ test('screen stream requires auth, shares capture, sends complete frames, and st
   const f = await fixture(t);
   assert.equal((await fetch(f.url+'/api/screen/stream')).status,401);
   assert.equal(f.spawns,0);
-  const status = await (await fetch(f.url+'/api/screen/status',{headers:{authorization:'qa'}})).json();
+  const status = await (await fetch(f.url+'/api/screen/status',{headers:identityHeaders})).json();
   assert.equal(status.available,true);
   assert.equal(f.spawns,0);
   const a = new AbortController(), b = new AbortController();
-  const connect = signal => fetch(f.url+'/api/screen/stream', {headers:{authorization:'qa'},signal});
+  const connect = signal => fetch(f.url+'/api/screen/stream', {headers:identityHeaders,signal});
   const first = connect(a.signal);
   while (!f.proc) await delay();
   // 未完成フレームを送った状態で 2 人目が接続しても、双方に完全な JPEG を届ける。
@@ -61,9 +62,9 @@ test('screen stream requires auth, shares capture, sends complete frames, and st
 
 test('missing desktop returns a recoverable error without starting capture', async t => {
   const f = await fixture(t,true);
-  const status = await (await fetch(f.url+'/api/screen/status',{headers:{authorization:'qa'}})).json();
+  const status = await (await fetch(f.url+'/api/screen/status',{headers:identityHeaders})).json();
   assert.equal(status.available,false);
-  const res = await fetch(f.url+'/api/screen/stream',{headers:{authorization:'qa'}});
+  const res = await fetch(f.url+'/api/screen/stream',{headers:identityHeaders});
   assert.equal(res.status,503);
   assert.equal((await res.json()).error,'desktop unavailable');
   assert.equal(f.spawns,0);
@@ -71,7 +72,7 @@ test('missing desktop returns a recoverable error without starting capture', asy
 
 test('encoder failure closes streams and releases the capture', async t => {
   const f = await fixture(t);
-  const pending = fetch(f.url+'/api/screen/stream',{headers:{authorization:'qa'}});
+  const pending = fetch(f.url+'/api/screen/stream',{headers:identityHeaders});
   while (!f.proc) await delay();
   f.proc.emit('error',new Error('spawn failure'));
   const res = await pending;
