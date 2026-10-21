@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -74,6 +74,12 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   const lineHeight = Number.isFinite(rawLineHeight)
     ? Math.min(2, Math.max(1, rawLineHeight))
     : 1;
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
+  useEffect(() => {
+    const update = () => setPageVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
   const hostRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -420,7 +426,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   useEffect(() => {
     const term = termRef.current;
     const fit = fitRef.current;
-    if (!term || !fit || !sessionId) return;
+    if (!term || !fit || !sessionId || !pageVisible) return;
 
     onStatus?.({ connected: false, message: '接続中…' });
 
@@ -533,7 +539,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       wsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, mode, showStatusBar, retryToken]);
+  }, [sessionId, mode, showStatusBar, retryToken, pageVisible]);
 
   // 同じセッション内のウィンドウ切り替えは、再接続せずミラー側の表示だけ変える
   useEffect(() => {

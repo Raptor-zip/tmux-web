@@ -34,6 +34,7 @@ export type DropTarget =
   | { kind: 'tab'; leafId: string; before: string | null };
 
 interface Props {
+  active: boolean;
   devices: Device[];
   tree: LayoutNode;
   statuses: Record<string, {connected:boolean;message?:string}>;
@@ -94,6 +95,7 @@ function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
 }
 
 export function SplitView({
+  active,
   devices,
   tree,
   focusMode,
@@ -299,7 +301,7 @@ export function SplitView({
                 <TerminalView
                   ref={(h) => registerTerm(leaf.id, h)}
                   retryToken={retries[leaf.id] || 0}
-                  sessionId={pendingRemap ? null : tab.sessionId}
+                  sessionId={pendingRemap || !active || (single && !focused) ? null : tab.sessionId}
                   windowId={tab.windowId}
                   windowIndex={view?.win.index ?? null}
                   mode={mode}

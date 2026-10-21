@@ -8,7 +8,7 @@ const express=require('express');
 const assert=require('node:assert/strict');
 const phase=process.argv[2]||'after';
 const root=resolve(__dirname,'../..');
-const out=join(root,'artifacts/visual-feedback',phase);fs.mkdirSync(out,{recursive:true});
+const out=process.env.TEST_OUTPUT||join(root,'artifacts/visual-feedback',phase);fs.mkdirSync(out,{recursive:true});
 const now=1792597800000;
 const deviceNames={local:'ThinkPad',spark:'DGX Spark'};
 const projects=['atlas-web','orbital-navigation-console','atlas-web','billing-service','research-notes','design-system'];
@@ -45,7 +45,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now})=>{Date.now=()=>now;localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now});
-  const page=await context.newPage();const errors=[];let terminalConnections=0;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();if(process.env.CONNECTION_CHECK)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;
    let body={};let status=200;
@@ -62,7 +62,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   await page.routeWebSocket(/\/ws\//,ws=>{
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
    if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));ws.onMessage(()=>{});}
-   else if(url.pathname.endsWith('/terminal')){terminalConnections++;if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});}
+   else if(url.pathname.endsWith('/terminal')){terminalConnections++;activeTerminals++;ws.onClose(()=>{activeTerminals--;});if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});}
   });
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
@@ -76,7 +76,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(phase==='after'){assert.deepEqual(errors,[],scene.name+' runtime errors');assert.equal(metrics.overflow,false,scene.name+' horizontal page overflow');}
   console.log(scene.name,JSON.stringify(metrics));
   if(phase==='after' && scene.name==='mobile-panels'){
-   const connections=terminalConnections;
+   assert.equal(activeTerminals,1,'only the visible mobile panel attaches');
    const layout=await page.evaluate(()=>localStorage.getItem('tw.layout'));
    await page.getByRole('button',{name:'タブ・パネルの一覧を開く',exact:true}).click();
    await page.getByRole('textbox',{name:'タブを検索'}).fill('DGX Spark');
@@ -88,7 +88,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(await page.locator('.tile:visible').count(),1);
    await page.setViewportSize({width:1920,height:1080});await page.waitForTimeout(150);
    assert.equal(await page.locator('.tile:visible').count(),4,'restores split after resize');
-   assert.equal(terminalConnections,connections,'resize and focus preserve websocket connections');
+   assert.equal(activeTerminals,4,'only visible split panels retain websocket connections');
    await page.setViewportSize({width:900,height:1024});await page.waitForTimeout(150);
    for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
    assert.equal(await page.evaluate(()=>localStorage.getItem('tw.layout')),layout,'responsive presentation preserves saved split tree');
@@ -132,6 +132,33 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await page.locator('.tile').nth(2).getByRole('tab').first().click();await page.waitForTimeout(150);
    assert.deepEqual(await geometry(),before,'changing focused panel preserves content and canvas geometry');
    assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()),'#7aa2f7','device selection preserves Tokyo Night accent');
+   if(process.env.CONNECTION_CHECK){
+    assert.equal(activeTerminals,4);
+    await page.getByRole('button',{name:'デスクトップを追加',exact:true}).click();
+    await page.waitForTimeout(250);
+    assert.equal(activeTerminals,0,'hidden desktop releases every terminal connection');
+    await page.getByRole('tab',{name:'1 デスクトップ1',exact:true}).click();
+    await page.waitForTimeout(250);
+    assert.equal(activeTerminals,4,'returning to desktop reconnects its visible terminals');
+    await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
+    await page.waitForTimeout(250);
+    assert.equal(activeTerminals,0,'hidden browser tab releases terminal connections');
+    await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
+    await page.waitForTimeout(250);
+    assert.equal(activeTerminals,4,'visible browser tab restores terminal connections');
+    const count=terminalConnections;
+    for(let i=0;i<3;i++){
+     await page.getByRole('button',{name:'このパネルを広げる',exact:true}).click();
+     await page.waitForTimeout(120);
+     assert.equal(activeTerminals,1,'focused panel is the only attached terminal');
+     await page.getByRole('button',{name:'分割表示に戻す',exact:true}).click();
+     await page.waitForTimeout(120);
+     assert.equal(activeTerminals,4,'restoring split does not accumulate connections');
+    }
+    assert.equal(terminalConnections,count+9,'only newly visible panels reconnect');
+    console.log('terminal connection lifecycle passed');
+   }
+
   }
   if(phase==='after' && scene.name==='laptop-four'){
    const divider=page.locator('.divider.row').first();const box=await divider.boundingBox();
