@@ -2153,3 +2153,27 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .device-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
 .device-row > span:nth-child(2) { flex: 1; min-width: 0; }
 .device-row small { display: block; color: var(--fg-dim); overflow-wrap: anywhere; }
+
+/* デスクトップを隠しても端末DOM・WebSocketを維持する。 */
+.desktop-shell { height: var(--app-height, 100dvh); display: flex; flex-direction: column; min-width: 0; }
+.desktop-bar { display: flex; flex: none; min-height: 34px; padding: var(--safe-top) var(--safe-right) 0 var(--safe-left); gap: 2px; align-items: stretch; background: #181818; border-bottom: 1px solid var(--border-strong); }
+.desktop-tabs { display: flex; align-items: stretch; min-width: 0; overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain; }
+.desktop-slot { display: flex; flex: none; align-items: stretch; position: relative; }
+.desktop-tab, .desktop-add, .desktop-rename, .desktop-close { border: 0; color: var(--fg-dim); background: transparent; cursor: pointer; }
+.desktop-tab { display: flex; gap: 7px; align-items: center; min-height: 33px; padding: 0 12px; border-bottom: 2px solid transparent; max-width: 220px; }
+.desktop-tab > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desktop-tab.on { color: #fff; background: var(--bg-1); border-bottom-color: var(--accent); }
+.desktop-number { font-size: 10px; color: var(--fg-dim); }
+.desktop-close { width: 25px; font-size: 16px; }
+.desktop-close:hover, .desktop-add:hover, .desktop-rename:hover { color: #fff; background: var(--bg-3); }
+.desktop-add, .desktop-rename { flex: none; min-width: 34px; font-size: 17px; }
+.desktop-panels { flex: 1; min-height: 0; position: relative; }
+.desktop-panel { width: 100%; height: 100%; }
+.desktop-panel[hidden] { display: none; }
+.desktop-panel > .app { height: 100%; padding-top: 0; }
+@media (max-width: 760px) {
+  .desktop-bar { min-height: 44px; }
+  .desktop-tab { min-height: 44px; max-width: 170px; padding: 0 9px; }
+  .desktop-close, .desktop-add, .desktop-rename { min-width: 36px; min-height: 44px; }
+  .desktop-panel .sidebar { top: calc(44px + var(--safe-top)); }
+}

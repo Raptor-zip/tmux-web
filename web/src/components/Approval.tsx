@@ -3,11 +3,12 @@ import { answerApproval, cancelApproval, fetchApproval, type Approval } from '..
 import { Modal } from './Modal';
 import { Icon } from './Icon';
 
-export function useApproval() {
+export function useApproval(active = true) {
   const [pending, setPending] = useState<Approval | null>(null);
   const [secure, setSecure] = useState(false);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
+    if (!active) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -21,7 +22,7 @@ export function useApproval() {
     }
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [revision]);
+  }, [revision, active]);
   return { pending, secure, refresh: () => setRevision(v => v + 1) };
 }
 
