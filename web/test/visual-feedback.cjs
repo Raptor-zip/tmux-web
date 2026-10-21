@@ -105,8 +105,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(terminalInputs.length,inputs,'right click, including Shift, never sends tmux mouse reports');
    await page.keyboard.press('Escape');
 
+   const tabWidths=await page.locator('.tab').evaluateAll(tabs=>tabs.map(tab=>tab.getBoundingClientRect().width));
    const first=page.locator('.tab[aria-selected=true]');await first.focus();await page.keyboard.press('ArrowRight');await page.waitForTimeout(100);
    assert.equal(await page.locator('.tab[aria-selected=true]').getAttribute('data-tab-id'),'tab-local-2');
+   assert.deepEqual(await page.locator('.tab').evaluateAll(tabs=>tabs.map(tab=>tab.getBoundingClientRect().width)),tabWidths,'tab selection preserves every tab width');
    assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-tab-id')),'tab-local-2');
    await page.locator('.tile:visible').getByRole('button',{name:'新しい端末をタブで開く',exact:true}).click();
    assert.equal(await page.getByRole('menuitem',{name:'DGX Spark で端末を開く'}).count(),1);
@@ -118,6 +120,18 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    const prompt=page.getByRole('dialog',{name:'デスクトップの名前を変更',exact:true});
    await prompt.getByRole('textbox').fill('開発用');await page.keyboard.press('Enter');
    assert.equal(await page.getByRole('tab',{name:'1 開発用',exact:true}).count(),1,'native prompt submits from keyboard');
+  }
+  if(phase==='after' && scene.name==='desktop-four'){
+   const geometry=()=>page.locator('.tile').evaluateAll(tiles=>tiles.map(tile=>{
+    const body=tile.querySelector('.tile-body').getBoundingClientRect();
+    const header=tile.querySelector('.tabstrip').getBoundingClientRect();
+    const canvas=tile.querySelector('canvas');
+    return {id:tile.querySelector('[data-strip-leaf]').getAttribute('data-strip-leaf'),x:body.x,y:body.y,w:body.width,h:body.height,headerWidth:header.width,canvasWidth:canvas?.width,canvasHeight:canvas?.height};
+   }));
+   const before=await geometry();
+   await page.locator('.tile').nth(2).getByRole('tab').first().click();await page.waitForTimeout(150);
+   assert.deepEqual(await geometry(),before,'changing focused panel preserves content and canvas geometry');
+   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()),'#7aa2f7','device selection preserves Tokyo Night accent');
   }
   if(phase==='after' && scene.name==='laptop-four'){
    const divider=page.locator('.divider.row').first();const box=await divider.boundingBox();

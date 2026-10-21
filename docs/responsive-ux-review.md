@@ -66,3 +66,9 @@ STATIC_ROOT=/path/to/baseline/web/dist PLAYWRIGHT_MODULE=/path/to/node_modules/p
 端末の右クリックからtmux内部の分割・ズーム・ペイン終了・ウィンドウ終了を除き、コピー・貼り付け・ブラウザのタブ／パネル操作に限定した。画面分割は「新しい端末を右／下に並べる」と明示。Shift＋右クリックのブラウザメニューを許可するときも、右ボタンの押下・解放はtmuxへ渡さない。
 
 [整理後の右クリックメニュー](../artifacts/visual-feedback/after/terminal-context-menu.png)を目視確認。マウス追跡を有効にした合成端末で、通常／Shift＋右クリックが端末入力を送らないことと、tmux内部の構造変更項目が存在しないことをブラウザで検査。型検査と本番ビルドも合格。
+
+## Tokyo Night と選択時のサイズ固定
+
+UI・端末・PWAの背景をTokyo Nightのnight配色へ統一。[配色の参照元](https://github.com/folke/tokyonight.nvim/blob/main/extras/kitty/tokyonight_night.conf)に沿って背景 `#1a1b26`、文字 `#c0caf5`、青 `#7aa2f7` などを使用。端末のbright色は通常色と揃え、蛍光色の強調を抑えた。デバイスを切り替えても配色を上書きせず、状態表示の発光・点滅も除いた。After画像はこの配色で更新。
+
+選択中パネルだけ枠幅が1pxから2pxになる指定を廃止し、常に1pxで色だけ切り替える。タブ名のフォントウェイトも選択前後で一定にした。ブラウザ検証で、別パネル選択前後の本文矩形・ヘッダー幅・端末canvas寸法が完全に一致すること、およびタブ選択前後に全タブの幅が一致することを確認。デバイス切替後もTokyo Nightのアクセント色を維持することを検査。12画面の確認、型検査、本番ビルド、サーバーテスト38件も合格。

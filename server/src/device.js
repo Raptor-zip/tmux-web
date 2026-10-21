@@ -75,7 +75,7 @@ export function installDevice(app) {
     name: `tmux web · ${device.name}`, short_name: 'tmux web', description: 'PCとDGX Sparkの端末・仮想デスクトップをまとめて操作',
     display: 'standalone', orientation: 'any', categories: ['developer', 'productivity'],
     prefer_related_applications: false,
-    background_color: '#1e1e1e', theme_color: device.color,
+    background_color: '#1a1b26', theme_color: '#1a1b26',
     icons: [192,512].map(size => ({src:`/icon-${size}.png`,sizes:`${size}x${size}`,type:'image/png',purpose:'any maskable'})),
   })));
 }

@@ -458,7 +458,7 @@ input {
 }
 .dot.ok {
   background: var(--green);
-  box-shadow: 0 0 6px rgba(126, 231, 135, 0.5);
+  box-shadow: none;
 }
 .dot.bad {
   background: var(--red);
@@ -567,8 +567,8 @@ input {
   border-radius: 50%;
   flex: none;
   background: var(--accent);
-  box-shadow: 0 0 6px var(--accent);
-  animation: pulse 1.4s ease-in-out infinite;
+  box-shadow: none;
+  animation: none;
 }
 @keyframes pulse {
   0%,
@@ -725,8 +725,8 @@ input {
 }
 .overview .ov.working i {
   background: var(--accent);
-  box-shadow: 0 0 6px var(--accent);
-  animation: pulse 1.4s ease-in-out infinite;
+  box-shadow: none;
+  animation: none;
 }
 .overview .ov.waiting {
   color: var(--green);
@@ -854,16 +854,16 @@ input {
 }
 .state-dot.working {
   background: var(--accent);
-  box-shadow: 0 0 6px var(--accent);
-  animation: pulse 1.4s ease-in-out infinite;
+  box-shadow: none;
+  animation: none;
 }
 .state-dot.waiting {
   background: var(--green);
-  box-shadow: 0 0 5px rgba(137, 209, 133, 0.6);
+  box-shadow: none;
 }
 .state-dot.server {
   background: #c586c0;
-  box-shadow: 0 0 5px rgba(197, 134, 192, 0.6);
+  box-shadow: none;
 }
 .state-dot.run {
   background: var(--yellow);
@@ -1604,7 +1604,7 @@ input {
   margin: 4px 0;
   background: var(--accent);
   border-radius: 1px;
-  box-shadow: 0 0 6px var(--accent);
+  box-shadow: none;
 }
 
 .strip-tools {

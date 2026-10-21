@@ -99,9 +99,9 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
   const unavailable = useMemo(() => new Set(devices.filter(d => !d.connected || !d.serverPid).map(d => d.id)), [devices]);
   useEffect(() => {
     if (!active || !device) return;
-    document.documentElement.style.setProperty('--status', device.color);
-    document.documentElement.style.setProperty('--accent', device.accent);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', device.color);
+    document.documentElement.style.removeProperty('--status');
+    document.documentElement.style.removeProperty('--accent');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#1a1b26');
     document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', device.name);
     // ホスト変更や設定変更の後も同じ URL の古いアイコンを使わせない。
     for (const rel of ['icon', 'apple-touch-icon', 'manifest']) {
