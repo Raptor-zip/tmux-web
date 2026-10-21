@@ -1,5 +1,7 @@
+import { Modal } from './Modal';
+import { Icon } from './Icon';
 import { deviceOf, type Device } from '../devices';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeTab,
   dividers,
@@ -34,6 +36,9 @@ export type DropTarget =
 interface Props {
   devices: Device[];
   tree: LayoutNode;
+  statuses: Record<string, {connected:boolean;message?:string}>;
+  focusMode: boolean;
+  onToggleFocus(): void;
   focusedId: string | null;
   sessions: Session[];
   windows: TmuxWindow[];
@@ -91,6 +96,9 @@ function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
 export function SplitView({
   devices,
   tree,
+  focusMode,
+  statuses,
+  onToggleFocus,
   focusedId,
   sessions,
   windows,
@@ -120,9 +128,26 @@ export function SplitView({
   const [dropAt, setDropAt] = useState<DropTarget | null>(null);
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null);
 
+  const [forceSplit, setForceSplit] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const [retries, setRetries] = useState<Record<string,number>>({});
+  const [size, setSize] = useState({width: 0, height: 0});
+  const [overview, setOverview] = useState(false);
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const observer = new ResizeObserver(([entry]) => { setSize({width:entry.contentRect.width,height:entry.contentRect.height}); setForceSplit(false); });
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
   const tiles = useMemo(() => leafRects(tree), [tree]);
   const bars = useMemo(() => dividers(tree), [tree]);
   const closableTile = tiles.length > 1;
+  const autoFocus = size.width > 0 && (window.innerWidth <= 760 || tiles.some(t => size.width * t.rect.width / 100 < 280 || size.height * t.rect.height / 100 < 160));
+  const single = closableTile && (focusMode || (!resizing && autoFocus && (!forceSplit || window.innerWidth <= 760)));
+  const selectedId = tiles.some(t => t.leaf.id === focusedId) ? focusedId : tiles[0]?.leaf.id;
+  const openOverview = () => { setQuery(''); setOverview(true); };
 
   /** タブが映しているウィンドウ。windowId が null のタブはセッションのアクティブを見る */
   const viewOf = useCallback(
@@ -173,6 +198,7 @@ export function SplitView({
       const box = host.getBoundingClientRect();
       const x = ((clientX - box.left) / box.width) * 100;
       const y = ((clientY - box.top) / box.height) * 100;
+      if (single) return selectedId ? {kind:'tab',leafId:selectedId,before:null} : null;
       const hit = tiles.find(
         ({ rect }) =>
           x >= rect.left &&
@@ -186,7 +212,7 @@ export function SplitView({
         ? { kind: 'tab', leafId: hit.leaf.id, before: null }
         : { kind: 'split', leafId: hit.leaf.id, side };
     },
-    [tiles],
+    [tiles, single, selectedId],
   );
 
   const startDividerDrag = useCallback(
@@ -195,6 +221,7 @@ export function SplitView({
       const host = hostRef.current;
       if (!host) return;
       const box = host.getBoundingClientRect();
+      setResizing(true);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
       const move = (ev: PointerEvent) => {
@@ -208,33 +235,48 @@ export function SplitView({
         if (size > 0) onRatio(split.id, (ratio - origin) / size);
       };
       const up = (ev: PointerEvent) => {
-        (e.target as HTMLElement).releasePointerCapture?.(ev.pointerId);
+        if ((e.target as HTMLElement).hasPointerCapture(ev.pointerId)) (e.target as HTMLElement).releasePointerCapture(ev.pointerId);
+        setResizing(false);
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
     },
     [onRatio],
   );
 
   return (
+    <div className={`panel-workspace ${single ? 'single-panel' : ''}`}>
+      {(closableTile || tiles.some(t=>t.leaf.tabs.length > 1)) && <div className="panel-navigation">
+        <button className="panel-overview-button" onClick={openOverview} aria-haspopup="dialog" aria-label="タブ・パネルの一覧を開く"><Icon name="grid" /><strong>パネル {tiles.findIndex(t=>t.leaf.id===selectedId)+1}/{tiles.length}</strong><span>· {tiles.reduce((n,t)=>n+t.leaf.tabs.length,0)} タブ</span></button>
+        <span className="panel-view-label">{single ? (focusMode ? '集中表示' : '幅に合わせて集中表示') : '分割表示'}</span>
+        {closableTile && <button className="panel-focus-button" aria-label={single ? '分割表示に戻す' : 'このパネルを広げる'} title="パネルを広げる / 戻す (Alt+Enter)" aria-pressed={single} onClick={()=>{if(single){if(focusMode) onToggleFocus();setForceSplit(true);}else{setForceSplit(false);onToggleFocus();}}}><Icon name={single ? 'splitRight' : 'expand'} /><span>{single ? '戻す' : '広げる'}</span></button>}
+      </div>}
     <div className="splitview" ref={hostRef}>
+
       {tiles.map(({ leaf, rect }) => {
         const tab = activeTab(leaf);
-        const { view } = tab ? viewOf(tab) : { view: null };
-        const focused = leaf.id === focusedId;
+        const { view, device } = tab ? viewOf(tab) : { view: null, device: undefined };
+        const status = statuses[leaf.id];
+        const focused = leaf.id === selectedId;
         const tabDrop = dropAt?.kind === 'tab' && dropAt.leafId === leaf.id;
 
         return (
           <div
             key={leaf.id}
             className={`tile ${focused ? 'focused' : ''} ${tabDrop ? 'drop-tab' : ''}`}
-            style={pct(rect)}
+            style={single && focused ? {left:0,top:0,width:'100%',height:'100%'} : pct(rect)}
+            hidden={single && !focused}
+            onFocusCapture={() => onFocus(leaf.id)}
             onPointerDown={() => onFocus(leaf.id)}
           >
             <TabStrip
               leaf={leaf}
+              onOverview={openOverview}
+              onToggleFocus={() => { onFocus(leaf.id); onToggleFocus(); }}
               focused={focused}
               devices={devices}
               viewOf={viewOf}
@@ -256,6 +298,7 @@ export function SplitView({
               {tab ? (
                 <TerminalView
                   ref={(h) => registerTerm(leaf.id, h)}
+                  retryToken={retries[leaf.id] || 0}
                   sessionId={pendingRemap ? null : tab.sessionId}
                   windowId={tab.windowId}
                   windowIndex={view?.win.index ?? null}
@@ -268,12 +311,13 @@ export function SplitView({
                   onCopied={onCopied}
                 />
               ) : null}
+              {status && !status.connected && <div className="panel-connection" role="status"><strong>{device?.name || '端末'} · 未接続</strong><span>{status.message || '接続を確認しています…'}</span><button onClick={()=>setRetries(v=>({...v,[leaf.id]:(v[leaf.id]||0)+1}))}>再接続</button></div>}
             </div>
           </div>
         );
       })}
 
-      {bars.map((d) => (
+      {!single && bars.map((d) => (
         <div
           key={d.id}
           className={`divider ${d.dir}`}
@@ -333,6 +377,22 @@ export function SplitView({
           {drag.label}
         </div>
       )}
+    </div>
+    {overview && <Modal title="タブ・パネル" className="panel-overview" onClose={()=>setOverview(false)}>
+      <div className="overview-search"><input autoFocus aria-label="タブを検索" placeholder="プロジェクト・デバイス・作業名で検索" value={query} onChange={e=>setQuery(e.target.value)} /></div>
+      <div className="overview-list">
+      {tiles.map(({leaf},index) => {
+        const matches = leaf.tabs.filter(tab => { const {view,device}=viewOf(tab); return [view?.project, view?.primary, tab.sessionName,device?.name].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase()); });
+        if (!matches.length) return null;
+        return <section key={leaf.id}><h3>パネル {index+1}{leaf.id===selectedId ? ' · 入力先' : ''}<span>{leaf.tabs.length} タブ</span></h3>
+          {matches.map(tab=>{const {view,device}=viewOf(tab);return <button key={tab.id} className="overview-tab" aria-current={tab.id===leaf.activeId && leaf.id===selectedId ? 'true' : undefined} onClick={()=>{onFocus(leaf.id);onActivateTab(tab.id);setOverview(false);requestAnimationFrame(()=>hostRef.current?.querySelector<HTMLTextAreaElement>('.tile.focused textarea')?.focus());}}>
+            <span className="overview-device">{device?.name || '接続先を確認中'}{device && !device.connected ? ' · 未接続' : ''}</span>
+            <strong>{view?.project || tab.sessionName}</strong><span className="overview-task">{view?.primary || tab.windowName || '端末'}</span><span className="overview-selected">{tab.id===leaf.activeId && leaf.id===selectedId ? '選択中' : '開く →'}</span>
+          </button>;})}</section>;
+      })}
+      {!tiles.some(({leaf})=>leaf.tabs.some(tab=>{const {view,device}=viewOf(tab);return [view?.project,view?.primary,tab.sessionName,device?.name].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase());})) && <p className="overview-empty">一致するタブがありません</p>}
+      </div>
+    </Modal>}
     </div>
   );
 }

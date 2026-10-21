@@ -6,6 +6,7 @@ import type { Pane, Session, TmuxWindow } from '../types';
 import { SEP, type MenuEntry } from './ContextMenu';
 
 interface Props {
+  deviceName: string;
   session: Session | null;
   window: TmuxWindow | null;
   activePane: Pane | null;
@@ -46,6 +47,7 @@ interface Props {
  * ボタンを 20 個並べておくより、目当てのものに届くまでが短い。
  */
 export function Toolbar({
+  deviceName,
   session,
   window: win,
   activePane,
@@ -145,7 +147,8 @@ export function Toolbar({
 
   return (
     <div className="editorbar">
-      <div className="crumbs">
+      <button className="icon-btn workspace-sidebar-button" onClick={onToggleSidebar} aria-label="セッション一覧の開閉" title="セッション一覧 (Alt+B)"><Icon name="menu" /></button>
+      <div className="crumbs"><span className="input-target-label">入力先</span><span className="toolbar-device" title={deviceName}>{deviceName}</span>
         {session ? (
           <>
             {crumbs().map((node, i) => (

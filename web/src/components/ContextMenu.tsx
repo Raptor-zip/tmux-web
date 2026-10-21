@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export interface MenuItem {
@@ -29,6 +30,12 @@ interface Props {
 export function ContextMenu({ x, y, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    return () => { if (document.activeElement === document.body) previous?.focus(); };
+  }, []);
 
   // 画面からはみ出すなら内側に寄せる
   useLayoutEffect(() => {
@@ -63,8 +70,21 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
+      role="menu" aria-label="操作メニュー"
+      onKeyDown={e => {
+        const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        let next = index;
+        if (e.key === "ArrowDown") next = (index + 1) % buttons.length;
+        else if (e.key === "ArrowUp") next = (index - 1 + buttons.length) % buttons.length;
+        else if (e.key === "Home") next = 0;
+        else if (e.key === "End") next = buttons.length - 1;
+        else if (e.key === "Tab") { onClose(); return; }
+        else return;
+        e.preventDefault(); buttons[next]?.focus();
+      }}
       className="ctxmenu"
       ref={ref}
       style={{ left: pos.x, top: pos.y }}
@@ -73,9 +93,10 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     >
       {items.map((item, i) =>
         item === SEP ? (
-          <hr key={`s${i}`} />
+          <hr role="separator" key={`s${i}`} />
         ) : (
           <button
+            role="menuitem" tabIndex={-1}
             key={item.label}
             disabled={item.disabled}
             onClick={() => {
@@ -88,6 +109,6 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           </button>
         ),
       )}
-    </div>
+    </div>, document.body
   );
 }

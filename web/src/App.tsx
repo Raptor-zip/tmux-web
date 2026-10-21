@@ -92,6 +92,7 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
   activeRef.current = active;
   const key = (name: string) => desktopKey(workspaceId, name);
   const [selectedDevice, setSelectedDevice] = usePersisted(key('tw.device'), 'local');
+  const [panelFocus, setPanelFocus] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
   const activeDevice = devices.find(d => d.id === selectedDevice) ?? devices[0];
   const device = activeDevice?.server?.device;
@@ -116,7 +117,7 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
   const [focusedId, setFocusedId] = usePersisted<string | null>(key('tw.focusedLeaf'), null);
   const [mode, setMode] = usePersisted<'mirror' | 'direct'>('tw.mode', 'mirror');
   const [showStatusBar, setShowStatusBar] = usePersisted('tw.statusBar', false);
-  const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar', true);
+  const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar.v2', false);
   // 一覧はプロジェクト（作業ディレクトリのリポジトリ）単位を既定にする。
   // 1 つのディレクトリに 1 つのエージェント、という使い方に一覧の形を合わせる
   const [groupBy, setGroupBy] = usePersisted<GroupBy>('tw.groupBy', 'project');
@@ -937,6 +938,11 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
             disabled: leaf.tabs.length < 2,
           },
           SEP,
+          ...allLeaves(tree).filter(l => l.id !== leaf.id).map((target) => ({
+            label: `パネル ${allLeaves(tree).findIndex(l => l.id === target.id) + 1} へ移動（${target.tabs.length}タブ）`,
+            run: () => { setLayout(prev => prev ? moveTab(prev, tabId, target.id, null) : prev); setFocusedId(target.id); },
+          })),
+          SEP,
           {
             label: 'ウィンドウ名を変更…',
             run: () =>
@@ -1066,6 +1072,8 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
         e.stopPropagation();
       };
 
+      if (document.querySelector('dialog[open], [role=menu], [aria-modal=true]')) return;
+      if (key === 'enter') { stop(); setPanelFocus(v => !v); return; }
       if (digit >= 1 && digit <= 9) {
         const tab = focusedLeaf?.tabs[digit - 1];
         if (tab) {
@@ -1190,6 +1198,7 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
 
       <main className={`main ${drag ? 'dragging' : ''}`}>
         <Toolbar
+          deviceName={devices.find(d => d.id === deviceOf(focusedTab?.sessionId || ""))?.name || activeDevice.name}
           session={currentSession}
           window={currentWindow}
           activePane={activePane}
@@ -1237,6 +1246,9 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
             {layout ? (
               <SplitView
                 tree={layout}
+                statuses={termStatuses}
+                focusMode={panelFocus}
+                onToggleFocus={() => setPanelFocus(v => !v)}
                 focusedId={focusedId}
                 devices={devices}
                 sessions={sessions}
@@ -1318,7 +1330,7 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
 
       {devicesOpen && <Devices devices={devices} onChanged={reloadDevices} onClose={() => setDevicesOpen(false)} />}
 
-      {filesPaneId && <FileBrowser paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
+      {filesPaneId && <FileBrowser deviceName={devices.find(d=>d.id===deviceOf(filesPaneId))?.name || activeDevice.name} paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
 
       <footer className="statusbar">
         <button className="sb-item device-name" title="デバイス接続を管理" onClick={() => setDevicesOpen(true)}>{activeDevice.name}</button>

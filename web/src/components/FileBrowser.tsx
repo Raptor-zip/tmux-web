@@ -9,7 +9,7 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): void }) {
+export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; deviceName: string; onClose(): void }) {
   const [transfer, setTransfer] = useState<{ done: number; total: number; name: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [archiving, setArchiving] = useState(false);
@@ -128,7 +128,7 @@ export function FileBrowser({ paneId, onClose }: { paneId: string; onClose(): vo
           }
         }}>
         <header className="file-header">
-          <strong>ファイル</strong>
+          <strong>{deviceName} のファイル</strong>
           <span className="file-root" title={listing?.root}>{listing?.root ?? '作業フォルダ'}</span>
           <button ref={closeButton} className="btn" onClick={onClose}>閉じる</button>
         </header>

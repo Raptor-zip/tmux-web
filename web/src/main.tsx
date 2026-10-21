@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import Desktops from './Desktops';
 import './styles.css';
+import './responsive.css';
 import { registerAppWorker } from './pwa';
 
 registerAppWorker();

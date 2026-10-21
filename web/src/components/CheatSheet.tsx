@@ -52,6 +52,7 @@ const APP_KEYS: { key: string; what: string }[] = [
   { key: 'Alt+1 〜 Alt+9', what: 'そのタイルの n 枚目のタブへ' },
   { key: 'Alt+0', what: '右端のタブへ' },
   { key: 'Alt+[ / Alt+]', what: '前 / 次のタブへ' },
+  { key: 'Alt+Enter', what: '入力先のパネルを広げる / 分割表示に戻す' },
   { key: 'Alt+T', what: '新しい端末をタブで開く' },
   { key: 'Alt+W', what: 'いまのタブを閉じる' },
   { key: 'Alt+P', what: 'ウィンドウ切り替えパレット' },

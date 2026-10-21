@@ -1,0 +1,146 @@
+/* Workspace chrome adapts to the width of each panel as well as the viewport. */
+:root { --bg:#191d23; --bg-1:#20252d; --bg-2:#282e38; --bg-3:#303946; --border:#303844; --border-strong:#465264; --fg:#dde3ec; --fg-dim:#a9b4c3; --fg-faint:#8c99aa; --radius:6px; }
+.app,.app.sidebar-hidden { --activity-w:0px; }
+.activitybar { display:none; }
+.editorbar { min-height:44px; height:44px; padding:0 8px; gap:8px; background:var(--bg-1); border-bottom:1px solid var(--border); }
+.workspace-sidebar-button { display:grid; flex:none; }
+.editorbar .mobile-sidebar-button { display:none; }
+.crumbs { flex:1; min-width:0; height:auto; gap:8px; overflow:hidden; }
+.input-target-label { font-size:10px; color:var(--fg-dim); flex:none; letter-spacing:.06em; }
+.crumbs .crumb:not(.project),.crumbs .sep,.crumbs .tile-count { display:none; }
+.crumbs .crumb.project { max-width:none; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+.editorbar-actions { width:auto; gap:4px; flex:none; }
+.editorbar-actions .icon-btn,.workspace-sidebar-button { width:32px; height:32px; min-width:32px; min-height:32px; border-radius:6px; }
+.editorbar-actions .toolbar-new-tab,.editorbar-actions .toolbar-switcher,.editorbar-actions .split-button { display:none; }
+.icon-btn:active:not(:disabled),.strip-btn:active:not(:disabled),.panel-navigation button:active { background:var(--bg-selected); }
+.panel-workspace { display:flex; flex-direction:column; height:100%; min-width:0; min-height:0; }
+.panel-workspace .splitview { flex:1; height:auto; min-height:0; }
+.panel-navigation { display:flex; align-items:center; gap:8px; padding:0 8px; height:36px; flex:none; background:var(--bg); border-bottom:1px solid var(--border); }
+.panel-navigation button { display:flex; align-items:center; justify-content:center; gap:7px; border:0; background:transparent; color:var(--fg); min-height:30px; padding:0 8px; border-radius:5px; font:inherit; cursor:pointer; }
+.panel-overview-button strong { font-weight:600; }
+.panel-overview-button span,.panel-view-label { font-size:11px; color:var(--fg-dim); }
+.panel-view-label { margin-left:auto; }
+.panel-focus-button span { font-size:11px; }
+.tile { container-type:inline-size; container-name:panel; border:1px solid var(--border-strong); border-radius:5px; overflow:hidden; }
+.tile.focused { border:2px solid var(--accent); }
+.tile[hidden] { display:none !important; }
+.tabstrip { height:38px; background:var(--bg-1); }
+.tabstrip.focused { background:color-mix(in srgb,var(--accent) 12%,var(--bg-1)); }
+.tablist { scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
+.tablist::-webkit-scrollbar { display:block; height:3px; }
+.tab-slot { max-width:100%; }
+.tab { max-width:290px; min-width:150px; gap:7px; border-top:0; font-size:12px; transition:none; }
+.tabstrip.focused .tab.active { border-top:0; }
+.tab.active { background:transparent; }
+.tab-name { min-width:0; flex:1; }
+.tab-device { flex:none; font-size:10px; max-width:90px; overflow:hidden; text-overflow:ellipsis; }
+.device-short { display:none; }
+.tab-where { display:none; }
+.strip-tools { gap:0; padding:0 2px; background:transparent; }
+.strip-btn { width:30px; height:34px; border-radius:4px; }
+.tab-count { width:27px; font-size:11px; font-weight:600; border:1px solid var(--border-strong); height:24px; align-self:center; margin:0 3px; }
+.tab-close { width:24px; height:28px; opacity:1; color:var(--fg-dim); }
+@container panel (max-width: 420px) {
+  .device-full { display:none; }
+  .device-short { display:inline; }
+  .tab { min-width:130px; max-width:230px; padding-left:7px; gap:5px; }
+}
+@container panel (max-width: 290px) { .tab-device,.tab .state-dot { display:none; } .tab { min-width:100px; } }
+.tabstrip .tablist:has(.tab-slot:only-child) .tab-slot { flex:1; }
+.tabstrip .tablist:has(.tab-slot:only-child) .tab { flex:1; max-width:none; }
+.statusbar { background:var(--bg-1); border-top:1px solid var(--border); color:var(--fg-dim); }
+.statusbar .sb-right > :nth-child(n+4) { display:none; }
+.sb-item.device-name { color:var(--accent); }
+.ctxmenu { border-radius:8px; border:1px solid var(--border-strong); box-shadow:0 12px 36px #0006; padding:5px; }
+.ctxmenu button { min-height:34px; border-radius:4px; }
+.ctxmenu button:focus-visible { outline:2px solid var(--accent); background:var(--bg-3); }
+.panel-overview { width:min(680px,calc(100vw - 24px)); }
+.overview-search { padding:12px; flex:none; border-bottom:1px solid var(--border); }
+.overview-search input { width:100%; background:var(--bg); border:1px solid var(--border-strong); border-radius:6px; padding:11px; font-size:16px; }
+.overview-list { overflow:auto; padding:0 12px 12px; min-height:0; }
+.overview-list h3 { display:flex; gap:8px; font-size:11px; color:var(--fg-dim); font-weight:500; padding:12px 2px 6px; margin:0; }
+.overview-list h3 span { margin-left:auto; }
+.overview-tab { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 12px; width:100%; text-align:left; padding:12px; border:1px solid transparent; border-radius:6px; background:transparent; color:var(--fg); cursor:pointer; }
+.overview-tab:hover { background:var(--bg-2); }
+.overview-tab[aria-current=true] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--bg)); }
+.overview-tab strong,.overview-task { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; grid-column:1; }
+.overview-device { font-size:10px; color:var(--fg-dim); grid-column:1; }
+.overview-task { font-size:12px; color:var(--fg-dim); }
+.overview-selected { grid-column:2; grid-row:1/4; align-self:center; font-size:11px; color:var(--accent); }
+.overview-empty { text-align:center; padding:24px; color:var(--fg-dim); }
+.mobile-input-draft { display:flex; flex-direction:column; gap:6px; }
+.mobile-input-draft[hidden] { display:none; }
+.mobile-input-toggle-row { display:flex; gap:8px; }
+.mobile-input-toggle-row button { min-height:44px; border:1px solid var(--border-strong); border-radius:6px; background:var(--bg-2); color:var(--fg); padding:0 12px; }
+.mobile-input-toggle-row .input-toggle { flex:1; text-align:left; }
+@media (min-width:761px) { .editorbar-actions .term-status { display:none; } }
+@media (max-width:1000px) { .agent-launchers { display:none; } }
+@media (max-width:760px) {
+ .editorbar { flex-direction:row; min-height:48px; height:48px; padding:0 6px; gap:4px; }
+ .editorbar-actions { width:auto; gap:0; }
+ .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; height:44px; min-width:44px; min-height:44px; }
+ .editorbar .crumbs { height:auto; flex:1; gap:5px; }
+ .input-target-label { display:none; }
+ .panel-navigation { height:44px; padding:0 4px; gap:0; }
+ .panel-navigation button { min-height:44px; }
+ .panel-view-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+ .panel-focus-button { display:none !important; }
+ .panel-navigation .panel-overview-button { gap:5px; }
+ .panel-overview-button strong { font-size:12px; }
+ .tabstrip { height:46px; }
+ .tab { min-width:150px; max-width:220px; }
+ .strip-btn { width:44px; height:44px; }
+ .tab-count { width:32px; height:36px; }
+ .tab-close { width:32px; min-width:32px; height:44px; }
+ .statusbar .sb-right > :nth-child(n+2),.statusbar > .sb-item:not(.device-name) { display:none; }
+ .statusbar .device-name { max-width:40vw; }
+ .mobile-input { padding:4px 6px; gap:4px; }
+ .ctxmenu button { min-height:44px; }
+}
+@media (pointer:coarse) and (min-width:761px) { .strip-btn { min-width:44px; min-height:44px; } .tabstrip { height:46px; } .icon-btn { min-width:44px; min-height:44px; } }
+.toolbar-device { font-size:11px; flex:none; max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:3px 6px; border-radius:4px; border:1px solid var(--border-strong); }
+.tile-body { position:relative; }
+.panel-connection { position:absolute; z-index:2; top:12px; left:12px; right:12px; display:flex; align-items:flex-start; flex-wrap:wrap; gap:8px; background:var(--bg-1); border:1px solid var(--border-strong); border-left:3px solid var(--yellow); border-radius:6px; padding:12px; box-shadow:0 4px 16px #0005; }
+.panel-connection strong { width:100%; font-size:12px; }
+.panel-connection span { flex:1; min-width:100px; font-size:12px; color:var(--fg-dim); }
+.panel-connection button { background:var(--bg-2); color:var(--fg); border:1px solid var(--border-strong); border-radius:4px; padding:6px 10px; cursor:pointer; }
+.desktop-more { position:relative; }
+.desktop-more summary { list-style:none; cursor:pointer; min-height:32px; display:flex; align-items:center; }
+.desktop-more summary::-webkit-details-marker { display:none; }
+.desktop-more-content { display:flex; gap:6px; flex-wrap:wrap; padding-top:8px; }
+.desktop-more[open] { flex-basis:100%; }
+.desktop-viewer .screen-foot { max-height:100px; overflow:auto; }
+.desktop-viewer .screen-controls { align-items:center; }
+.desktop-viewer .desktop-device-label { flex:1; min-width:150px; }
+.prompt-dialog { width:min(480px,calc(100vw - 24px)); }
+.dialog-content { padding:16px; }
+.file-header strong { font-size:12px; overflow-wrap:anywhere; }
+@media (max-width:760px) {
+ .toolbar-device { max-width:105px; font-size:10px; }
+ .panel-connection button { min-height:44px; }
+ .desktop-more summary { min-height:44px; }
+ .file-header { gap:8px; padding:8px; }
+ .desktop-viewer .screen-foot { font-size:10px; padding:6px 8px; max-height:72px; }
+}
+.panel-workspace .splitview { position:relative; inset:auto; width:100%; }
+.panel-overview[open] { display:flex; flex-direction:column; max-height:calc(var(--app-height,100dvh) - 32px); overflow:hidden; }
+.panel-overview .app-modal-head { flex:none; }
+@media (max-width:760px) { .app-modal-head .icon-btn { min-width:44px; min-height:44px; } }
+.tab-caption { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; line-height:1.2; }
+.tab-caption .tab-name { display:block; flex:none; }
+.tab-task { overflow:hidden; text-overflow:ellipsis; font-size:10px; color:var(--fg-dim); white-space:nowrap; }
+.tab.active { background:var(--bg); box-shadow:inset 0 -2px 0 var(--accent); }
+.tab:not(.active) .tab-name { font-weight:500; color:var(--fg-dim); }
+@media (max-width:760px), (pointer:coarse) {
+ .tab-close { width:44px; min-width:44px; height:44px; min-height:44px; }
+ .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; min-width:44px; height:44px; min-height:44px; }
+ .desktop-close,.desktop-add,.desktop-rename,.app-install { min-width:44px; }
+ .editorbar { min-height:48px; }
+}
+/* Keep project confirmation reachable when a short viewport or keyboard reduces height. */
+.app-modal:has(.project-form)[open] { display:flex; flex-direction:column; overflow:hidden; }
+.app-modal:has(.project-form) .app-modal-head { flex:none; }
+.project-form { overflow:auto; min-height:0; }
+.project-form .app-modal-actions { position:sticky; bottom:-20px; padding:12px 20px; margin:16px -20px -20px; border-top:1px solid var(--border); background:var(--bg-1); }
+/* Keep xterm canvas layers below panel-level status and recovery controls. */
+.tile-body > .terminal-host { z-index:0; }
