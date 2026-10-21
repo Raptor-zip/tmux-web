@@ -1226,6 +1226,7 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
           <div className="terminal-wrap">
             {layout ? (
               <SplitView
+                active={active}
                 tree={layout}
                 statuses={termStatuses}
                 focusMode={panelFocus}

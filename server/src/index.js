@@ -22,7 +22,9 @@ import { installDevice } from './device.js';
 import { installFiles } from './files.js';
 import { installWorkspaces } from './workspaces.js';
 import { createApprovals } from './approvals.js';
-import { createAttachment, cleanupOrphanMirrors, isMirrorSession } from './attach.js';
+import { cleanupOrphanMirrors } from './attach.js';
+import { connectTerminal } from './terminal.js';
+import { visibleState, stateSignature } from './state.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.resolve(__dirname, '../../web/dist');
@@ -146,71 +148,33 @@ const terminalWss = new WebSocketServer({ noServer: true });
 
 let lastStateJson = '';
 let pollTimer = null;
-
-// グループを共有するセッションを 1 つにまとめるか。TMUX_WEB_SHOW_GROUP_VIEWS=1 で無効
-const COLLAPSE_GROUPS = process.env.TMUX_WEB_SHOW_GROUP_VIEWS !== '1';
-
-/**
- * 画面に出す分だけに絞る。
- *
- * - ミラー（`webmux-*`）は隠す。tmux-web が attach のために作る内部的なもの。
- * - グループを共有するセッションは 1 つだけ残す。tmux のグループはウィンドウを
- *   共有するので、`tmux new-session -t <既存>` で端末ごとに view を作る使い方だと、
- *   同じウィンドウが view の数だけ並んでしまう。中身が同じものを何度も見せない。
- *   残すのはグループ名と同じ名前のもの（＝元のセッション）。無ければいちばん古いもの。
- *
- * ウィンドウとペインはセッションごとに重複して返るので、残したセッションの分だけに揃える。
- */
-function visibleState(state) {
-  let sessions = state.sessions.filter((s) => !isMirrorSession(s.name));
-
-  if (COLLAPSE_GROUPS) {
-    const keep = new Map(); // グループ名 -> 残すセッション
-    // 作成時刻だけで選ぶと、再起動で復元される順番しだいで残るセッションが入れ替わる。
-    // ブラウザは配置をセッション名で覚えているので、名前が入れ替わると繋ぎ直せない。
-    // グループ名と同じ名前のもの（＝元のセッション）を優先し、無ければ古いほうを残す。
-    const better = (s, cur) => {
-      if (!cur) return true;
-      if ((s.name === s.group) !== (cur.name === cur.group)) return s.name === s.group;
-      return s.created < cur.created;
-    };
-    for (const s of sessions) {
-      if (!s.group || s.groupSize <= 1) continue;
-      if (better(s, keep.get(s.group))) keep.set(s.group, s);
-    }
-    const kept = new Set([...keep.values()].map((s) => s.id));
-    sessions = sessions.filter((s) => !s.group || s.groupSize <= 1 || kept.has(s.id));
-  }
-
-  const ids = new Set(sessions.map((s) => s.id));
-  const windows = state.windows.filter((w) => ids.has(w.sessionId));
-  const winIds = new Set(windows.map((w) => w.id));
-  return {
-    ...state,
-    sessions,
-    windows,
-    panes: state.panes.filter((p) => winIds.has(p.windowId)),
-  };
-}
+let polling = false;
+let pollSoonTimer = null;
 
 async function pollState() {
-  if (eventsWss.clients.size === 0) return;
+  if (eventsWss.clients.size === 0 || polling) return;
+  polling = true;
   try {
     const state = await snapshot();
-    const json = JSON.stringify({ type: 'state', ...visibleState(state) });
-    if (json === lastStateJson) return;
-    lastStateJson = json;
+    const message = { type: 'state', ...visibleState(state) };
+    const signature = stateSignature(message);
+    if (signature === lastStateJson) return;
+    lastStateJson = signature;
+    const json = JSON.stringify(message);
     for (const ws of eventsWss.clients) {
       if (ws.readyState === ws.OPEN) ws.send(json);
     }
   } catch {
     /* tmux サーバが落ちている場合は次のポーリングで復帰する */
+  } finally {
+    polling = false;
   }
 }
 
 function broadcastStateSoon() {
   lastStateJson = '';
-  setTimeout(pollState, 60);
+  clearTimeout(pollSoonTimer);
+  pollSoonTimer = setTimeout(pollState, 60);
 }
 
 eventsWss.on('connection', (ws) => {
@@ -232,100 +196,8 @@ pollTimer.unref?.();
 // ---------------------------------------------------------------------------
 // WebSocket: ターミナル
 // ---------------------------------------------------------------------------
-terminalWss.on('connection', async (ws, req) => {
-  const url = new URL(req.url, 'http://localhost');
-  const sessionId = url.searchParams.get('session');
-  const windowId = url.searchParams.get('window');
-  const cols = Number(url.searchParams.get('cols') || 80);
-  const rows = Number(url.searchParams.get('rows') || 24);
-  const mode = url.searchParams.get('mode') === 'direct' ? 'direct' : 'mirror';
-  const showStatusBar = url.searchParams.get('status') === '1';
-
-  // attach の準備には tmux を数回叩くぶんの時間がかかる。その間にブラウザが送ってきた
-  // 入力やウィンドウ切り替えを取りこぼさないよう、リスナーを先に張ってキューに貯める。
-  let attachment = null;
-  const pending = [];
-
-  const handleMessage = (msg) => {
-    if (!attachment) {
-      pending.push(msg);
-      return;
-    }
-    switch (msg.type) {
-      case 'input':
-        attachment.pty.write(msg.data);
-        break;
-      case 'resize':
-        try {
-          attachment.pty.resize(Math.max(2, msg.cols | 0), Math.max(2, msg.rows | 0));
-        } catch {
-          /* pty がすでに閉じている */
-        }
-        break;
-      case 'selectWindow':
-        attachment.selectWindowIndex(msg.index);
-        break;
-      default:
-        break;
-    }
-  };
-
-  ws.on('message', (raw, isBinary) => {
-    if (isBinary) {
-      handleMessage({ type: 'input', data: raw.toString('utf8') });
-      return;
-    }
-    try {
-      handleMessage(JSON.parse(raw.toString()));
-    } catch {
-      /* 壊れたフレームは無視 */
-    }
-  });
-
-  try {
-    attachment = await createAttachment({
-      sessionId,
-      windowId,
-      cols,
-      rows,
-      mode,
-      showStatusBar,
-    });
-  } catch (err) {
-    ws.send(JSON.stringify({ type: 'error', message: String(err.message || err) }));
-    ws.close();
-    return;
-  }
-
-  ws.send(
-    JSON.stringify({
-      type: 'ready',
-      attachTarget: attachment.attachTarget,
-      mirrorName: attachment.mirrorName,
-      mode,
-    }),
-  );
-
-  // 準備中に届いていたぶんを順番に処理する
-  while (pending.length) handleMessage(pending.shift());
-
-  attachment.pty.onData((data) => {
-    if (ws.readyState === ws.OPEN) ws.send(Buffer.from(data, 'utf8'));
-  });
-
-  attachment.pty.onExit(({ exitCode }) => {
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: 'exit', exitCode }));
-      ws.close();
-    }
-  });
-
-  const close = async () => {
-    await attachment.dispose();
-    broadcastStateSoon();
-  };
-  ws.on('close', close);
-  ws.on('error', close);
+terminalWss.on('connection', (ws, req) => {
+  void connectTerminal(ws, req, broadcastStateSoon);
 });
 
 server.on('upgrade', (req, socket, head) => {
@@ -368,6 +240,7 @@ server.listen(PORT, HOST, () => {
 
 const shutdown = async () => {
   clearInterval(pollTimer);
+  clearTimeout(pollSoonTimer);
   clearInterval(authRefreshTimer);
   approvals.dispose();
   devices.dispose();
