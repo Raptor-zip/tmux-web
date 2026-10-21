@@ -800,7 +800,6 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
   /** 端末を右クリックしたときに出す項目。tmux の display-menu の代わり */
   const menuItems = useCallback((): MenuEntry[] => {
     const pane = activePane?.id;
-    const win = currentWindow;
     const selection = focusedTerm()?.getSelection().trim() ?? '';
     return [
       // 選択があるときはそれが主役。「本文をコピー」を先頭に置くと、選択したつもりで
@@ -817,8 +816,8 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
           ]
         : []),
       { label: '新しい端末をタブで開く', hint: 'Alt+T', run: () => newTerminal(focusedIdRef.current) },
-      { label: '左右に分割', hint: '新しいウィンドウ', run: () => splitIntoNewWindow('right') },
-      { label: '上下に分割', hint: '新しいウィンドウ', run: () => splitIntoNewWindow('bottom') },
+      { label: '新しい端末を右に並べる', hint: '画面を分割', run: () => splitIntoNewWindow('right') },
+      { label: '新しい端末を下に並べる', hint: '画面を分割', run: () => splitIntoNewWindow('bottom') },
       SEP,
       {
         label: '画面全体をコピー',
@@ -840,19 +839,10 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
       },
       SEP,
       {
-        label: 'ペインを全画面 / 元に戻す',
-        run: () => pane && doAction('zoomPane', { target: pane }),
-        disabled: !pane,
-      },
-      {
-        label: 'tmux のペインとして分割（左右）',
-        run: () => pane && doAction('splitPane', { target: pane, direction: 'horizontal' }),
-        disabled: !pane,
-      },
-      {
-        label: 'tmux のペインとして分割（上下）',
-        run: () => pane && doAction('splitPane', { target: pane, direction: 'vertical' }),
-        disabled: !pane,
+        label: 'このパネルを広げる / 元に戻す',
+        hint: 'Alt+Enter',
+        run: () => setPanelFocus(v => !v),
+        disabled: leaves.length < 2,
       },
       SEP,
       {
@@ -861,25 +851,16 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
         run: () => focusedTab && closeTabById(focusedTab.id),
         disabled: !focusedTab,
       },
-      { label: 'ペインを閉じる…', run: killPane, disabled: !pane },
-      {
-        label: 'ウィンドウを閉じる…',
-        run: () => win && killWindow(win),
-        disabled: !win,
-      },
     ];
   }, [
     activePane,
-    currentWindow,
+    leaves.length,
     focusedTab,
     newTerminal,
     splitIntoNewWindow,
     copyPane,
     copySelection,
     closeTabById,
-    killPane,
-    killWindow,
-    doAction,
     toast,
   ]);
 

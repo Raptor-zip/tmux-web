@@ -281,7 +281,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     });
 
     const swallowRightButton = (e: MouseEvent) => {
-      if (e.button !== 2 || e.shiftKey) return;
+      // Shift はブラウザのメニューを許可するだけで、tmuxには右ボタンを渡さない。
+      if (e.button !== 2) return;
       e.preventDefault();
       e.stopPropagation();
     };

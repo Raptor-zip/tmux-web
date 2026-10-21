@@ -45,7 +45,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now})=>{Date.now=()=>now;localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now});
-  const page=await context.newPage();const errors=[];let terminalConnections=0;page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();const errors=[];let terminalConnections=0;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;
    let body={};let status=200;
@@ -62,7 +62,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   await page.routeWebSocket(/\/ws\//,ws=>{
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
    if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));ws.onMessage(()=>{});}
-   else if(url.pathname.endsWith('/terminal')){terminalConnections++;if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from(output(deviceNames[remote?'spark':'local'])));ws.onMessage(()=>{});}
+   else if(url.pathname.endsWith('/terminal')){terminalConnections++;if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});}
   });
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
@@ -94,6 +94,17 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(await page.evaluate(()=>localStorage.getItem('tw.layout')),layout,'responsive presentation preserves saved split tree');
   }
   if(phase==='after' && scene.name==='many-tabs'){
+   const inputs=terminalInputs.length;
+   const terminal=page.locator('.tile:visible .terminal-host').first();
+   await terminal.click({button:'right',position:{x:80,y:80}});
+   await page.getByRole('menuitem',{name:/^新しい端末を右に並べる/}).waitFor();
+   assert.equal(await page.getByRole('menuitem',{name:/tmux|ペイン|ウィンドウを閉じる/}).count(),0,'no tmux structural actions in terminal menu');
+   await page.screenshot({path:join(out,'terminal-context-menu.png'),animations:'disabled'});
+   await page.keyboard.press('Escape');
+   await terminal.click({button:'right',modifiers:['Shift'],position:{x:80,y:80}});
+   assert.equal(terminalInputs.length,inputs,'right click, including Shift, never sends tmux mouse reports');
+   await page.keyboard.press('Escape');
+
    const first=page.locator('.tab[aria-selected=true]');await first.focus();await page.keyboard.press('ArrowRight');await page.waitForTimeout(100);
    assert.equal(await page.locator('.tab[aria-selected=true]').getAttribute('data-tab-id'),'tab-local-2');
    assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-tab-id')),'tab-local-2');

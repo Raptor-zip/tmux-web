@@ -60,3 +60,9 @@ STATIC_ROOT=/path/to/baseline/web/dist PLAYWRIGHT_MODULE=/path/to/node_modules/p
 ```
 
 画像と計測値は `artifacts/visual-feedback/{before,after}/` に保存する。
+
+## 右クリックの分割操作の整理
+
+端末の右クリックからtmux内部の分割・ズーム・ペイン終了・ウィンドウ終了を除き、コピー・貼り付け・ブラウザのタブ／パネル操作に限定した。画面分割は「新しい端末を右／下に並べる」と明示。Shift＋右クリックのブラウザメニューを許可するときも、右ボタンの押下・解放はtmuxへ渡さない。
+
+[整理後の右クリックメニュー](../artifacts/visual-feedback/after/terminal-context-menu.png)を目視確認。マウス追跡を有効にした合成端末で、通常／Shift＋右クリックが端末入力を送らないことと、tmux内部の構造変更項目が存在しないことをブラウザで検査。型検査と本番ビルドも合格。
