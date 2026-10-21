@@ -5,6 +5,7 @@ const paths = {
   codex: 'm8 6-6 6 6 6 M16 6l6 6-6 6 M14 7l-4 10',
   loading: 'M20 12a8 8 0 1 1-8-8',
   screen: 'M3 4h18v13H3z M8 21h8 M12 17v4',
+  projects: 'M3 7h18v14H3z M8 7V3h8v4 M3 12h18 M10 12v3h4v-3',
   folder: 'M3 7V5a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v2H6l-3 11h15l3-11 M3 7v13',
   plus: 'M12 5v14 M5 12h14',
   close: 'm6 6 12 12 M18 6 6 18',

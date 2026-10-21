@@ -1,3 +1,4 @@
+import { ProjectManager, SudoNotice } from './components/ProjectManager';
 import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
 import { FileBrowser } from './components/FileBrowser';
@@ -126,6 +127,7 @@ export default function App() {
       document.documentElement.style.removeProperty('--app-height');
     };
   }, []);
+  const [projectsOpen, setProjectsOpen] = useState(false);
   const [screenOpen, setScreenOpen] = useState(false);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [cheatOpen, setCheatOpen] = useState(false);
@@ -1021,7 +1023,7 @@ export default function App() {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
+      if (projectsOpen || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
       const key = e.key.toLowerCase();
       const digit = e.code.startsWith('Digit')
         ? Number(e.code.slice(5))
@@ -1074,7 +1076,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
+  }, [projectsOpen, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
@@ -1169,6 +1171,7 @@ export default function App() {
           onToggle={onToggle}
           onCopyPane={copyPane}
           onKillPane={killPane}
+          onOpenProjects={() => setProjectsOpen(true)}
           onOpenScreen={() => setScreenOpen(true)}
           onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
           onOpenSwitcher={() => setSwitcherOpen(true)}
@@ -1317,6 +1320,8 @@ export default function App() {
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 
+      {projectsOpen && <ProjectManager onClose={() => setProjectsOpen(false)} />}
+      <SudoNotice onOpen={() => setProjectsOpen(true)} />
       {screenOpen && <ScreenViewer deviceName={device?.name} onClose={() => setScreenOpen(false)} />}
       {switcherOpen && (
         <Switcher
