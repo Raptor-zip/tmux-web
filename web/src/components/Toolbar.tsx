@@ -30,7 +30,8 @@ interface Props {
   onCopyPane(): void;
   onKillPane(): void;
   onOpenFiles(): void;
-  onOpenProjects(): void;
+  onNewProject(): void;
+  onRemoteControl(): void;
   onOpenScreen(): void;
   onOpenSwitcher(): void;
   onOpenCheatSheet(): void;
@@ -66,7 +67,8 @@ export function Toolbar({
   onCopyPane,
   onKillPane,
   onOpenFiles,
-  onOpenProjects,
+  onNewProject,
+  onRemoteControl,
   onOpenScreen,
   onOpenSwitcher,
   onOpenCheatSheet,
@@ -79,7 +81,11 @@ export function Toolbar({
   const project = projectName(activePane, home);
 
   const moreItems = (): MenuEntry[] => [
-    { label: 'プロジェクト管理（新規・履歴・アップロード・sudo）', run: onOpenProjects },
+    { label: '新しいプロジェクトを作る…', run: onNewProject },
+    ...(activePane?.proc?.agent === 'Claude' ? [
+      { label: 'Claude アプリに接続…', run: onRemoteControl },
+      { label: 'Claude を終了する', run: () => pane && onAction('runCommand', { target: pane, command: '/exit' }), disabled: activePane.busy },
+    ] : []),
     SEP,
     { label: 'Claude を新しいタブで起動', run: () => onLaunchAgent('claude'), disabled: !session || launchingAgent !== null },
     { label: 'Codex を新しいタブで起動', run: () => onLaunchAgent('codex'), disabled: !session || launchingAgent !== null },
@@ -157,8 +163,6 @@ export function Toolbar({
       </div>
 
       <div className="editorbar-actions">
-        <button className="icon-btn" onClick={onOpenProjects} aria-label="プロジェクト管理"
-          title="新規プロジェクト・Claude履歴・アップロード・sudo承認"><Icon name="projects" /></button>
         <button className="icon-btn mobile-sidebar-button" onClick={onToggleSidebar}
           aria-label="セッション一覧の開閉" title="セッション一覧"><Icon name="menu" /></button>
         <button className="icon-btn file-open-button" disabled={!activePane} onClick={onOpenFiles}

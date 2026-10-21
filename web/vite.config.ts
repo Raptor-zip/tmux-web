@@ -11,7 +11,6 @@ export default defineConfig({
     proxy: {
       '/icon': { target: BACKEND, changeOrigin: true },
       '/manifest.webmanifest': { target: BACKEND, changeOrigin: true },
-      '/projects': { target: BACKEND, changeOrigin: true },
       '/files': { target: BACKEND, changeOrigin: true },
       '/api': { target: BACKEND, changeOrigin: true },
       '/ws': { target: BACKEND.replace(/^http/, 'ws'), ws: true },

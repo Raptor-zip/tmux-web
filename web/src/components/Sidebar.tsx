@@ -1,3 +1,6 @@
+import { Icon } from './Icon';
+import { RecentWork } from './ProjectStart';
+import type { StartedProject } from '../api';
 import { useMemo, useRef, useState } from 'react';
 import { HoverPreview, type PreviewTarget } from './HoverPreview';
 import type { DragPayload } from './SplitView';
@@ -41,7 +44,11 @@ interface Props {
   onSelectSession(id: string): void;
   onSelectWindow(win: TmuxWindow): void;
   onAction(action: string, params: Record<string, unknown>): void;
+  onClose(): void;
   onNewSession(): void;
+  onNewProject(): void;
+  onOpenFolder(): void;
+  onProjectStarted(project: StartedProject): void;
   onConfirm(message: string, detail: string, run: () => void): void;
   /** 一定距離ドラッグしたら呼ばれる。ここから先はターミナル側が受け取る */
   onStartDrag(payload: DragPayload): void;
@@ -72,7 +79,11 @@ export function Sidebar({
   onSelectSession,
   onSelectWindow,
   onAction,
+  onClose,
   onNewSession,
+  onNewProject,
+  onOpenFolder,
+  onProjectStarted,
   onConfirm,
   onStartDrag,
   onDropInTree,
@@ -720,13 +731,13 @@ export function Sidebar({
           <span className="brand-mark">▤</span>
           <span className="brand-text">tmux web</span>
         </div>
+        <button className="icon-btn sidebar-close" aria-label="一覧を閉じる" onClick={onClose}><Icon name="close" /></button>
         <span className={`dot ${connected ? 'ok' : 'bad'}`} title={connected ? '接続中' : '切断'} />
       </header>
 
       <div className="sidebar-actions">
-        <button className="btn primary block" onClick={onNewSession}>
-          ＋ セッションを作る
-        </button>
+        <button className="btn primary block" onClick={onNewProject}>＋ プロジェクトを作る</button>
+        <button className="btn block open-folder-button" onClick={onOpenFolder}>フォルダーを開く</button>
 
         <div className="group-switch" role="group" aria-label="一覧の並べ方">
           <button
@@ -744,6 +755,8 @@ export function Sidebar({
             セッション別
           </button>
         </div>
+
+        {groupBy === 'session' && <button className="btn block" onClick={onNewSession}>＋ tmux セッションを作る</button>}
 
         <div className="filter-wrap">
           <input
@@ -832,6 +845,7 @@ export function Sidebar({
             {(restOpen || query) && restGroups.map(groupBlock)}
           </div>
         )}
+        <RecentWork home={home} onStarted={onProjectStarted} />
       </nav>
 
       <HoverPreview target={preview} />
