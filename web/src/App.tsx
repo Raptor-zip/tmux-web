@@ -87,7 +87,7 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
 export default function App({ workspaceId, workspaceName, active, connection }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
 }) {
-  const { state, devices, connected, unauthorized, refresh, reloadDevices } = connection;
+  const { state, devices, connected, unauthorized, authUrl, refresh, reloadDevices } = connection;
   const activeRef = useRef(active);
   activeRef.current = active;
   const key = (name: string) => desktopKey(workspaceId, name);
@@ -1278,10 +1278,10 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
               <div className="placeholder">
                 {unauthorized ? (
                   <>
-                    <p>認証されていません（401）。</p>
+                    <p>Tailscale認証を確認してください。</p>
                     <p className="dim">
-                      サーバは TMUX_WEB_TOKEN を要求しています。
-                      <code>?token=...</code> 付きの URL で開き直してください。
+                      Tailscaleに接続して、許可されたアカウントで開いてください。
+                      {authUrl && <><br /><a href={authUrl}>TailscaleのURLで開く</a></>}
                       セッションが消えたわけではありません。
                     </p>
                   </>

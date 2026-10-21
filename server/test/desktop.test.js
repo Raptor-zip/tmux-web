@@ -1,3 +1,4 @@
+import { auth, headers as identityHeaders } from './helpers/tailscale.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -30,9 +31,10 @@ async function fixture(t, options = {}) {
     ...options,
   });
   const server = http.createServer();
+  const authentication = auth();
   // Same authentication boundary as index.js: reject before upgrading/spawning.
   server.on('upgrade', (req, socket, head) => {
-    if (new URL(req.url, 'http://localhost').searchParams.get('token') !== 'qa') {
+    if (authentication.authorize(req).status !== 200) {
       socket.end('HTTP/1.1 401 Unauthorized\r\n\r\n'); return;
     }
     desktop.upgrade(req, socket, head);
@@ -47,7 +49,7 @@ test('desktop is authenticated, bridges binary traffic, uses a private socket, a
   const denied = new WebSocket(f.url);
   const [err] = await once(denied, 'error');
   assert.match(err.message, /401/); assert.equal(f.spawns, 0);
-  const ws = new WebSocket(f.url + '?token=qa');
+  const ws = new WebSocket(f.url, { headers: identityHeaders });
   const [greeting, binary] = await once(ws, 'message');
   assert.equal(greeting.toString(), 'RFB 003.008\n'); assert.equal(binary, true);
   assert.equal((await stat(path.dirname(f.socketPath))).mode & 0o777, 0o700);
@@ -65,7 +67,7 @@ test('desktop is authenticated, bridges binary traffic, uses a private socket, a
 test('unavailable desktop returns a useful status and closes without spawning', async t => {
   const f = await fixture(t, { probe: async () => { throw new Error('X11 unavailable'); } });
   assert.deepEqual(await f.desktop.status(), { available: false, error: 'X11 unavailable', viewers: 0 });
-  const ws = new WebSocket(f.url + '?token=qa');
+  const ws = new WebSocket(f.url, { headers: identityHeaders });
   const [code, reason] = await once(ws, 'close');
   assert.equal(code, 1011); assert.match(reason.toString(), /X11 unavailable/); assert.equal(f.spawns, 0);
 });
@@ -73,7 +75,7 @@ test('unavailable desktop returns a useful status and closes without spawning', 
 test('closing during probe cancels startup and disposal ends active sessions', async t => {
   let release;
   const f = await fixture(t, { probe: () => new Promise(resolve => { release = resolve; }) });
-  const ws = new WebSocket(f.url + '?token=qa'); await once(ws, 'open');
+  const ws = new WebSocket(f.url, { headers: identityHeaders }); await once(ws, 'open');
   await until(() => release);
   ws.close(); await once(ws, 'close');
   release({ display: ':99', env: {} }); await delay(30);
@@ -83,7 +85,7 @@ test('closing during probe cancels startup and disposal ends active sessions', a
 
 test('server disposal stops a connected desktop process', async t => {
   const f = await fixture(t);
-  const ws = new WebSocket(f.url + '?token=qa'); await once(ws, 'message');
+  const ws = new WebSocket(f.url, { headers: identityHeaders }); await once(ws, 'message');
   const closed = once(ws, 'close'); f.desktop.dispose(); await closed;
   assert.equal(f.kills, 1);
 });
@@ -98,7 +100,7 @@ test('desktop tuning accepts only bounded scale and polling options', () => {
 
 test('desktop applies per-connection scaling and avoids overload sleep without exposing TCP', async t => {
   const f = await fixture(t);
-  const ws = new WebSocket(f.url + '?token=qa&scale=0.75&interval=66');
+  const ws = new WebSocket(f.url + '?scale=0.75&interval=66', { headers: identityHeaders });
   await once(ws, 'message');
   assert.equal(f.args[f.args.indexOf('-scale') + 1], '0.75');
   assert.equal(f.args[f.args.indexOf('-wait') + 1], '66');

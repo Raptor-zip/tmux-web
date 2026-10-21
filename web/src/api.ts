@@ -2,27 +2,28 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { deviceOf, unscoped, scoped, devicePath, scopeState, routeAction, type Device } from './devices';
 import type { ActionName, KeyBinding, TmuxState } from './types';
 
-/** ?token=... を付けて起動した場合、以降のリクエストにも引き継ぐ */
-export const TOKEN = new URLSearchParams(location.search).get('token');
-
-function withToken(url: string): string {
-  if (!TOKEN) return url;
-  return url + (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN);
+// 古いブックマークに含まれた固定トークンは読み取らず、URLから取り除く。
+const cleanUrl = new URL(location.href);
+if (cleanUrl.searchParams.has('token')) {
+  cleanUrl.searchParams.delete('token');
+  history.replaceState(history.state, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
 }
 
-export class AuthError extends Error {}
+export class AuthError extends Error {
+  constructor(message: string, publicUrl?: string) { super(message); this.publicUrl = publicUrl; }
+  publicUrl?: string;
+}
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(withToken(url), {
+  const res = await fetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(TOKEN ? { 'x-tmux-web-token': TOKEN } : {}),
       ...(init?.headers || {}),
     },
   });
   const body = await res.json().catch(() => ({}));
-  if (res.status === 401) throw new AuthError('unauthorized');
+  if (res.status === 401 || res.status === 403) throw new AuthError(body.error || 'Tailscaleによる本人確認が必要です', body.publicUrl);
   if (!res.ok) throw new Error((body as { error?: string }).error || res.statusText);
   return body as T;
 }
@@ -63,14 +64,13 @@ export function wsUrl(path: string, params: Record<string, string | number> = {}
   if (typeof values.session === 'string') device = deviceOf(values.session);
   for (const key of ['session', 'window']) if (typeof values[key] === 'string') values[key] = unscoped(values[key] as string);
   const qs = new URLSearchParams(Object.entries(values).map(([k, v]) => [k, String(v)]));
-  if (TOKEN) qs.set('token', TOKEN);
   const route = device === 'local' ? path : `/ws/devices/${encodeURIComponent(device)}/${path.slice('/ws/'.length)}`;
   return `${proto}//${location.host}${route}?${qs.toString()}`;
 }
 
 export const listDevices = () => request<{ devices: Device[] }>('/api/devices');
-export const addDevice = (device: { name: string; url: string; token: string }) => request<{ id: string }>('/api/devices', { method: 'POST', body: JSON.stringify(device) });
-export const updateDevice = (id: string, device: { name: string; url: string; token?: string }) => request('/api/devices/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(device) });
+export const addDevice = (device: { name: string; url: string }) => request<{ id: string }>('/api/devices', { method: 'POST', body: JSON.stringify(device) });
+export const updateDevice = (id: string, device: { name: string; url: string }) => request('/api/devices/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(device) });
 export const removeDevice = (id: string) => request('/api/devices/' + encodeURIComponent(id), { method: 'DELETE' });
 
 /** デバイスごとに状態と接続を保持する。一台の切断で他の端末を巻き込まない。 */
@@ -78,13 +78,14 @@ export function useTmuxState() {
   const [devices, setDevices] = useState<Device[]>([{ id: 'local', name: 'このPC', local: true }]);
   const [records, setRecords] = useState<Record<string, { state?: TmuxState; connected: boolean; error?: string }>>({});
   const [unauthorized, setUnauthorized] = useState(false);
+  const [authUrl, setAuthUrl] = useState<string | undefined>();
   const [revision, setRevision] = useState(0);
   const sockets = useRef(new Map<string, WebSocket>());
   const reloadDevices = () => setRevision(v => v + 1);
   useEffect(() => {
     let stopped = false;
     listDevices().then(data => { if (!stopped) { setDevices(data.devices); setUnauthorized(false); } })
-      .catch(err => { if (!stopped) setUnauthorized(err instanceof AuthError); });
+      .catch(err => { if (!stopped) { setUnauthorized(err instanceof AuthError); setAuthUrl(err.publicUrl); } });
     return () => { stopped = true; };
   }, [revision]);
   const signature = JSON.stringify(devices.map(({ id, name, url }) => ({ id, name, url })));
@@ -138,7 +139,7 @@ export function useTmuxState() {
     return { available, state };
   }, [devices, records]);
   const refresh = () => { for (const ws of sockets.current.values()) if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'refresh' })); };
-  return { state, devices: available, connected: !!records.local?.connected, unauthorized, refresh, reloadDevices };
+  return { state, devices: available, connected: !!records.local?.connected, unauthorized, authUrl, refresh, reloadDevices };
 }
 
 export interface FileEntry {
@@ -160,7 +161,7 @@ export function fetchFiles(pane: string, path = '', signal?: AbortSignal) {
 export async function openFile(pane: string, path: string, root: string) {
   const device = deviceOf(pane);
   const result = await request<{ url: string }>(devicePath(device, '/api/files/open'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root }) });
-  return { url: withToken(devicePath(device, result.url)) };
+  return { url: devicePath(device, result.url) };
 }
 
 export interface ScreenStatus {
@@ -176,7 +177,7 @@ export function fetchScreenStatus(signal?: AbortSignal) {
   return request<ScreenStatus>('/api/screen/status', { signal });
 }
 export function screenStreamUrl(attempt: number) {
-  return withToken(`/api/screen/stream?attempt=${attempt}`);
+  return `/api/screen/stream?attempt=${attempt}`;
 }
 
 export interface DesktopStatus {
@@ -217,8 +218,8 @@ export const startProject = async (options: StartProjectOptions, device = 'local
 };
 export const remoteControl = (pane: string, connect = true) => request<{ url?: string; pending?: boolean }>(devicePath(deviceOf(pane), '/api/claude/remote-control'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), connect }) });
 export async function uploadFile(pane: string, path: string, root: string, file: File, signal?: AbortSignal) {
-  const res = await fetch(withToken(devicePath(deviceOf(pane), `/api/files/upload?${new URLSearchParams({ pane: unscoped(pane), path, root, name: file.name })}`)), {
-    method: 'POST', body: file, signal, headers: { 'Content-Type': 'application/octet-stream', ...(TOKEN ? { 'x-tmux-web-token': TOKEN } : {}) },
+  const res = await fetch(devicePath(deviceOf(pane), `/api/files/upload?${new URLSearchParams({ pane: unscoped(pane), path, root, name: file.name })}`), {
+    method: 'POST', body: file, signal, headers: { 'Content-Type': 'application/octet-stream' },
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(res.status === 413 ? '1ファイルは50MBまでです。' : body.error || 'アップロードできませんでした');
@@ -227,7 +228,7 @@ export async function uploadFile(pane: string, path: string, root: string, file:
 export const archiveFiles = async (pane: string, path: string, root: string) => {
   const device = deviceOf(pane);
   const result = await request<{ url: string }>(devicePath(device, '/api/files/archive'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root }) });
-  return { url: withToken(devicePath(device, result.url)) };
+  return { url: devicePath(device, result.url) };
 };
 export interface Approval { id: string; cmd: string; cwd: string; detail: string; attempt: number; expiresAt: number }
 export const fetchApproval = (signal?: AbortSignal) => request<{ pending: Approval | null; secure: boolean }>('/api/approvals', { signal, cache: 'no-store' });

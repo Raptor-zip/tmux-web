@@ -9,10 +9,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/icon': { target: BACKEND, changeOrigin: true },
-      '/manifest.webmanifest': { target: BACKEND, changeOrigin: true },
-      '/files': { target: BACKEND, changeOrigin: true },
-      '/api': { target: BACKEND, changeOrigin: true },
+      '/icon': { target: BACKEND, changeOrigin: false },
+      '/manifest.webmanifest': { target: BACKEND, changeOrigin: false },
+      '/files': { target: BACKEND, changeOrigin: false },
+      '/api': { target: BACKEND, changeOrigin: false },
       '/ws': { target: BACKEND.replace(/^http/, 'ws'), ws: true },
     },
   },

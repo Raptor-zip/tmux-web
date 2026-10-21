@@ -16,6 +16,7 @@ import {
 } from './tmux.js';
 import { installScreen } from './screen.js';
 import { createDesktop, readDesktopClipboard, writeDesktopClipboard } from './desktop.js';
+import { assertLoopbackHost, createTailscaleAuth } from './auth.js';
 import { createDevices } from './devices.js';
 import { installDevice } from './device.js';
 import { installFiles } from './files.js';
@@ -28,7 +29,11 @@ const WEB_DIST = path.resolve(__dirname, '../../web/dist');
 
 const PORT = Number(process.env.PORT || 7654);
 const HOST = process.env.HOST || '127.0.0.1';
-const TOKEN = process.env.TMUX_WEB_TOKEN || null;
+assertLoopbackHost(HOST);
+const auth = createTailscaleAuth();
+await auth.refresh();
+const authRefreshTimer = setInterval(() => { void auth.refresh(); }, 30000);
+authRefreshTimer.unref();
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -36,20 +41,17 @@ const approvals = createApprovals();
 approvals.installHelpers(app);
 
 // ---------------------------------------------------------------------------
-// 認証（TMUX_WEB_TOKEN を設定したときだけ有効）
+// 認証: Tailscale Serveが付与した利用者情報を確認する。
 // ---------------------------------------------------------------------------
-function checkToken(req) {
-  if (!TOKEN) return true;
-  const header = req.headers['x-tmux-web-token'];
-  if (header === TOKEN) return true;
-  const url = new URL(req.url, 'http://localhost');
-  return url.searchParams.get('token') === TOKEN;
-}
-
-app.use('/api', (req, res, next) => {
-  if (!checkToken(req)) return res.status(401).json({ error: 'unauthorized' });
-  next();
+app.get('/api/auth', (req, res) => {
+  const result = auth.authorize(req);
+  res.set('Cache-Control', 'no-store').status(result.status).json({
+    auth: 'tailscale', authenticated: result.status === 200, user: result.user,
+    error: result.error, publicUrl: auth.publicURL(),
+  });
 });
+app.use('/api', auth.middleware);
+app.use('/files', auth.middleware);
 
 // ---------------------------------------------------------------------------
 // REST API
@@ -62,7 +64,7 @@ app.get('/api/state', async (_req, res) => {
   try {
     const [state, info] = await Promise.all([snapshot(), serverInfo()]);
     // WS の push と同じ絞り込みを通す。ここだけ素通しすると初回描画で一瞬だけ違う
-    res.json({ ...visibleState(state), server: info, authRequired: Boolean(TOKEN) });
+    res.json({ ...visibleState(state), server: info, authRequired: true, auth: { mode: 'tailscale', user: _req.auth } });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
@@ -328,8 +330,9 @@ terminalWss.on('connection', async (ws, req) => {
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, 'http://localhost');
-  if (TOKEN && url.searchParams.get('token') !== TOKEN) {
-    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+  const authenticated = auth.authorize(req);
+  if (authenticated.status !== 200) {
+    socket.write(`HTTP/1.1 ${authenticated.status} ${authenticated.status === 401 ? 'Unauthorized' : 'Forbidden'}\r\nConnection: close\r\n\r\n`);
     socket.destroy();
     return;
   }
@@ -360,16 +363,12 @@ server.listen(PORT, HOST, () => {
   if (!fs.existsSync(WEB_DIST)) {
     console.log('[tmux-web] web/dist がありません。開発時は Vite (npm run dev) を使ってください。');
   }
-  if (TOKEN) console.log('[tmux-web] トークン認証が有効です (TMUX_WEB_TOKEN)');
-  else if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
-    console.warn(
-      '[tmux-web] 警告: localhost 以外で待ち受けています。TMUX_WEB_TOKEN の設定を強く推奨します。',
-    );
-  }
+  console.log('[tmux-web] Tailscale認証が有効です。アクセス先:', auth.publicURL() || 'Tailscale ServeのURL');
 });
 
 const shutdown = async () => {
   clearInterval(pollTimer);
+  clearInterval(authRefreshTimer);
   approvals.dispose();
   devices.dispose();
   screenCapture.dispose();

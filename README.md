@@ -29,7 +29,7 @@ Ubuntu 24.04 で tmux / git がなければ `sudo apt install tmux git` で導�
 
 ```bash
 ./scripts/setup.sh      # 依存関係・ビルド・Web/tmux 自動起動・保存/復元を導入
-                       # ブラウザで http://127.0.0.1:7654
+                       # ブラウザで ./scripts/tailscale-serve.sh url のHTTPS URLを開く
 ```
 
 起動用の tmux セッション `0` を作り、保存があれば構成を復元する。
@@ -68,14 +68,14 @@ git pull --ff-only
 
 ```bash
 npm ci
-npm run serve          # ビルドして起動 → http://127.0.0.1:7654
+npm run serve          # ビルドして起動（Tailscale Serveから接続）
 ```
 
 開発するときは:
 
 ```bash
 npm run dev            # Vite (5173) + API サーバ (7654) を同時起動
-                       # ブラウザで http://localhost:5173
+                       # Tailscale Serveで5173番へ中継したHTTPS URLを開く
 ```
 
 ## できること
@@ -153,9 +153,8 @@ Claude アプリへの接続準備や終了操作は、その端末のメニュ�
 サイドバー上部のデバイス選択の右にある **＋（デバイス接続）** から、
 DGX Spark など、別マシンで起動している tmux-web を登録できる。
 接続先URLは `http://ホスト名:7654` または Tailscale Serve の HTTPS URL を入力し、
-接続先に `TMUX_WEB_TOKEN` がある場合はトークン欄へ入力する。
-登録済みデバイスの **編集** から接続先・トークンを更新できる。トークン欄が空なら既存の値を維持する。
-URLにはパスや `?token=...` を含めない。接続先を新しいコードへ更新する必要はない。
+接続先もTailscale認証に対応した最新版へ更新する。登録済みの **編集** からURLを更新できる。
+URLにはパスやクエリを含めない。ログイントークンの登録は不要。
 
 - サイドバーはデバイスごとにプロジェクト・セッションを表示する。
 - 一覧から別デバイスのウィンドウを開いたり、端末の端へドラッグして並べられる。
@@ -173,9 +172,10 @@ URLにはパスや `?token=...` を含めない。接続先を新しいコード
 配信元PCから接続先へ到達できる必要がある。入口のPCが停止すると統合画面も利用できなくなるが、
 各マシン上のtmuxとプロセスは継続する。接続先には信頼できるマシンのURLを登録する。
 
-設定と接続先トークンは配信元PCの `~/.config/tmux-web/devices.json` に権限0600で保存し、
-ブラウザのデバイス一覧にはトークンを返さない。保存先は `TMUX_WEB_DEVICES_FILE` で変更できる。
-登録・削除と中継には既存の `TMUX_WEB_TOKEN` 認証を使用する。
+設定は配信元PCの `~/.config/tmux-web/devices.json` に権限0600で保存する。
+保存先は `TMUX_WEB_DEVICES_FILE` で変更できる。旧形式に含まれる固定トークンは起動時に削除する。
+登録・削除にはTailscale認証を使用する。中継先のServeには配信元PCのTailscaleユーザーが伝わるため、
+接続先でもそのアカウントを許可する必要がある。ブラウザの利用者情報は中継先に転送しない。
 
 ### リモートデスクトップ
 
@@ -226,7 +226,7 @@ systemctl --user restart tmux-web
 別の X ディスプレイを選ぶには `TMUX_WEB_DISPLAY` を設定する。
 ヘッドレス環境でも tmux の機能は引き続き使える。
 
-接続は既存の `TMUX_WEB_TOKEN` 認証と `/ws/desktop` を使い、Tailscale Serve の既存 URL で利用できる。
+接続はTailscale認証と `/ws/desktop` を使い、Tailscale Serve の既存 URL で利用できる。
 VNC 用の TCP ポートは開かず、権限 0700 の一時ディレクトリ内の Unix ソケットで中継する。
 閉じるとその接続の x11vnc とソケットを片付ける。ブラウザを非表示にした間も接続は維持する。
 従来の閲覧専用 MJPEG API (`/api/screen/*`) は互換用に残してあり、そちらだけ `ffmpeg` が必要。
@@ -557,7 +557,8 @@ view のほうを個別に見たいときは `TMUX_WEB_SHOW_GROUP_VIEWS=1` で�
 | --- | --- | --- |
 | `PORT` | `7654` | 待ち受けポート |
 | `HOST` | `127.0.0.1` | 待ち受けアドレス |
-| `TMUX_WEB_TOKEN` | なし | 設定するとトークン必須になる。`http://host:7654/?token=...` で開く |
+| `TMUX_WEB_ALLOWED_USERS` | Tailscaleのデバイス所有者 | 操作を許可するログイン名。複数はカンマ区切り。タグ付き端末など所有者が取得できない場合は必須 |
+| `TMUX_WEB_PUBLIC_URL` | 自端末のTailscale HTTPS URL（8443） | アクセス案内URLと認証で許可するホスト名。ポート変更時に設定する |
 | `TMUX_WEB_SOCKET_NAME` | なし | `tmux -L <name>` 相当。別の tmux サーバを操作したいとき |
 | `TMUX_WEB_SOCKET_PATH` | なし | `tmux -S <path>` 相当 |
 | `TMUX_WEB_TMUX_BIN` | `tmux` | tmux の実行ファイル |
@@ -576,10 +577,10 @@ view のほうを個別に見たいときは `TMUX_WEB_SHOW_GROUP_VIEWS=1` で�
 → linger を有効化 → サービスを有効化・再起動。
 linger によってログアウト後も動き、PC 起動時にはログイン前から起動する。
 tmux 自体の自動起動・保存・復元は `install-persistence.sh` が導入する。
-ポートやトークンは環境変数で渡すとユニットに焼き込まれる:
+ポートや許可ユーザーは環境変数で渡すとユニットに焼き込まれる:
 
 ```bash
-PORT=8080 TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
+PORT=8080 TMUX_WEB_ALLOWED_USERS=you@example.com ./scripts/install-service.sh
 ```
 
 | したいこと | コマンド |
@@ -592,7 +593,7 @@ PORT=8080 TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
 
 コードを更新したら `./scripts/install-service.sh` をもう一度実行すれば、
 依存関係を同期して再ビルドし、サービスを再起動する。
-既存のポート・待ち受けアドレス・トークンは、環境変数を明示しなければ引き継ぐ。
+既存のポート・待ち受けアドレス・許可ユーザーは、環境変数を明示しなければ引き継ぐ。
 Node.js を更新して古い実行ファイルを削除した場合も、再実行してパスを更新する。
 保存・復元側も更新するなら `./scripts/setup.sh` を再実行する。
 
@@ -602,7 +603,7 @@ Node.js を更新して古い実行ファイルを削除した場合も、再実
 systemctl --user is-enabled tmux-web tmux-web-tmux tmux-web-resurrect-save.timer
 systemctl --user is-active tmux-web tmux-web-tmux tmux-web-resurrect-save.timer
 loginctl show-user "$USER" -p Linger     # Linger=yes
-curl -fsS http://127.0.0.1:7654/api/state # トークン認証時はヘッダーを付ける
+curl -fsS "$(./scripts/tailscale-serve.sh url)api/state" # Tailscaleが利用者を認証する
 npm test -w server
 ```
 
@@ -794,14 +795,13 @@ resurrect はウィンドウを全部保存して全部戻すが、claude など
 アプリの bind は `127.0.0.1` のままなので、LAN にもインターネットにも出ない。
 
 ```bash
-# トークン付きでサービスを入れ直してから
-TMUX_WEB_TOKEN=$(openssl rand -hex 24) ./scripts/install-service.sh
+./scripts/install-service.sh
 ./scripts/tailscale-serve.sh
 ```
 
-`https://<マシン名>.<tailnet>.ts.net:8443/?token=...` が表示されるので、
-スマホでこれを開いてホーム画面に追加しておく（トークンは URL のクエリで渡す方式なので、
-ブックマークしておけば毎回貼り直さずに済む）。
+`https://<マシン名>.<tailnet>.ts.net:8443/` を開く。
+Tailscaleが本人確認を行い、許可されたログイン名だけが端末を操作できる。
+スマホでホーム画面に追加して使える。
 
 | したいこと | コマンド |
 | --- | --- |
@@ -821,17 +821,29 @@ secure context でしか許さず、`http://100.x.y.z` は secure context 扱い
 **このアプリはシェルへの完全なアクセスを HTTP 越しに提供する。**
 既定で `127.0.0.1` にしか bind しないのはそのため。
 
-LAN や外部に出す場合は最低限これを守ること:
+認証は [Tailscale ServeのIdentity headers](https://tailscale.com/docs/features/tailscale-serve#identity-headers)
+を使う。`Tailscale-User-Login` が許可ユーザーと一致する場合だけ、API・端末WebSocket・
+デスクトップWebSocket・署名付きメディアを利用できる。署名付きURLだけではアクセスできない。
+認証情報がない場合・Tailscale情報を取得できない場合には拒否する。
+
+Serve経由で届いたHTTPSのHostとOriginを照合し、別サイトからのAPI・WebSocket操作を拒否する。
+待ち受けはループバックに限定し、`HOST=0.0.0.0` のような設定では起動しない。
+Serveの利用者ヘッダーは直接接続なら偽装できるため、同じOS内のローカルプロセスは信頼境界内とする。
+公開先はTailscale Serveとし、Funnelは使わない。
+
+既存環境を固定トークンから移行する場合は、各マシン上で:
 
 ```bash
-TMUX_WEB_TOKEN=$(openssl rand -hex 24) HOST=0.0.0.0 npm start
+git pull --ff-only
+npm run build
+./scripts/migrate-tailscale-auth.sh
 ```
 
-より安全なのは、bind は `127.0.0.1` のままにして SSH ポート転送で繋ぐ方法:
-
-```bash
-ssh -N -L 7654:127.0.0.1:7654 user@remote-host
-```
+既存のtmuxを残し、サービスの旧トークン設定を削除して、Tailscale所有者を許可ユーザーに設定する。
+デバイス登録に含まれていた旧トークンも起動時に削除する。
+旧トークンによる認証は受け付けず、古いブックマークのクエリも画面を開いた際に除去する。
+`http://127.0.0.1:7654` やSSHポート転送だけの接続では本人情報がないため、操作できない。
+ローカルPCからもTailscale ServeのHTTPS URLを開く。
 
 ## 構成
 
@@ -902,6 +914,6 @@ tmux に繋ぎ直してしまうため。端末はタイルに 1 つで、タブ
 - 画像・PDF・動画・音声・テキストをプレビューし、ダウンロードできます。動画・音声はブラウザが対応する形式で再生できます。
 - スマホではファイルを選ぶとプレビューへ切り替わり、「← 一覧」で戻れます。PDF は別タブでも開けます。
 - 隠しファイル、`node_modules`、`__pycache__`、作業フォルダ外へのリンクは表示・配信しません。HTML 等はダウンロード扱いです。
-- 一覧と閲覧リンクの発行には既存の `TMUX_WEB_TOKEN` 認証を使います。メディア用のリンクはファイル単位の署名付きで、有効期間は 1 時間です。期限切れやサーバ再起動後は一覧から開き直してください。
+- 一覧・閲覧リンクの発行・メディアの表示にはTailscale認証を使います。メディア用のリンクはファイル単位の署名付きで、有効期間は 1 時間です。期限切れやサーバ再起動後は一覧から開き直してください。
 
 ファイル API のテスト: `npm test -w server`

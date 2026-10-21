@@ -14,15 +14,16 @@ export function validateDevice(input) {
   let url;
   try { url = new URL(input.url); } catch { throw fail(400, 'http(s) の接続先URLを入力してください'); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw fail(400, '接続先は http(s)://ホスト名:ポート の形式で入力してください');
-  if (input.token != null && (typeof input.token !== 'string' || input.token.length > 4096 || /[\r\n]/.test(input.token))) throw fail(400, 'トークンが無効です');
-  return { name: input.name.trim(), url: url.origin, token: input.token || '' };
+  return { name: input.name.trim(), url: url.origin };
 }
 
-/** 保存先はサーバ側だけに置き、接続先のトークンは一覧に返さない。 */
+/** デバイスの名前とURLのみ保存する。認証は接続先のTailscale Serveが行う。 */
 export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path.join(os.homedir(), '.config/tmux-web/devices.json') } = {}) {
   let devices = [];
+  let migrateCredentials = false;
   if (fs.existsSync(file)) {
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+    migrateCredentials = Array.isArray(saved) && saved.some(item => Object.hasOwn(item, 'token'));
     if (!Array.isArray(saved)) throw new Error('devices.json must be an array');
     devices = saved.map(item => {
       if (!/^[a-zA-Z0-9_-]{1,80}$/.test(item.id) || item.id === 'local') throw new Error('Invalid device id');
@@ -40,16 +41,17 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
       devices = next;
     } finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
   };
+  if (migrateCredentials) save(devices);
   const get = id => {
     const device = devices.find(d => d.id === id);
     if (!device) throw fail(404, 'デバイスが見つかりません');
     return device;
   };
-  const publicList = () => [{ id: 'local', name: 'このPC', local: true }, ...devices.map(({ id, name, url, token }) => ({ id, name, url, hasToken: Boolean(token), local: false }))];
+  const publicList = () => [{ id: 'local', name: 'このPC', local: true }, ...devices.map(({ id, name, url }) => ({ id, name, url, local: false }))];
   const target = (device, relative) => {
     const url = new URL(relative, device.url);
     if (url.origin !== device.url) throw fail(400, 'Invalid proxy path');
-    url.searchParams.delete('token');
+    url.searchParams.delete('token'); // 古いブックマーク由来の資格情報は接続先に送らない。
     return url;
   };
   const error = (res, err) => {
@@ -70,7 +72,7 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
     app.put('/api/devices/:id', (req, res) => {
       try {
         const previous = get(req.params.id);
-        const next = { id: previous.id, ...validateDevice({ ...req.body, token: req.body?.token === undefined ? previous.token : req.body.token }) };
+        const next = { id: previous.id, ...validateDevice(req.body) };
         if (devices.some(d => d.id !== previous.id && d.url === next.url)) throw fail(409, 'この接続先は登録済みです');
         save(devices.map(d => d.id === next.id ? next : d));
         for (const ws of sockets.get(next.id) || []) ws.terminate();
@@ -94,10 +96,10 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
         const url = target(device, relative + new URL(req.originalUrl, 'http://localhost').search);
         const headers = {};
         for (const key of ['content-type', 'range', 'accept']) if (req.headers[key]) headers[key] = req.headers[key];
-        if (device.token) headers['x-tmux-web-token'] = device.token;
         const body = !['GET', 'HEAD'].includes(req.method) && req.body && req.is('application/json') ? JSON.stringify(req.body) : null;
         if (body) headers['content-length'] = Buffer.byteLength(body);
         const upstream = (url.protocol === 'https:' ? https : http).request(url, { method: req.method, headers }, incoming => {
+          if ([401, 403].includes(incoming.statusCode)) { incoming.resume(); res.status(502).json({ error: '接続先のTailscale認証を確認してください。接続先も最新版に更新し、配信元PCのTailscaleアカウントを許可してください。' }); return; }
           res.status(incoming.statusCode);
           for (const key of ['content-type', 'content-length', 'content-disposition', 'content-range', 'accept-ranges', 'cache-control', 'x-content-type-options', 'content-security-policy', 'referrer-policy']) {
             if (incoming.headers[key]) res.set(key, incoming.headers[key]);
@@ -122,7 +124,6 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
     catch { socket.end('HTTP/1.1 404 Not Found\r\n\r\n'); return true; }
     const remote = target(device, `/ws/${match[2]}${url.search}`);
     remote.protocol = remote.protocol === 'https:' ? 'wss:' : 'ws:';
-    if (device.token) remote.searchParams.set('token', device.token);
     wss.handleUpgrade(req, socket, head, client => {
       const upstream = new WebSocket(remote, { handshakeTimeout: 8000, maxPayload: 8 * 1024 * 1024 });
       const set = sockets.get(device.id) || new Set();
