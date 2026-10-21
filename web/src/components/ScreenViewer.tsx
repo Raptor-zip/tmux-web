@@ -1,10 +1,16 @@
+import type { Device } from '../devices';
 import { useEffect, useRef, useState } from 'react';
 import { fetchDesktopStatus, measureDesktopRoundTrip, readDesktopClipboard, writeDesktopClipboard, wsUrl } from '../api';
 import { DESKTOP_SETTINGS_KEY, desktopPresets, loadDesktopSettings, type DesktopSettings } from '../desktop-settings';
 import type { LosslessRFB } from '../vendor/lossless-rfb';
 import { Icon } from './Icon';
 
-export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { deviceName?: string; deviceId?: string; onClose(): void }) {
+export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onClose }: { deviceName?: string; deviceId?: string; devices?: Device[]; onClose(): void }) {
+  const [selectedDeviceId, setSelectedDeviceId] = useState(deviceId);
+  const selectedDevice = devices.find(device => device.id === selectedDeviceId);
+  const selectedName = selectedDevice?.name || deviceName || 'デバイス';
+  const selectedIdRef = useRef(selectedDeviceId);
+  selectedIdRef.current = selectedDeviceId;
   const [attempt, setAttempt] = useState(0);
   const [connected, setConnected] = useState(false);
   const [message, setMessage] = useState('デスクトップに接続中…');
@@ -54,15 +60,16 @@ export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { devi
   useEffect(() => {
     const controller = new AbortController();
     let rfb: LosslessRFB | null = null;
-    setConnected(false); setError(''); setMessage('デスクトップを確認中…');
-    void fetchDesktopStatus(controller.signal, deviceId).then(async status => {
+    viewport.current?.replaceChildren();
+    setConnected(false); setError(''); setSourceSize(''); setMessage('デスクトップを確認中…');
+    void fetchDesktopStatus(controller.signal, selectedDeviceId).then(async status => {
       if (controller.signal.aborted) return;
       if (!status.available) throw new Error(status.error || 'デスクトップに接続できません');
       setSourceSize(`${status.width}×${status.height}`);
       const { LosslessRFB } = await import('../vendor/lossless-rfb');
       if (controller.signal.aborted) return;
       setMessage('デスクトップに接続中…');
-      rfb = new LosslessRFB(viewport.current!, wsUrl('/ws/desktop', { scale: settings.scale, interval: settings.interval }, deviceId));
+      rfb = new LosslessRFB(viewport.current!, wsUrl('/ws/desktop', { scale: settings.scale, interval: settings.interval }, selectedDeviceId));
       rfb.lossless = settings.lossless;
       client.current = rfb;
       rfb.scaleViewport = fitRef.current;
@@ -89,7 +96,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { devi
       });
     }).catch(err => { if (!controller.signal.aborted) setError(err.message); });
     return () => { controller.abort(); rfb?.disconnect(); client.current = null; };
-  }, [attempt, settings, deviceId]);
+  }, [attempt, settings, selectedDeviceId]);
 
   useEffect(() => {
     if (!connected) { setRoundTrip(null); return; }
@@ -98,14 +105,14 @@ export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { devi
     const measure = async () => {
       // Include server/network contention, but do not label this as display latency.
       try {
-        const value = await measureDesktopRoundTrip(AbortSignal.any([controller.signal, AbortSignal.timeout(4000)]), deviceId);
+        const value = await measureDesktopRoundTrip(AbortSignal.any([controller.signal, AbortSignal.timeout(4000)]), selectedDeviceId);
         if (!controller.signal.aborted) setRoundTrip(value);
       } catch { if (!controller.signal.aborted) setRoundTrip(null); }
       if (!controller.signal.aborted) timer = setTimeout(() => void measure(), 5000);
     };
     void measure();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [connected]);
+  }, [connected, selectedDeviceId]);
 
   useEffect(() => { if (client.current) client.current.scaleViewport = fit; }, [fit]);
   useEffect(() => { if (client.current) client.current.viewOnly = viewOnly; }, [viewOnly]);
@@ -125,9 +132,9 @@ export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { devi
   };
   const paste = async () => {
     const rfb = client.current;
-    try { await writeDesktopClipboard(text, deviceId); }
+    try { await writeDesktopClipboard(text, selectedDeviceId); }
     catch (err) { setNotice((err as Error).message); return; }
-    if (client.current !== rfb || !rfb) return;
+    if (selectedIdRef.current !== selectedDeviceId || client.current !== rfb || !rfb) return;
     client.current?.sendKey(0xffe3, 'ControlLeft', true);
     client.current?.sendKey(0x76, 'KeyV');
     client.current?.sendKey(0xffe3, 'ControlLeft', false);
@@ -136,7 +143,8 @@ export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { devi
   };
   const copy = async () => {
     try {
-      const { text: received } = await readDesktopClipboard(deviceId);
+      const { text: received } = await readDesktopClipboard(selectedDeviceId);
+      if (selectedIdRef.current !== selectedDeviceId) return;
       setText(received);
       try { await navigator.clipboard.writeText(received); setNotice('この端末にコピーしました'); }
       catch { setNotice('入力欄に取得しました。テキストを選択してコピーしてください'); }
@@ -146,10 +154,17 @@ export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { devi
   return <div className="modal-backdrop desktop-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
     <div className="screen-viewer desktop-viewer" role="dialog" aria-modal="true" aria-label="リモートデスクトップ" tabIndex={-1} ref={panel}>
       <div className="screen-head">
-        <strong><Icon name="screen" /> <span>{deviceName || 'デバイス'} のデスクトップ</span></strong>
+        <strong><Icon name="screen" /> <span>{selectedName} のデスクトップ</span></strong>
         <button className="icon-btn" aria-label="デスクトップを閉じる" onClick={onClose}><Icon name="close" /></button>
       </div>
       <div className="screen-controls">
+        {devices.length > 1 && <label className="desktop-device-label">接続先
+          <select aria-label="デスクトップのデバイス" value={selectedDeviceId} onChange={event => {
+            setText(''); setNotice(''); setRoundTrip(null); setSelectedDeviceId(event.target.value);
+          }}>
+            {devices.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}
+          </select>
+        </label>}
         <button className="btn" aria-pressed={!fit} onClick={() => setFit(v => !v)}>{fit ? '原寸表示' : '画面に合わせる'}</button>
         <button className="btn" onClick={() => void fullscreen()}>{full ? '全画面を終了' : '全画面'}</button>
         <button className="btn" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>画質・遅延設定</button>

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { deviceIdentity } from './device.js';
 import http from 'node:http';
 import https from 'node:https';
 import { randomUUID } from 'node:crypto';
@@ -47,7 +48,7 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
     if (!device) throw fail(404, 'デバイスが見つかりません');
     return device;
   };
-  const publicList = () => [{ id: 'local', name: 'このPC', local: true }, ...devices.map(({ id, name, url }) => ({ id, name, url, local: false }))];
+  const publicList = () => [{ id: 'local', name: deviceIdentity().name, local: true }, ...devices.map(({ id, name, url }) => ({ id, name, url, local: false }))];
   const target = (device, relative) => {
     const url = new URL(relative, device.url);
     if (url.origin !== device.url) throw fail(400, 'Invalid proxy path');
