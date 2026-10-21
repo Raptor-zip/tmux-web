@@ -18,6 +18,7 @@ import { installScreen } from './screen.js';
 import { createDesktop, readDesktopClipboard, writeDesktopClipboard } from './desktop.js';
 import { installDevice } from './device.js';
 import { installFiles } from './files.js';
+import { installProjects } from './projects/index.js';
 import { createAttachment, cleanupOrphanMirrors, isMirrorSession } from './attach.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +29,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const TOKEN = process.env.TMUX_WEB_TOKEN || null;
 
 const app = express();
+installProjects(app, TOKEN);
 app.use(express.json({ limit: '1mb' }));
 
 // ---------------------------------------------------------------------------

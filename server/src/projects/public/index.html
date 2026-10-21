@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="tmux-web">
+<link rel="manifest" href="/projects/manifest.webmanifest">
+<link rel="icon" href="/projects/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/projects/icon.svg">
+<link rel="stylesheet" href="/projects/style.css">
+<title>tmux-web · プロジェクト管理</title>
+</head>
+<body>
+
+<header class="topbar" id="topbar">
+  <a href="__TERMINAL_URL__" target="_top" id="terminal-link" aria-label="tmux-web の端末に戻る">端末へ</a>
+  <h1 id="title">セッション</h1>
+  <button id="refresh" class="icon-btn" aria-label="更新"></button>
+</header>
+
+<button id="askpass-banner" class="askpass-banner hidden">
+  <span class="askpass-title">sudo のパスワード待ち</span>
+  <span class="askpass-cmd" id="askpass-banner-cmd"></span>
+</button>
+
+<main>
+  <!-- ── セッション ─────────────────────────────────────── -->
+  <section id="view-sessions" class="view">
+    <div id="live-list" class="groups"></div>
+    <div id="live-empty" class="empty hidden"></div>
+
+    <details id="stopped-wrap" class="stopped">
+      <summary>
+        <span class="disclosure"></span>
+        <span>停止中のプロジェクト</span>
+        <span id="stopped-count" class="count"></span>
+      </summary>
+      <div id="stopped-list" class="list"></div>
+    </details>
+  </section>
+
+  <!-- ── 新規 ──────────────────────────────────────────── -->
+  <section id="view-new" class="view hidden">
+    <form id="new-form" class="form">
+      <label class="field">
+        <span>プロジェクト名</span>
+        <input id="new-name" type="text" autocomplete="off" autocapitalize="off"
+               placeholder="例: 電車で作るメモアプリ" required>
+        <small id="new-path" class="hint"></small>
+      </label>
+
+      <div class="field">
+        <span>テンプレート</span>
+        <div class="chips" id="new-template">
+          <label><input type="radio" name="tpl" value="none" checked><span>なし</span></label>
+          <label><input type="radio" name="tpl" value="node"><span>Node</span></label>
+          <label><input type="radio" name="tpl" value="python"><span>Python (uv)</span></label>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>最初の指示（任意）</span>
+        <textarea id="new-prompt" rows="4"
+                  placeholder="作りたいものを書くと、そのまま最初のメッセージとして送られます"></textarea>
+      </label>
+
+      <button type="submit" class="primary" id="new-submit">作成して開始</button>
+    </form>
+    <div id="new-result" class="result hidden"></div>
+  </section>
+
+  <!-- ── ファイル ───────────────────────────────────────── -->
+  <section id="view-files" class="view hidden">
+    <nav id="crumbs" class="crumbs" aria-label="場所"></nav>
+    <div class="filebar">
+      <label class="ghost" id="upload-label">
+        <span>アップロード</span>
+        <input id="file-upload" type="file" multiple hidden>
+      </label>
+      <a id="file-zip" class="ghost" href="#"><span>tar.gz</span></a>
+      <label class="ghost toggle"><input id="file-hidden" type="checkbox"><span>隠しファイル</span></label>
+    </div>
+    <div id="file-jump" class="chips jump"></div>
+    <div id="file-list" class="list"></div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button data-tab="sessions" data-icon="sessions" class="active">セッション</button>
+  <button data-tab="new" data-icon="plus">新規</button>
+  <button data-tab="files" data-icon="folder">ファイル</button>
+</nav>
+
+<div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-bg" id="sheet-bg"></div>
+  <div class="sheet-panel" id="sheet-panel">
+    <div class="sheet-handle" id="sheet-handle">
+      <span class="grabber" aria-hidden="true"></span>
+      <button class="sheet-close" id="sheet-close" aria-label="閉じる"></button>
+    </div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script type="module" src="/projects/app.js"></script>
+</body>
+</html>
