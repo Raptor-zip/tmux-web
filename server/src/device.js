@@ -71,8 +71,11 @@ export function installDevice(app) {
     res.set('Cache-Control', 'no-cache').type('image/png').send(icon);
   });
   app.get('/manifest.webmanifest', (_req, res) => res.set('Cache-Control', 'no-cache').type('application/manifest+json').send(JSON.stringify({
-    name: `tmux · ${device.name}`, short_name: device.name, display: 'standalone', orientation: 'any',
+    id: '/', start_url: '/', scope: '/', lang: 'ja',
+    name: `tmux web · ${device.name}`, short_name: 'tmux web', description: 'PCとDGX Sparkの端末・仮想デスクトップをまとめて操作',
+    display: 'standalone', orientation: 'any', categories: ['developer', 'productivity'],
+    prefer_related_applications: false,
     background_color: '#1e1e1e', theme_color: device.color,
-    icons: [192,512].map(size => ({src:`/icon-${size}.png`,sizes:`${size}x${size}`,type:'image/png'})),
+    icons: [192,512].map(size => ({src:`/icon-${size}.png`,sizes:`${size}x${size}`,type:'image/png',purpose:'any maskable'})),
   })));
 }

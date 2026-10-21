@@ -8,10 +8,10 @@ import { spawnSync } from 'node:child_process';
 const outDir = await mkdtemp(join(tmpdir(), 'tmux-web-tests-'));
 try {
   await build({ configFile: false, logLevel: 'error', build: {
-    outDir, lib: { entry: { windows: 'test/windows.test.ts', desktop: 'test/desktop.test.ts', devices: 'test/devices.test.ts', desktops: 'test/desktops.test.ts' }, formats: ['es'], fileName: (_format, entry) => `${entry}.test.mjs` },
+    outDir, lib: { entry: { windows: 'test/windows.test.ts', desktop: 'test/desktop.test.ts', devices: 'test/devices.test.ts', desktops: 'test/desktops.test.ts', pwa: 'test/pwa.test.ts' }, formats: ['es'], fileName: (_format, entry) => `${entry}.test.mjs` },
     rollupOptions: { external: id => id.startsWith('node:') },
   } });
-  const result = spawnSync(process.execPath, ['--test', join(outDir, 'windows.test.mjs'), join(outDir, 'desktop.test.mjs'), join(outDir, 'devices.test.mjs'), join(outDir, 'desktops.test.mjs')], { stdio: 'inherit' });
+  const result = spawnSync(process.execPath, ['--test', join(outDir, 'windows.test.mjs'), join(outDir, 'desktop.test.mjs'), join(outDir, 'devices.test.mjs'), join(outDir, 'desktops.test.mjs'), join(outDir, 'pwa.test.mjs')], { stdio: 'inherit' });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 } finally { await rm(outDir, { recursive: true, force: true }); }

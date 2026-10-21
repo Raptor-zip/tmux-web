@@ -129,6 +129,38 @@ Claude アプリへの接続準備や終了操作は、その端末のメニュ�
 同じ端末名なら再起動しても同じ色・アイコンになる。
 表示名を変える場合はサービスの環境変数 `TMUX_WEB_DEVICE_NAME` を設定する。
 
+### Ubuntuのアプリ一覧・Dockから起動する
+
+このPCにChromeまたはBraveなどのChromium系ブラウザがある場合:
+
+```bash
+python3 scripts/install-desktop-app.py --launch
+```
+
+ユーザーのアプリ一覧に **tmux web** を登録し、GNOMEのDockへ追加して、
+アドレスバーのない専用ウィンドウで開く。sudoは不要。
+既存のお気に入りは維持する。通常のブラウザと同じプロファイル・同じHTTPS URLを使うため、
+タブと仮想デスクトップの保存内容も共有される。
+
+接続先やブラウザを指定する場合:
+
+```bash
+python3 scripts/install-desktop-app.py --url https://<マシン名>.<tailnet>.ts.net:8443/ --browser google-chrome
+```
+
+`--no-pin` を付けるとアプリ一覧への登録だけを行う。
+起動設定は `~/.local/share/applications/tmux-web.desktop`、
+アイコンと起動スクリプトは `~/.local/share/tmux-web/` に保存する
+（`XDG_DATA_HOME` 指定時はその配下）。再実行で設定を更新できる。
+
+ブラウザからは画面上部の **アプリとして追加（⇩）** を使ってPWAとしてインストールできる。
+ブラウザがインストール画面を提供しない場合は、そのブラウザの操作案内を表示する。
+iPhone・iPadではSafariの共有メニューから「ホーム画面に追加」を使う。
+
+アプリの起動先は固定トークンのないHTTPS URLで、毎回Tailscaleが本人確認する。
+接続できない状態でアプリを開いた場合は、接続確認と再接続の案内を表示する。
+Service WorkerはAPI・端末出力・ファイル・画面の内容をオフライン保存しない。
+
 ### 仮想デスクトップ（画面全体の切り替え）
 
 画面上部のバーで、タブと分割配置をまとめて切り替えられる。
