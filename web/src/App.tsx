@@ -1368,7 +1368,7 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
       {projectMode && <ProjectStart deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
       {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure} onClose={() => setApprovalOpen(false)} onDone={() => { setApprovalOpen(false); approval.refresh(); }} />}
       {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}
-      {screenOpen && <ScreenViewer deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)} />}
+      {screenOpen && <ScreenViewer devices={devices} deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)} />}
       {switcherOpen && (
         <Switcher
           items={switchItems}
