@@ -1,3 +1,4 @@
+import { deviceOf, type Device } from '../devices';
 import { Icon } from './Icon';
 import { RecentWork } from './ProjectStart';
 import type { StartedProject } from '../api';
@@ -27,6 +28,10 @@ const RECENT_IDLE_MS = 10 * 60_000;
 export type GroupBy = 'project' | 'session';
 
 interface Props {
+  devices: Device[];
+  selectedDevice: string;
+  onSelectDevice(id: string): void;
+  onManageDevices(): void;
   sessions: Session[];
   windows: TmuxWindow[];
   /** ウィンドウ id → 見せ方。タブや切り替えパレットと同じものを使う */
@@ -64,6 +69,7 @@ export type TreeDropTarget =
   | { kind: 'window'; windowId: string; sessionId: string; place: 'before' | 'after' };
 
 export function Sidebar({
+  devices, selectedDevice, onSelectDevice, onManageDevices,
   sessions,
   windows,
   views,
@@ -192,7 +198,7 @@ export function Sidebar({
 
   /** その組み合わせに意味があるか（自分自身への移動などを弾く） */
   const canDrop = (t: TreeDropTarget): boolean => {
-    if (!drag || !treeDrops) return false;
+    if (!drag || !treeDrops || deviceOf(drag.sessionId) !== deviceOf(t.sessionId)) return false;
     if (drag.kind === 'session') {
       // セッションはセッションにしか合流できない
       return t.kind === 'session' && t.sessionId !== drag.sessionId;
@@ -287,6 +293,7 @@ export function Sidebar({
     if (!query) return true;
     const d = describe(win);
     return [
+      devices.find(d => d.id === deviceOf(win.id))?.name,
       win.sessionName,
       win.name,
       d.primary,
@@ -340,12 +347,13 @@ export function Sidebar({
     for (const win of visible) {
       const pane = views.get(win.id)?.lead ?? null;
       const root = pane?.project?.root ?? pane?.path ?? win.sessionName;
-      let g = byRoot.get(root);
+      const groupKey = `${deviceOf(win.id)}:${root}`;
+      let g = byRoot.get(groupKey);
       if (!g) {
         byRoot.set(
-          root,
+          groupKey,
           (g = {
-            key: root,
+            key: groupKey,
             name: pane?.project?.name ?? shortPath(pane?.path ?? '', home) ?? win.sessionName,
             hint: tildePath(root, home),
             session: null,
@@ -736,6 +744,12 @@ export function Sidebar({
       </header>
 
       <div className="sidebar-actions">
+        <div className="device-controls">
+          <select aria-label="新しいプロジェクト・セッションのデバイス" value={selectedDevice} onChange={e => onSelectDevice(e.target.value)}>
+            {devices.map(d => <option key={d.id} value={d.id}>{d.name}{d.connected ? '' : '（未接続）'}</option>)}
+          </select>
+          <button className="btn ghost" title="デバイス接続" aria-label="デバイス接続を管理" onClick={onManageDevices}>＋</button>
+        </div>
         <button className="btn primary block" onClick={onNewProject}>＋ プロジェクトを作る</button>
         <button className="btn block open-folder-button" onClick={onOpenFolder}>フォルダーを開く</button>
 
@@ -827,25 +841,26 @@ export function Sidebar({
           </p>
         )}
 
-        {liveGroups.map(groupBlock)}
-
-        {restGroups.length > 0 && (
-          <div className="rest">
-            <button
-              className="rest-head"
-              onClick={() => setRestOpen((v) => !v)}
-              title="ウィンドウが全部未使用（シェルだけ）のプロジェクト"
-            >
-              <span className="fold-twisty">{restOpen || query ? '▾' : '▸'}</span>
-              動いていないプロジェクト
-              <span className="rest-count">
-                {restGroups.length} 件 · {restGroups.reduce((n, g) => n + g.wins.length, 0)} 枚
-              </span>
+        {devices.map(device => {
+          const belongs = (g: Group) => deviceOf(g.session?.id ?? g.wins[0]?.sessionId) === device.id;
+          const live = liveGroups.filter(belongs);
+          const rest = restGroups.filter(belongs);
+          return <section className="device-group" key={device.id}>
+            <button className="device-heading" onClick={() => onSelectDevice(device.id)} title={device.error || device.url || 'このPC'}>
+              <span className={`dot ${device.connected ? 'ok' : 'bad'}`} />
+              <strong>{device.name}</strong><small>{device.connected ? '接続中' : device.error || '接続中…'}</small>
             </button>
-            {(restOpen || query) && restGroups.map(groupBlock)}
-          </div>
-        )}
-        <RecentWork home={home} onStarted={onProjectStarted} />
+            {live.map(groupBlock)}
+            {rest.length > 0 && <div className="rest">
+              <button className="rest-head" onClick={() => setRestOpen(v => !v)}>
+                <span className="fold-twisty">{restOpen || query ? '▾' : '▸'}</span>
+                動いていないプロジェクト <span className="rest-count">{rest.length} 件</span>
+              </button>
+              {(restOpen || query) && rest.map(groupBlock)}
+            </div>}
+          </section>;
+        })}
+        <RecentWork key={selectedDevice} deviceId={selectedDevice} home={home} onStarted={onProjectStarted} />
       </nav>
 
       <HoverPreview target={preview} />

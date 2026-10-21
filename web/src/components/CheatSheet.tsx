@@ -59,15 +59,15 @@ const APP_KEYS: { key: string; what: string }[] = [
   { key: 'Shift+右クリック', what: 'ブラウザ本来のメニュー' },
 ];
 
-export function CheatSheet({ onClose, prefix }: { onClose(): void; prefix: string }) {
+export function CheatSheet({ onClose, prefix, deviceId = 'local' }: { onClose(): void; prefix: string; deviceId?: string }) {
   const [keys, setKeys] = useState<KeyBinding[]>([]);
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
-    fetchKeys('prefix')
+    fetchKeys('prefix', deviceId)
       .then((r) => setKeys(r.keys))
       .catch(() => setKeys([]));
-  }, []);
+  }, [deviceId]);
 
   const rows = useMemo(() => {
     const q = filter.trim().toLowerCase();

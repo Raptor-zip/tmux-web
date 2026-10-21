@@ -1,3 +1,4 @@
+import { deviceOf, type Device } from '../devices';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   activeTab,
@@ -31,6 +32,7 @@ export type DropTarget =
   | { kind: 'tab'; leafId: string; before: string | null };
 
 interface Props {
+  devices: Device[];
   tree: LayoutNode;
   focusedId: string | null;
   sessions: Session[];
@@ -52,7 +54,7 @@ interface Props {
   onActivateTab(tabId: string): void;
   onCloseTab(tabId: string): void;
   onCloseTile(leafId: string): void;
-  onNewTab(leafId: string): void;
+  onNewTab(leafId: string, deviceId?: string): void;
   onDrop(target: DropTarget, payload: DragPayload): void;
   onStartDrag(payload: DragPayload): void;
   onDragEnd(): void;
@@ -87,6 +89,7 @@ function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
 }
 
 export function SplitView({
+  devices,
   tree,
   focusedId,
   sessions,
@@ -128,9 +131,9 @@ export function SplitView({
       const win = tab.windowId
         ? windows.find((w) => w.id === tab.windowId)
         : windows.find((w) => w.sessionId === tab.sessionId && w.active);
-      return { view: win ? views.get(win.id) ?? null : null, session };
+      return { view: win ? views.get(win.id) ?? null : null, session, device: devices.find(d => d.id === deviceOf(tab.sessionId)) };
     },
-    [sessions, windows, views],
+    [sessions, windows, views, devices],
   );
 
   /**
@@ -233,6 +236,7 @@ export function SplitView({
             <TabStrip
               leaf={leaf}
               focused={focused}
+              devices={devices}
               viewOf={viewOf}
               closableTile={closableTile}
               draggingTabId={drag?.fromTabId ?? null}
@@ -243,7 +247,7 @@ export function SplitView({
               }}
               onClose={onCloseTab}
               onCloseTile={() => onCloseTile(leaf.id)}
-              onNewTab={() => onNewTab(leaf.id)}
+              onNewTab={(deviceId) => onNewTab(leaf.id, deviceId)}
               onStartDrag={onStartDrag}
               onContextMenu={onTabContextMenu}
             />

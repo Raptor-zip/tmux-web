@@ -1,3 +1,4 @@
+import { deviceOf } from './devices';
 /**
  * 画面の配置を二分木で持つ。
  *
@@ -413,15 +414,16 @@ export function stampNames(tree: LayoutNode, { sessions, windows }: NameSource):
  * ・同じウィンドウを 2 枚のタブが取り合わないよう、割り当て済みは避ける。
  *   それでも同じものを映す 2 枚が残ったら、あとで dedupeTabs が 1 枚に畳む。
  */
-export function remapByName(tree: LayoutNode, src: NameSource): LayoutNode | null {
+export function remapByName(tree: LayoutNode, src: NameSource, unavailable = new Set<string>()): LayoutNode | null {
   const { sessions, windows } = src;
   const used = new Set<string>();
   /** 前の id → 今の id。同じウィンドウを映していた 2 枚は繋ぎ直しても同じものを映す */
   const mapped = new Map<string, string>();
 
   const resolve = (tab: TabRef): TabRef | null => {
+    if (unavailable.has(deviceOf(tab.sessionId))) return tab;
     const session = tab.sessionName
-      ? sessions.find((s) => s.name === tab.sessionName)
+      ? sessions.find((s) => s.name === tab.sessionName && deviceOf(s.id) === deviceOf(tab.sessionId))
       : sessions.find((s) => s.id === tab.sessionId);
     if (!session) return null;
 
@@ -495,9 +497,9 @@ export function remapByName(tree: LayoutNode, src: NameSource): LayoutNode | nul
 }
 
 /** localStorage から読んだ木が今の tmux の状態とずれていないか確かめる */
-export function pruneStale(tree: LayoutNode, validSessionIds: Set<string>): LayoutNode | null {
+export function pruneStale(tree: LayoutNode, validSessionIds: Set<string>, unavailable = new Set<string>()): LayoutNode | null {
   return mapLeaves(tree, (leaf) => {
-    const tabs = leaf.tabs.filter((t) => validSessionIds.has(t.sessionId));
+    const tabs = leaf.tabs.filter((t) => validSessionIds.has(t.sessionId) || unavailable.has(deviceOf(t.sessionId)));
     return tabs.length === leaf.tabs.length ? leaf : settle({ ...leaf, tabs });
   });
 }

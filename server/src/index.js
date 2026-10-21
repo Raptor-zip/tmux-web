@@ -16,6 +16,7 @@ import {
 } from './tmux.js';
 import { installScreen } from './screen.js';
 import { createDesktop, readDesktopClipboard, writeDesktopClipboard } from './desktop.js';
+import { createDevices } from './devices.js';
 import { installDevice } from './device.js';
 import { installFiles } from './files.js';
 import { installWorkspaces } from './workspaces.js';
@@ -53,6 +54,9 @@ app.use('/api', (req, res, next) => {
 // ---------------------------------------------------------------------------
 // REST API
 // ---------------------------------------------------------------------------
+
+const devices = createDevices();
+devices.install(app);
 
 app.get('/api/state', async (_req, res) => {
   try {
@@ -329,6 +333,7 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy();
     return;
   }
+  if (devices.upgrade(req, socket, head, url)) return;
   if (url.pathname === '/ws/desktop') {
     desktop.upgrade(req, socket, head);
   } else if (url.pathname === '/ws/events') {
@@ -366,6 +371,7 @@ server.listen(PORT, HOST, () => {
 const shutdown = async () => {
   clearInterval(pollTimer);
   approvals.dispose();
+  devices.dispose();
   screenCapture.dispose();
   desktop.dispose();
   await cleanupOrphanMirrors().catch(() => {});
