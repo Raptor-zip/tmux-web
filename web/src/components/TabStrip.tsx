@@ -1,3 +1,4 @@
+import type { Device } from '../devices';
 import { useEffect, useRef } from 'react';
 import { Icon } from './Icon';
 import type { DragPayload } from './SplitView';
@@ -6,10 +7,11 @@ import type { Session } from '../types';
 import { whereWithSession, type WindowView } from '../windows';
 
 interface Props {
+  devices: Device[];
   leaf: LeafNode;
   focused: boolean;
   /** タブ id → 表示に使う情報。tmux 側に無いタブは undefined になる */
-  viewOf(tab: TabRef): { view: WindowView | null; session: Session | null };
+  viewOf(tab: TabRef): { view: WindowView | null; session: Session | null; device?: Device };
   /** タイルが 2 枚以上ある＝タイルごと閉じられる */
   closableTile: boolean;
   /** ドラッグ中のタブ id（掴んでいる本人を薄くする） */
@@ -22,7 +24,7 @@ interface Props {
   onActivate(tabId: string): void;
   onClose(tabId: string): void;
   onCloseTile(): void;
-  onNewTab(): void;
+  onNewTab(deviceId?: string): void;
   onStartDrag(payload: DragPayload): void;
   onContextMenu(tabId: string, x: number, y: number): void;
 }
@@ -34,6 +36,7 @@ interface Props {
  * 掴んで並べ替え／別のタイルへ移動・空きをダブルクリックで新しい端末）。
  */
 export function TabStrip({
+  devices,
   leaf,
   focused,
   viewOf,
@@ -114,7 +117,7 @@ export function TabStrip({
         }}
       >
         {leaf.tabs.map((tab, i) => {
-          const { view, session } = viewOf(tab);
+          const { view, session, device } = viewOf(tab);
           const active = tab.id === leaf.activeId;
           const kind = view?.status.kind ?? 'idle';
           const label = view?.project || tab.sessionName || '—';
@@ -170,6 +173,7 @@ export function TabStrip({
                 }}
               >
                 <span className={`state-dot ${kind}`} />
+                <span className="tab-device" style={{ color: device?.server?.device?.accent }} title={device?.error}>{device?.name || "このPC"}{device && !device.connected ? " · 切断" : ""}</span>
                 <span className="tab-name">{label}</span>
                 <span className="tab-where">{where}</span>
                 <button
@@ -191,13 +195,17 @@ export function TabStrip({
       </div>
 
       <div className="strip-tools">
+        {devices.length > 1 && <select className="device-tab-picker" aria-label="別のデバイスで新しいタブを開く" value="" onChange={e => { if (e.target.value) onNewTab(e.target.value); }}>
+          <option value="" disabled>デバイス ＋</option>
+          {devices.map(d => <option key={d.id} value={d.id} disabled={!d.connected}>{d.name}{d.connected ? '' : '（未接続）'}</option>)}
+        </select>}
         <select className="tab-picker" aria-label="このタイルのタブを選ぶ"
           title={`タブ一覧（${leaf.tabs.length} タブ）`} value={leaf.activeId}
           onChange={(e) => onActivate(e.target.value)}>
           {leaf.tabs.map((tab, i) => {
-            const { view, session } = viewOf(tab);
+            const { view, session, device } = viewOf(tab);
             return <option key={tab.id} value={tab.id}>
-              {i + 1}/{leaf.tabs.length} · {view?.project || tab.sessionName || '端末'} · {view?.primary || ''} · {view ? whereWithSession(view, session) : ''}
+              {i + 1}/{leaf.tabs.length} · {device?.name} · {view?.project || tab.sessionName || '端末'} · {view?.primary || ''} · {view ? whereWithSession(view, session) : ''}
             </option>;
           })}
         </select>
@@ -205,7 +213,7 @@ export function TabStrip({
           className="strip-btn"
           title="新しい端末をタブで開く (Alt+T)"
           aria-label="新しい端末をタブで開く"
-          onClick={onNewTab}
+          onClick={() => onNewTab()}
         >
           <Icon name="plus" />
         </button>

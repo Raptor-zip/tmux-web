@@ -4,8 +4,8 @@ import { Modal } from './Modal';
 import { Icon } from './Icon';
 import { tildePath } from '../paths';
 
-export function ProjectStart({ home, initialMode, onClose, onStarted }: {
-  home: string; initialMode: 'new' | 'existing'; onClose(): void; onStarted(project: StartedProject): void;
+export function ProjectStart({ home, deviceId = 'local', deviceName, initialMode, onClose, onStarted }: {
+  home: string; deviceId?: string; deviceName?: string; initialMode: 'new' | 'existing'; onClose(): void; onStarted(project: StartedProject): void;
 }) {
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
@@ -19,11 +19,11 @@ export function ProjectStart({ home, initialMode, onClose, onStarted }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
-  return <Modal title="プロジェクトを開く" onClose={onClose} busy={busy}>
+  return <Modal title={`${deviceName || 'このPC'} · プロジェクトを開く`} onClose={onClose} busy={busy}>
     <form className="project-form" onSubmit={async e => {
       e.preventDefault(); if (inFlight.current) return;
       inFlight.current = true; setBusy(true); setError('');
-      try { const project = await startProject({ mode, name, parent, dir, agent, template, prompt, remoteControl: agent === 'claude' && rc }); onStarted(project); }
+      try { const project = await startProject({ mode, name, parent, dir, agent, template, prompt, remoteControl: agent === 'claude' && rc }, deviceId); onStarted(project); }
       catch (error) { setError((error as Error).message); }
       finally { inFlight.current = false; setBusy(false); }
     }}>
@@ -50,7 +50,7 @@ export function ProjectStart({ home, initialMode, onClose, onStarted }: {
   </Modal>;
 }
 
-export function RecentWork({ home, onStarted }: { home: string; onStarted(project: StartedProject): void }) {
+export function RecentWork({ home, deviceId = 'local', onStarted }: { home: string; deviceId?: string; onStarted(project: StartedProject): void }) {
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(false);
@@ -63,9 +63,9 @@ export function RecentWork({ home, onStarted }: { home: string; onStarted(projec
     if (!open) return;
     const controller = new AbortController();
     setLoading(true); setError('');
-    recentProjects(controller.signal).then(data => setProjects(data.projects)).catch(e => { if (!controller.signal.aborted) setError(e.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    recentProjects(controller.signal, deviceId).then(data => setProjects(data.projects)).catch(e => { if (!controller.signal.aborted) setError(e.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [open, revision]);
+  }, [open, revision, deviceId]);
   return <section className="recent-work" aria-label="最近のClaude履歴">
     <button className="recent-heading" aria-expanded={open} onClick={() => setOpen(v => !v)}><span aria-hidden="true">{open ? '▾' : '▸'}</span> 最近のClaude履歴 <Icon name="history" /></button>
     {open && <div className="recent-body">
@@ -75,7 +75,7 @@ export function RecentWork({ home, onStarted }: { home: string; onStarted(projec
       {!loading && !error && projects.filter(p => `${p.name} ${p.cwd} ${p.summary}`.toLowerCase().includes(query.toLowerCase())).length === 0 && <p className="field-hint">{query ? '一致する履歴がありません' : '再開できる履歴がありません'}</p>}
       {projects.filter(p => `${p.name} ${p.cwd} ${p.summary}`.toLowerCase().includes(query.toLowerCase())).map(project => <button key={project.cwd} className="recent-row" disabled={busy !== null} onClick={async () => {
         if (lock.current) return; lock.current = true; setBusy(project.cwd); setError('');
-        try { onStarted(await startProject({ mode: 'existing', dir: project.cwd, agent: 'claude', resumeId: project.sessionId })); }
+        try { onStarted(await startProject({ mode: 'existing', dir: project.cwd, agent: 'claude', resumeId: project.sessionId }, deviceId)); }
         catch (e) { setError((e as Error).message); }
         finally { setBusy(null); lock.current = false; }
       }} title={`${project.summary || project.name}\n${project.cwd}\nクリックして会話を再開`}>

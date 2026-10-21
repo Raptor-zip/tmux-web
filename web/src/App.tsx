@@ -1,3 +1,5 @@
+import { Devices } from './components/Devices';
+import { deviceOf } from './devices';
 import { ProjectStart } from './components/ProjectStart';
 import { ApprovalDialog, ApprovalNotice, useApproval } from './components/Approval';
 import { RemoteControl } from './components/RemoteControl';
@@ -41,7 +43,7 @@ import {
   setRatio,
   type LayoutNode,
 } from './layout';
-import { buildWindowViews, paneCommand, windowName } from './windows';
+import { buildWindowViews, paneCommand, windowName, type WindowView } from './windows';
 import { STATUS_ORDER } from './status';
 import type { TmuxWindow } from './types';
 
@@ -82,8 +84,12 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
 }
 
 export default function App() {
-  const { state, connected, unauthorized, refresh } = useTmuxState();
-  const device = state?.server?.device;
+  const { state, devices, connected, unauthorized, refresh, reloadDevices } = useTmuxState();
+  const [selectedDevice, setSelectedDevice] = usePersisted('tw.device', 'local');
+  const [devicesOpen, setDevicesOpen] = useState(false);
+  const activeDevice = devices.find(d => d.id === selectedDevice) ?? devices[0];
+  const device = activeDevice?.server?.device;
+  const unavailable = useMemo(() => new Set(devices.filter(d => !d.connected || !d.serverPid).map(d => d.id)), [devices]);
   useEffect(() => {
     if (!device) return;
     document.documentElement.style.setProperty('--status', device.color);
@@ -135,7 +141,7 @@ export default function App() {
   const approval = useApproval();
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [remotePane, setRemotePane] = useState<string | null>(null);
-  const [screenOpen, setScreenOpen] = useState(false);
+  const [screenOpen, setScreenOpen] = useState<string | null>(null);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [cheatOpen, setCheatOpen] = useState(false);
   const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
@@ -186,8 +192,8 @@ export default function App() {
   const sessions = state?.sessions ?? [];
   const windows = state?.windows ?? [];
   const panes = state?.panes ?? [];
-  const prefix = state?.server?.prefix ?? 'C-b';
-  const home = state?.server?.home ?? '';
+  const prefix = activeDevice?.server?.prefix ?? 'C-b';
+  const home = activeDevice?.server?.home ?? '';
 
   // 「未使用 12分」のような相対時間を、状態が変わらなくても進ませる
   const [now, setNow] = useState(() => Date.now());
@@ -198,8 +204,12 @@ export default function App() {
 
   /** ウィンドウ id → 一覧・タブ・パレットで共通に使う見せ方 */
   const views = useMemo(
-    () => buildWindowViews(windows, panes, home, now),
-    [windows, panes, home, now],
+    () => {
+      const result = new Map<string, WindowView>();
+      for (const d of devices) for (const [id, view] of buildWindowViews(windows.filter(w => deviceOf(w.id) === d.id), panes.filter(p => deviceOf(p.id) === d.id), d.server?.home || '', now)) result.set(id, view);
+      return result;
+    },
+    [windows, panes, devices, now],
   );
 
   // ---------------------------------------------------------------- レイアウト
@@ -225,8 +235,8 @@ export default function App() {
    * 開いていたタブが消えてしまう。サーバが入れ替わったのを見て、
    * そのときだけ名前で繋ぎ直す。同じサーバのまま消えたウィンドウは今まで通り閉じる。
    */
-  const [savedPid, setSavedPid] = usePersisted<number | null>('tw.serverPid', null);
-  const serverPid = state?.serverPid ?? null;
+  const [savedPid, setSavedPid] = usePersisted<string | number | null>('tw.serverPid', null);
+  const serverPid = devices.map(d => `${d.id}:${d.serverPid ?? '?'}`).join('|');
 
   /**
    * pid は使い回されることがあり、再起動後にたまたま同じ値になると入れ替わりを見逃す。
@@ -274,7 +284,7 @@ export default function App() {
       return;
     }
 
-    const next = prev ? remapByName(prev, { sessions, windows }) : prev;
+    const next = prev ? remapByName(prev, { sessions, windows }, unavailable) : prev;
 
     setLayout(next);
     setSavedPid(serverPid);
@@ -323,11 +333,11 @@ export default function App() {
     for (const session of sessions) pendingSessions.current.delete(session.id);
     const valid = new Set([...sessions.map((s) => s.id), ...pendingSessions.current]);
     setLayout((prev) => {
-      const pruned = prev ? pruneStale(prev, valid) : null;
+      const pruned = prev ? pruneStale(prev, valid, unavailable) : null;
       if (pruned) return pruned === prev ? prev : pruned;
       // 自分で閉じた／消えた結果として空になったなら、そのままにしておく
       if (opened.current) return null;
-      const first = sessions[0];
+      const first = sessions.find(s => deviceOf(s.id) === activeDevice.id);
       if (!first) return null;
       const active =
         windows.find((w) => w.sessionId === first.id && w.active) ??
@@ -366,6 +376,9 @@ export default function App() {
     [layout, focusedId],
   );
   const focusedTab = focusedLeaf ? activeTab(focusedLeaf) : null;
+  useEffect(() => {
+    if (focusedTab) setSelectedDevice(deviceOf(focusedTab.sessionId));
+  }, [focusedTab?.id, focusedTab?.sessionId]);
   const focusedIdRef = useRef(focusedId);
   focusedIdRef.current = focusedId;
 
@@ -398,7 +411,7 @@ export default function App() {
     const dead = tabs
       .filter(
         ({ tab }) =>
-          tab.windowId && !live.has(tab.windowId) && !pendingWindows.current.has(tab.windowId),
+          tab.windowId && !unavailable.has(deviceOf(tab.sessionId)) && !live.has(tab.windowId) && !pendingWindows.current.has(tab.windowId),
       )
       .map(({ tab }) => tab.id);
     if (dead.length === 0) return;
@@ -533,14 +546,16 @@ export default function App() {
 
   /** そのタブと同じディレクトリに、新しい tmux ウィンドウを作ってタブで開く */
   const newTerminal = useCallback(
-    async (leafId?: string | null, agent?: 'claude' | 'codex') => {
+    async (leafId?: string | null, agent?: 'claude' | 'codex', deviceId?: string) => {
       const tree = layoutRef.current;
       const anchor = tree ? anchorLeaf(tree, leafId) : null;
       const tab = anchor ? activeTab(anchor) : null;
-      const session = tab?.sessionId ?? focusedTab?.sessionId ?? sessions[0]?.id;
-      if (!session) { setProjectMode('existing'); return; }
+      const session = deviceId
+        ? sessions.find(s => deviceOf(s.id) === deviceId)?.id
+        : tab?.sessionId ?? focusedTab?.sessionId ?? sessions.find(s => deviceOf(s.id) === activeDevice.id)?.id;
+      if (!session) { if (deviceId) setSelectedDevice(deviceId); setProjectMode('existing'); return; }
       const cwd =
-        panes.find((p) => p.windowId === tab?.windowId && p.active)?.path ?? activePane?.path;
+        deviceId ? undefined : panes.find((p) => p.windowId === tab?.windowId && p.active)?.path ?? activePane?.path;
       try {
         const { result } = await runAction(agent ? 'launchAgent' : 'newWindow', { target: session, after: true, cwd, ...(agent ? { agent } : {}) });
         if (!result) return;
@@ -563,7 +578,7 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [focusedTab, sessions, panes, activePane, setLayout, refresh, toast],
+    [focusedTab, sessions, panes, activePane, activeDevice.id, setLayout, refresh, toast],
   );
 
   const launchAgent = async (agent: 'claude' | 'codex') => {
@@ -684,6 +699,7 @@ export default function App() {
    */
   const dropInTree = useCallback(
     (target: TreeDropTarget, payload: DragPayload) => {
+      if (deviceOf(target.sessionId) !== deviceOf(payload.sessionId)) { toast('デバイスをまたぐ移動・結合はできません。'); return; }
       if (payload.kind === 'session') {
         if (target.kind !== 'session') return;
         const from = sessions.find((s) => s.id === payload.sessionId);
@@ -1127,6 +1143,10 @@ export default function App() {
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="セッション一覧を閉じる"
         onClick={() => setSidebarOpen(false)} />}
       <Sidebar
+        devices={devices}
+        selectedDevice={activeDevice.id}
+        onSelectDevice={setSelectedDevice}
+        onManageDevices={() => setDevicesOpen(true)}
         sessions={sessions}
         windows={windows}
         views={views}
@@ -1158,7 +1178,7 @@ export default function App() {
             detail: '名前は省略できます（tmux が番号を振ります）。',
             placeholder: 'セッション名',
             confirmLabel: '作成',
-            onSubmit: (name) => doAction('newSession', name.trim() ? { name: name.trim() } : {}),
+            onSubmit: (name) => doAction('newSession', { deviceId: activeDevice.id, ...(name.trim() ? { name: name.trim() } : {}) }),
           })
         }
         onConfirm={confirmThen}
@@ -1192,7 +1212,7 @@ export default function App() {
           onKillPane={killPane}
           onNewProject={() => setProjectMode('new')}
           onRemoteControl={() => activePane && setRemotePane(activePane.id)}
-          onOpenScreen={() => setScreenOpen(true)}
+          onOpenScreen={() => setScreenOpen(activeDevice.id)}
           onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
           onOpenSwitcher={() => setSwitcherOpen(true)}
           onOpenCheatSheet={() => setCheatOpen(true)}
@@ -1218,6 +1238,7 @@ export default function App() {
               <SplitView
                 tree={layout}
                 focusedId={focusedId}
+                devices={devices}
                 sessions={sessions}
                 windows={windows}
                 views={views}
@@ -1231,7 +1252,7 @@ export default function App() {
                 onActivateTab={activate}
                 onCloseTab={closeTabById}
                 onCloseTile={closeTile}
-                onNewTab={(leafId) => newTerminal(leafId)}
+                onNewTab={(leafId, deviceId) => newTerminal(leafId, undefined, deviceId)}
                 onDrop={onDrop}
                 onStartDrag={startDrag}
                 onDragEnd={() => setDrag(null)}
@@ -1277,7 +1298,7 @@ export default function App() {
                 ) : (
                   <>
                     <p>tmux セッションがありません。</p>
-                    <button className="btn primary" onClick={() => doAction('newSession', {})}>
+                    <button className="btn primary" onClick={() => doAction('newSession', { deviceId: activeDevice.id })}>
                       セッションを作る
                     </button>
                   </>
@@ -1295,10 +1316,12 @@ export default function App() {
         {showKeyBar && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
       </main>
 
+      {devicesOpen && <Devices devices={devices} onChanged={reloadDevices} onClose={() => setDevicesOpen(false)} />}
+
       {filesPaneId && <FileBrowser paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
 
       <footer className="statusbar">
-        {device && <span className="sb-item device-name" title={device.name}>{device.name}</span>}
+        <button className="sb-item device-name" title="デバイス接続を管理" onClick={() => setDevicesOpen(true)}>{activeDevice.name}</button>
         <span className="sb-item">
           {currentSession ? currentSession.name : 'セッションなし'}
           {currentWindow && ` / ${currentWindow.index}:${windowName(currentWindow, activePane)}`}
@@ -1342,10 +1365,10 @@ export default function App() {
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 
-      {projectMode && <ProjectStart home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
+      {projectMode && <ProjectStart deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
       {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure} onClose={() => setApprovalOpen(false)} onDone={() => { setApprovalOpen(false); approval.refresh(); }} />}
       {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}
-      {screenOpen && <ScreenViewer deviceName={device?.name} onClose={() => setScreenOpen(false)} />}
+      {screenOpen && <ScreenViewer deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)} />}
       {switcherOpen && (
         <Switcher
           items={switchItems}
@@ -1354,7 +1377,7 @@ export default function App() {
         />
       )}
 
-      {cheatOpen && <CheatSheet prefix={prefix} onClose={() => setCheatOpen(false)} />}
+      {cheatOpen && <CheatSheet deviceId={activeDevice.id} prefix={prefix} onClose={() => setCheatOpen(false)} />}
 
       {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
 

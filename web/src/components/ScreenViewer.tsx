@@ -4,7 +4,7 @@ import { DESKTOP_SETTINGS_KEY, desktopPresets, loadDesktopSettings, type Desktop
 import type { LosslessRFB } from '../vendor/lossless-rfb';
 import { Icon } from './Icon';
 
-export function ScreenViewer({ deviceName, onClose }: { deviceName?: string; onClose(): void }) {
+export function ScreenViewer({ deviceName, deviceId = 'local', onClose }: { deviceName?: string; deviceId?: string; onClose(): void }) {
   const [attempt, setAttempt] = useState(0);
   const [connected, setConnected] = useState(false);
   const [message, setMessage] = useState('デスクトップに接続中…');
@@ -55,14 +55,14 @@ export function ScreenViewer({ deviceName, onClose }: { deviceName?: string; onC
     const controller = new AbortController();
     let rfb: LosslessRFB | null = null;
     setConnected(false); setError(''); setMessage('デスクトップを確認中…');
-    void fetchDesktopStatus(controller.signal).then(async status => {
+    void fetchDesktopStatus(controller.signal, deviceId).then(async status => {
       if (controller.signal.aborted) return;
       if (!status.available) throw new Error(status.error || 'デスクトップに接続できません');
       setSourceSize(`${status.width}×${status.height}`);
       const { LosslessRFB } = await import('../vendor/lossless-rfb');
       if (controller.signal.aborted) return;
       setMessage('デスクトップに接続中…');
-      rfb = new LosslessRFB(viewport.current!, wsUrl('/ws/desktop', { scale: settings.scale, interval: settings.interval }));
+      rfb = new LosslessRFB(viewport.current!, wsUrl('/ws/desktop', { scale: settings.scale, interval: settings.interval }, deviceId));
       rfb.lossless = settings.lossless;
       client.current = rfb;
       rfb.scaleViewport = fitRef.current;
@@ -89,7 +89,7 @@ export function ScreenViewer({ deviceName, onClose }: { deviceName?: string; onC
       });
     }).catch(err => { if (!controller.signal.aborted) setError(err.message); });
     return () => { controller.abort(); rfb?.disconnect(); client.current = null; };
-  }, [attempt, settings]);
+  }, [attempt, settings, deviceId]);
 
   useEffect(() => {
     if (!connected) { setRoundTrip(null); return; }
@@ -98,7 +98,7 @@ export function ScreenViewer({ deviceName, onClose }: { deviceName?: string; onC
     const measure = async () => {
       // Include server/network contention, but do not label this as display latency.
       try {
-        const value = await measureDesktopRoundTrip(AbortSignal.any([controller.signal, AbortSignal.timeout(4000)]));
+        const value = await measureDesktopRoundTrip(AbortSignal.any([controller.signal, AbortSignal.timeout(4000)]), deviceId);
         if (!controller.signal.aborted) setRoundTrip(value);
       } catch { if (!controller.signal.aborted) setRoundTrip(null); }
       if (!controller.signal.aborted) timer = setTimeout(() => void measure(), 5000);
@@ -125,7 +125,7 @@ export function ScreenViewer({ deviceName, onClose }: { deviceName?: string; onC
   };
   const paste = async () => {
     const rfb = client.current;
-    try { await writeDesktopClipboard(text); }
+    try { await writeDesktopClipboard(text, deviceId); }
     catch (err) { setNotice((err as Error).message); return; }
     if (client.current !== rfb || !rfb) return;
     client.current?.sendKey(0xffe3, 'ControlLeft', true);
@@ -136,7 +136,7 @@ export function ScreenViewer({ deviceName, onClose }: { deviceName?: string; onC
   };
   const copy = async () => {
     try {
-      const { text: received } = await readDesktopClipboard();
+      const { text: received } = await readDesktopClipboard(deviceId);
       setText(received);
       try { await navigator.clipboard.writeText(received); setNotice('この端末にコピーしました'); }
       catch { setNotice('入力欄に取得しました。テキストを選択してコピーしてください'); }
