@@ -1,5 +1,13 @@
 /* Workspace chrome adapts to the width of each panel as well as the viewport. */
-:root { --bg:#191d23; --bg-1:#20252d; --bg-2:#282e38; --bg-3:#303946; --border:#303844; --border-strong:#465264; --fg:#dde3ec; --fg-dim:#a9b4c3; --fg-faint:#8c99aa; --radius:6px; }
+:root {
+  /* Tokyo Night (night): https://github.com/folke/tokyonight.nvim */
+  --bg:#1a1b26; --bg-1:#16161e; --bg-2:#1f2335; --bg-3:#292e42;
+  --bg-selected:#283457; --border:#292e42; --border-strong:#414868;
+  --fg:#c0caf5; --fg-dim:#a9b1d6; --fg-faint:#737aa2;
+  --accent:#7aa2f7; --accent-dim:#283457; --status:#16161e;
+  --green:#9ece6a; --red:#f7768e; --yellow:#e0af68; --purple:#bb9af7;
+  --radius:6px;
+}
 .app,.app.sidebar-hidden { --activity-w:0px; }
 .activitybar { display:none; }
 .editorbar { min-height:44px; height:44px; padding:0 8px; gap:8px; background:var(--bg-1); border-bottom:1px solid var(--border); }
@@ -22,10 +30,10 @@
 .panel-view-label { margin-left:auto; }
 .panel-focus-button span { font-size:11px; }
 .tile { container-type:inline-size; container-name:panel; border:1px solid var(--border-strong); border-radius:5px; overflow:hidden; }
-.tile.focused { border:2px solid var(--accent); }
+.tile.focused { border-color:var(--accent); }
 .tile[hidden] { display:none !important; }
 .tabstrip { height:38px; background:var(--bg-1); }
-.tabstrip.focused { background:color-mix(in srgb,var(--accent) 12%,var(--bg-1)); }
+.tabstrip.focused { background:var(--bg-1); }
 .tablist { scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; }
 .tablist::-webkit-scrollbar { display:block; height:3px; }
 .tab-slot { max-width:100%; }
@@ -130,7 +138,7 @@
 .tab-caption .tab-name { display:block; flex:none; }
 .tab-task { overflow:hidden; text-overflow:ellipsis; font-size:10px; color:var(--fg-dim); white-space:nowrap; }
 .tab.active { background:var(--bg); box-shadow:inset 0 -2px 0 var(--accent); }
-.tab:not(.active) .tab-name { font-weight:500; color:var(--fg-dim); }
+.tab:not(.active) .tab-name { font-weight:600; color:var(--fg-dim); }
 @media (max-width:760px), (pointer:coarse) {
  .tab-close { width:44px; min-width:44px; height:44px; min-height:44px; }
  .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; min-width:44px; height:44px; min-height:44px; }
@@ -144,3 +152,16 @@
 .project-form .app-modal-actions { position:sticky; bottom:-20px; padding:12px 20px; margin:16px -20px -20px; border-top:1px solid var(--border); background:var(--bg-1); }
 /* Keep xterm canvas layers below panel-level status and recovery controls. */
 .tile-body > .terminal-host { z-index:0; }
+
+/* Flat status indicators, without neon glow or pulsing. */
+.busy, .dot, .tab-caret, .state-dot, .overview .ov i, .tab .state-dot { box-shadow:none; animation:none; }
+.btn.primary { background:var(--accent-dim); border-color:var(--border-strong); color:var(--fg); }
+.btn.primary:hover { background:var(--bg-3); border-color:var(--accent); }
+.ctxmenu { background:var(--bg-1); }
+.ctxmenu button:hover:not(:disabled) { background:var(--bg-selected); color:var(--fg); }
+.desktop-bar { background:var(--bg-1); }
+.tab.active .tab-name, .desktop-tab.on { color:var(--fg); }
+.state-dot.server, .tally.server i { background:var(--purple); }
+.overview .ov.working, .state-text.working, .chip.working { color:var(--accent); }
+.state-text.server, .chip.server { color:var(--purple); }
+.chip.run { color:var(--yellow); }

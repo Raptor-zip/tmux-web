@@ -186,7 +186,7 @@ export function TabStrip({
                 }}
               >
                 <span className={`state-dot ${kind}`} />
-                <span className="tab-device" style={{ color: device?.server?.device?.accent }} title={device?.error}><span className="device-full">{device?.name || "このPC"}</span><span className="device-short" aria-hidden="true">{device?.local ? "PC" : (device?.name || "接続先").replace(/[^A-Za-z0-9一-龯ぁ-んァ-ヶ]/g, "").slice(0,2).toUpperCase()}</span>{device && !device.connected ? " · 切断" : ""}</span>
+                <span className="tab-device" title={device?.error}><span className="device-full">{device?.name || "このPC"}</span><span className="device-short" aria-hidden="true">{device?.local ? "PC" : (device?.name || "接続先").replace(/[^A-Za-z0-9一-龯ぁ-んァ-ヶ]/g, "").slice(0,2).toUpperCase()}</span>{device && !device.connected ? " · 切断" : ""}</span>
                 <span className="tab-caption"><span className="tab-name">{label}</span><span className="tab-task">{view?.primary || tab.windowName || "端末"}</span></span>
                 <span className="tab-where">{where}</span>
                 <button
