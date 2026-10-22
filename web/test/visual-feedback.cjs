@@ -46,7 +46,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  try{
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
-  await context.addInitScript(({tree,sidebar,now})=>{Date.now=()=>now;localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now});
+  await context.addInitScript(({tree,sidebar,now,keepStorage})=>{Date.now=()=>now;if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK});
   const page=await context.newPage();if(process.env.CONNECTION_CHECK)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;
@@ -106,6 +106,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.deepEqual(errors,[],'no runtime errors after form and font interactions');
   }
 
+  if(process.env.DESKTOP_TRANSFER_CHECK) await require('./desktop-transfer.cjs')(page, errors);
   console.log(scene.name,JSON.stringify(metrics));
   if(phase==='after' && scene.name==='mobile-panels'){
    assert.equal(activeTerminals,1,'only the visible mobile panel attaches');

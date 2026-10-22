@@ -1,4 +1,4 @@
-import { desktopKey } from './desktops';
+import { desktopKey, type DesktopLayoutRegistry } from './desktops';
 import { Devices } from './components/Devices';
 import { deviceOf } from './devices';
 import { ProjectStart } from './components/ProjectStart';
@@ -8,7 +8,7 @@ import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
 import { FileBrowser } from './components/FileBrowser';
 import { MobileInput } from './components/MobileInput';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, useTmuxState, type StartedProject } from './api';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
@@ -84,8 +84,10 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
   return [value, setValue] as const;
 }
 
-export default function App({ workspaceId, workspaceName, active, connection }: {
+export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
+  desktopLayouts: DesktopLayoutRegistry;
+  onDesktopDrag(sourceId: string, payload: DragPayload, end: () => void): void;
 }) {
   const { state, devices, connected, unauthorized, authUrl, refresh, reloadDevices } = connection;
   const activeRef = useRef(active);
@@ -151,6 +153,17 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
   /** 非同期の途中で使う「いまの木」。await のあいだに変わっていることがある */
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  useLayoutEffect(() => {
+    desktopLayouts.set(workspaceId, {
+      read: () => ({ layout: layoutRef.current, focusedId }),
+      write: (next, focus) => {
+        layoutRef.current = next;
+        setLayout(next);
+        setFocusedId(focus);
+      },
+    });
+    return () => { desktopLayouts.delete(workspaceId); };
+  }, [desktopLayouts, workspaceId, focusedId, setLayout, setFocusedId]);
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'error') => {
     const id = Date.now() + Math.random();
@@ -748,7 +761,8 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
     };
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
-  }, []);
+    onDesktopDrag(workspaceId, payload, end);
+  }, [onDesktopDrag, workspaceId]);
 
   /** 端末で選択中の文字列をコピーする。右クリックメニューから使う */
   const copySelection = useCallback(async () => {

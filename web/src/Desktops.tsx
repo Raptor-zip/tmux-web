@@ -1,11 +1,13 @@
 import { InstallApp } from './components/InstallApp';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import App from './App';
+import { flushSync } from 'react-dom';
+import type { DragPayload } from './components/SplitView';
 import { Icon } from './components/Icon';
 import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
-import { addDesktop, desktopKey, INITIAL_DESKTOPS, removeDesktop, restoreDesktops, type Desktops as DesktopState } from './desktops';
+import { addDesktop, desktopKey, INITIAL_DESKTOPS, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
 
 export default function Desktops() {
   const connection = useTmuxState();
@@ -16,6 +18,62 @@ export default function Desktops() {
   const [visited, setVisited] = useState(() => new Set([state.activeId]));
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  const desktopLayouts = useRef<DesktopLayoutRegistry>(new Map());
+  const [dropDesktopId, setDropDesktopId] = useState<string | null>(null);
+  const dragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanup.current?.(), []);
+  const startDesktopDrag = useCallback((sourceId: string, payload: DragPayload, endSource: () => void) => {
+    dragCleanup.current?.();
+    if (!payload.fromTabId) return;
+    const hit = (event: PointerEvent) => {
+      const button = document.elementsFromPoint(event.clientX, event.clientY)
+        .map(el => el.closest<HTMLElement>('[data-desktop-id]')).find(Boolean);
+      const id = button?.dataset.desktopId;
+      return id && id !== sourceId ? id : null;
+    };
+    const move = (event: PointerEvent) => setDropDesktopId(hit(event));
+    const cleanup = () => {
+      setDropDesktopId(null);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', drop, true);
+      window.removeEventListener('pointercancel', cleanup);
+      window.removeEventListener('keydown', cancel, true);
+      window.removeEventListener('blur', abort);
+      dragCleanup.current = null;
+    };
+    const abort = () => { cleanup(); endSource(); };
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); abort(); }
+    };
+    const drop = (event: PointerEvent) => {
+      const destinationId = hit(event);
+      cleanup();
+      if (!destinationId) return;
+      const source = desktopLayouts.current.get(sourceId);
+      const sourceState = source?.read();
+      if (!source || !sourceState?.layout) return;
+      // Mount an unvisited desktop before reading its saved layout.
+      flushSync(() => setVisited(prev => new Set([...prev, destinationId])));
+      const destination = desktopLayouts.current.get(destinationId);
+      if (!destination) return;
+      const target = destination.read();
+      const result = transferDesktopTab(sourceState.layout, target.layout, payload.fromTabId!, target.focusedId);
+      if (!result) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      endSource();
+      source.write(result.source, sourceState.focusedId);
+      destination.write(result.destination, result.focusedId);
+      setState(prev => ({ ...prev, activeId: destinationId }));
+    };
+    dragCleanup.current = abort;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', drop, true);
+    window.addEventListener('pointercancel', cleanup);
+    window.addEventListener('keydown', cancel, true);
+    window.addEventListener('blur', abort);
+  }, []);
+
   const current = state.items.find(item => item.id === state.activeId)!;
   useEffect(() => { try { localStorage.setItem('tw.desktops', JSON.stringify(state)); } catch { /* storage unavailable */ } }, [state]);
   useEffect(() => {
@@ -73,9 +131,9 @@ export default function Desktops() {
     <header className="desktop-bar">
       <div className="desktop-tabs" role="tablist" aria-label="仮想デスクトップ" ref={list}>
         {state.items.map((desktop, index) => <div className="desktop-slot" key={desktop.id}>
-          <button id={`desktop-tab-${desktop.id}`} className={`desktop-tab ${desktop.id === state.activeId ? 'on' : ''}`} role="tab" aria-selected={desktop.id === state.activeId}
+          <button id={`desktop-tab-${desktop.id}`} data-desktop-id={desktop.id} className={`desktop-tab ${desktop.id === state.activeId ? 'on' : ''} ${dropDesktopId === desktop.id ? 'drop-target' : ''}`} role="tab" aria-selected={desktop.id === state.activeId}
             aria-controls={`desktop-panel-${desktop.id}`} tabIndex={desktop.id === state.activeId ? 0 : -1}
-            title={`${desktop.name}（ダブルクリックで名前変更）`} onClick={() => select(desktop.id)}
+            title={`${desktop.name}（タブをドロップして移動・ダブルクリックで名前変更）`} onClick={() => select(desktop.id)}
             onDoubleClick={() => { select(desktop.id); rename(desktop); }}
             onKeyDown={e => {
               let next: number;
@@ -97,7 +155,7 @@ export default function Desktops() {
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
-        {visited.has(desktop.id) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} />}
+        {visited.has(desktop.id) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} />}
       </section>)}
     </div>
     {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
