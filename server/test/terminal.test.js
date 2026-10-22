@@ -105,6 +105,38 @@ process.stdin.on('data', data => {
     client.write('\x03');
     await waitFor(() => run(['display-message', '-p', '#{alternate_on}']) === '0');
 
+    // Claude/Codex が alternate screen を使わない場合も、描画済みの
+    // tmux 履歴ではなくアプリへスクロールキーを渡す。実プロセス名で判定する。
+    for (const name of ['claude', 'codex']) {
+      const executable = path.join(temp, name);
+      const normalApp = path.join(temp, `${name}-app.cjs`);
+      const normalReport = path.join(temp, `${name}-input`);
+      await fs.symlink(process.execPath, executable);
+      await fs.writeFile(normalApp, `const fs = require('node:fs');
+process.stdin.setRawMode(true);
+process.stdin.on('data', data => {
+  fs.appendFileSync(${JSON.stringify(normalReport)}, data);
+  if (data.includes(3)) process.exit();
+});
+process.stdout.write('normal-agent-ready');
+`);
+      client.write(`'${executable}' '${normalApp}'\r`);
+      await waitFor(() => run(['display-message', '-p', '#{pane_current_command}']) === name);
+      await waitFor(() => run(['capture-pane', '-p']).includes('normal-agent-ready'));
+      assert.equal(run(['display-message', '-p', '#{alternate_on}']), '0');
+      client.write(wheelUp);
+      await waitFor(async () => { try { return (await fs.readFile(normalReport, 'utf8')).includes('\x1b[5~'); } catch { return false; } });
+      client.resize(120, 24);
+      await waitFor(() => run(['display-message', '-p', '#{pane_width}']) === '120');
+      client.write(wheelDown);
+      await waitFor(async () => (await fs.readFile(normalReport, 'utf8')).includes('\x1b[6~'));
+      assert.equal(run(['display-message', '-p', '#{pane_in_mode}']), '0');
+      client.write('\x03');
+      await waitFor(() => run(['display-message', '-p', '#{pane_current_command}']) === 'bash');
+      client.resize(80, 24);
+      await waitFor(() => run(['display-message', '-p', '#{pane_width}']) === '80');
+    }
+
     // アプリがマウス入力を要求している場合は、ホイールをそのまま届ける。
     const app = path.join(temp, 'mouse-app.cjs');
     const report = path.join(temp, 'mouse-input');
