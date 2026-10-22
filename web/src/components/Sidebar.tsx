@@ -553,7 +553,7 @@ export function Sidebar({
             aria-label="名前を変更"
             onClick={() => startRename('window', win.id, win.name)}
           >
-            ✎
+            <Icon name="edit" />
           </button>
           <button
             className="danger"
@@ -571,7 +571,7 @@ export function Sidebar({
               )
             }
           >
-            ✕
+            <Icon name="close" />
           </button>
         </div>
       </div>
@@ -663,7 +663,7 @@ export function Sidebar({
                   aria-label="名前を変更"
                   onClick={() => startRename('session', session.id, session.name)}
                 >
-                  ✎
+                  <Icon name="edit" />
                 </button>
                 <button
                   className="danger"
@@ -677,7 +677,7 @@ export function Sidebar({
                     )
                   }
                 >
-                  ✕
+                  <Icon name="close" />
                 </button>
               </>
             )}
@@ -734,21 +734,13 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <header className="sidebar-head">
-        <div className="brand">
-          <span className="brand-mark">▤</span>
-          <span className="brand-text">tmux web</span>
-        </div>
-        <button className="icon-btn sidebar-close" aria-label="一覧を閉じる" onClick={onClose}><Icon name="close" /></button>
-        <span className={`dot ${connected ? 'ok' : 'bad'}`} title={connected ? '接続中' : '切断'} />
-      </header>
-
       <div className="sidebar-actions">
         <div className="device-controls">
           <select aria-label="新しいプロジェクト・セッションのデバイス" value={selectedDevice} onChange={e => onSelectDevice(e.target.value)}>
             {devices.map(d => <option key={d.id} value={d.id}>{d.name}{d.connected ? '' : '（未接続）'}</option>)}
           </select>
           <button className="btn ghost" title="デバイス接続" aria-label="デバイス接続を管理" onClick={onManageDevices}>＋</button>
+          <button className="icon-btn sidebar-close" aria-label="一覧を閉じる" onClick={onClose}><Icon name="close" /></button>
         </div>
         <button className="btn primary block" onClick={onNewProject}>＋ プロジェクトを作る</button>
         <button className="btn block open-folder-button" onClick={onOpenFolder}>フォルダーを開く</button>
@@ -781,7 +773,7 @@ export function Sidebar({
           />
           {filter && (
             <button className="filter-clear" title="クリア" onClick={() => setFilter('')}>
-              ✕
+              <Icon name="close" />
             </button>
           )}
         </div>

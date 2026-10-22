@@ -22,6 +22,8 @@ function tab(n,device='local'){return{id:'tab-'+device+'-'+n,sessionId:device===
 function leaf(n,device='local',extra=[]){const t=tab(n,device);return{type:'leaf',id:'panel-'+device+'-'+n,tabs:[t,...extra],activeId:t.id};}
 function four(){return{type:'split',id:'split1',dir:'row',ratio:.25,a:leaf(1,'local',[tab(5)]),b:{type:'split',id:'split2',dir:'row',ratio:1/3,a:leaf(2),b:{type:'split',id:'split3',dir:'row',ratio:.5,a:leaf(1,'spark'),b:leaf(3)}}};}
 const scenes=[
+ {name:"desktop-controls",width:1280,height:800,sidebar:true,tree:leaf(1)},
+ {name:"project-desktop",width:1280,height:800,sidebar:true,tree:leaf(1),action:"project"},
  {name:'desktop-four',width:1920,height:1080,tree:four()},
  {name:'laptop-four',width:1280,height:800,tree:four()},
  {name:'tablet-two',width:900,height:1024,sidebar:true,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:leaf(1,'spark')}},
@@ -74,6 +76,36 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,visiblePanels:[...document.querySelectorAll('.tile')].filter(el=>!!el.getClientRects().length).map(el=>({width:Math.round(el.getBoundingClientRect().width),headerWidth:el.querySelector('.tablist')?.clientWidth||0})),dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].map(el=>({label:el.getAttribute('aria-label'),width:Math.round(el.getBoundingClientRect().width)}))}));
   results.push({screen:scene.name,width:scene.width,height:scene.height,...metrics,errors});
   if(phase==='after'){assert.deepEqual(errors,[],scene.name+' runtime errors');assert.equal(metrics.overflow,false,scene.name+' horizontal page overflow');}
+  if(phase==='after' && process.env.FORM_CHECK){
+   assert.doesNotMatch(await page.title(),/tmux[ -]?web/i,'product name removed from browser title');
+   assert.equal(await page.locator('.brand').count(),0,'no redundant sidebar brand');
+   assert.deepEqual(await page.locator('body *:visible').evaluateAll(elements=>elements.filter(el=>{
+    const s=getComputedStyle(el);return [s.borderTopLeftRadius,s.borderTopRightRadius,s.borderBottomLeftRadius,s.borderBottomRightRadius].some(v=>parseFloat(v)!==0);
+   }).map(el=>el.className)),[],'all visible UI corners are square');
+   for(const select of await page.locator('select:visible').all()){
+    const style=await select.evaluate(el=>({appearance:getComputedStyle(el).appearance,arrow:getComputedStyle(el).backgroundImage,height:el.getBoundingClientRect().height}));
+    assert.equal(style.appearance,'none');assert.notEqual(style.arrow,'none');assert.ok(style.height>=(scene.width<=1024?44:34));
+   }
+   if(scene.name==='desktop-controls'){
+    await page.getByTitle('文字サイズを変える',{exact:true}).click();
+    await page.getByRole('menuitem',{name:/最小にする/}).click();
+    assert.equal(await page.getByTitle('文字サイズを変える',{exact:true}).textContent(),'6px');
+    await page.getByTitle('行間を変える',{exact:true}).click();
+    await page.getByRole('menuitem',{name:/詰める/}).click();
+    assert.equal(await page.getByTitle('行間を変える',{exact:true}).textContent(),'行間 1.14');
+    await page.getByTitle('行間を変える',{exact:true}).click();
+    await page.getByRole('menuitem',{name:/最小にする/}).click();
+    assert.equal(await page.getByTitle('行間を変える',{exact:true}).textContent(),'行間 1.00');
+    await page.waitForTimeout(150);
+   }
+   if(scene.action==='project'){
+    const select=page.getByRole('combobox',{name:'テンプレート',exact:true});
+    await select.focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+    assert.equal(await select.inputValue(),'node','select retains native keyboard behavior');
+   }
+   assert.deepEqual(errors,[],'no runtime errors after form and font interactions');
+  }
+
   console.log(scene.name,JSON.stringify(metrics));
   if(phase==='after' && scene.name==='mobile-panels'){
    assert.equal(activeTerminals,1,'only the visible mobile panel attaches');

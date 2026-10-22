@@ -1,6 +1,7 @@
 import { InstallApp } from './components/InstallApp';
 import { useEffect, useRef, useState } from 'react';
 import App from './App';
+import { Icon } from './components/Icon';
 import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
@@ -86,12 +87,12 @@ export default function Desktops() {
               e.preventDefault(); select(state.items[next].id);
               list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
             }}><span className="desktop-number">{index + 1}</span><span>{desktop.name}</span></button>
-          {state.items.length > 1 && <button className="desktop-close" aria-label={`${desktop.name} を削除`} title="デスクトップの配置を削除" onClick={() => remove(desktop.id)}>×</button>}
+          {state.items.length > 1 && <button className="desktop-close" aria-label={`${desktop.name} を削除`} title="デスクトップの配置を削除" onClick={() => remove(desktop.id)}><Icon name="close" /></button>}
         </div>)}
       </div>
-      <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}>＋</button>
+      <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
       <InstallApp />
-      <button className="desktop-rename" aria-label="現在のデスクトップの名前を変更" title="デスクトップの名前を変更" onClick={() => rename()}>✎</button>
+      <button className="desktop-rename" aria-label="現在のデスクトップの名前を変更" title="デスクトップの名前を変更" onClick={() => rename()}><Icon name="edit" /></button>
     </header>
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"

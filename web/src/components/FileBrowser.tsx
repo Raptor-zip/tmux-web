@@ -164,7 +164,7 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
               {items.map((entry) => (
                 <button key={entry.path} className={`file-row ${selected?.path === entry.path ? 'selected' : ''}`}
                   disabled={entry.directory && transfer !== null} onClick={() => entry.directory ? navigate(entry.path) : preview(entry)}>
-                  <span className="file-kind" aria-hidden="true">{entry.directory ? <Icon name="folder" /> : entry.mime.startsWith('image/') ? '▧' : entry.mime.startsWith('video/') ? '▶' : entry.mime.startsWith('audio/') ? '♪' : '▤'}</span>
+                  <span className="file-kind" aria-hidden="true">{entry.directory ? <Icon name="folder" /> : entry.mime.startsWith('image/') ? <Icon name="image" /> : entry.mime.startsWith('video/') ? <Icon name="video" /> : entry.mime.startsWith('audio/') ? <Icon name="audio" /> : <Icon name="file" />}</span>
                   <span className="file-details"><span className="file-name">{entry.name}</span>
                     <span className="file-meta">{entry.directory ? 'フォルダ' : formatSize(entry.size)} · {new Date(entry.modified).toLocaleString('ja-JP')}</span>
                   </span>

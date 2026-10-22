@@ -426,7 +426,7 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
   useEffect(() => {
     const name = activePane?.project?.name;
     if (!active) return;
-    document.title = [workspaceName, name, device?.name, 'tmux web'].filter(Boolean).join(' — ');
+    document.title = [workspaceName, name, device?.name].filter(Boolean).join(' — ');
   }, [active, workspaceName, activePane, device?.name]);
 
   /** 直前に見ていた順。切り替えパレットの並びに使う（ref だと並びが古いまま残る） */
@@ -974,19 +974,21 @@ export default function App({ workspaceId, workspaceName, active, connection }: 
         kind === 'fontSize'
           ? [
               { label: '大きく', hint: '+1px', run: () => setFontSize((f) => Math.min(28, f + 1)) },
-              { label: '小さく', hint: '-1px', run: () => setFontSize((f) => Math.max(8, f - 1)) },
+              { label: '小さく', hint: '-1px', disabled: fontSize <= 6, run: () => setFontSize((f) => Math.max(6, f - 1)) },
+              { label: '最小にする', hint: '6px', run: () => setFontSize(6) },
               SEP,
               { label: '既定に戻す', hint: '13px', run: () => setFontSize(13) },
             ]
           : [
-              { label: '広げる', hint: '+0.05', run: () => onLineHeightStep(0.05) },
-              { label: '詰める', hint: '-0.05', run: () => onLineHeightStep(-0.05) },
+              { label: '広げる', hint: '+0.01', run: () => onLineHeightStep(0.01) },
+              { label: '詰める', hint: '-0.01', disabled: lineHeight <= 1, run: () => onLineHeightStep(-0.01) },
+              { label: '最小にする', hint: '1.00', run: () => setLineHeight(1) },
               SEP,
               { label: '既定に戻す', hint: '1.15', run: () => setLineHeight(1.15) },
             ];
       setMenu({ x: r.left, y: r.top - 8 - items.length * 26, items });
     },
-    [setFontSize, setLineHeight, onLineHeightStep],
+    [fontSize, lineHeight, setFontSize, setLineHeight, onLineHeightStep],
   );
 
   const onToggle = useCallback(

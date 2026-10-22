@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
 
 interface InstallPrompt extends Event {
@@ -35,7 +36,7 @@ export function InstallApp() {
     finally { setPrompt(null); setBusy(false); }
   };
   return <>
-    <button className="app-install" aria-label="アプリとしてインストール" title="アプリとしてインストール" disabled={busy} onClick={() => void install()}><span aria-hidden="true">⇩</span><span className="install-label">アプリとして追加</span></button>
+    <button className="app-install" aria-label="アプリとしてインストール" title="アプリとしてインストール" disabled={busy} onClick={() => void install()}><Icon name="download" /><span className="install-label">アプリとして追加</span></button>
     {help && <Modal title="アプリとして使う" onClose={() => setHelp(false)}>
       <div className="install-help">
         <p>専用ウィンドウで開き、アプリ一覧やDockから起動できます。</p>

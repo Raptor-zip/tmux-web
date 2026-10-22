@@ -16,7 +16,7 @@
   --green: #89d185;
   --red: #f14c4c;
   --yellow: #cca700;
-  --radius: 3px;
+  --radius: 0;
   --sidebar-w: 260px;
   --activity-w: 48px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -181,7 +181,7 @@ input {
   padding: 4px 0;
   background: #1f1f1f;
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: 0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   font-size: 13px;
 }
@@ -265,7 +265,7 @@ input {
   flex: 1;
   min-height: 0;
   border: 1px solid var(--border);
-  border-radius: 0 0 5px 5px;
+  border-radius: 0;
   background: var(--bg);
   overflow: hidden;
 }
@@ -312,7 +312,7 @@ input {
   white-space: nowrap;
   background: var(--bg-2);
   border: 1px solid var(--accent-dim);
-  border-radius: 5px;
+  border-radius: 0;
   padding: 4px 10px;
   font-size: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
@@ -379,7 +379,7 @@ input {
   right: 4px;
   height: 2px;
   background: var(--accent);
-  border-radius: 1px;
+  border-radius: 0;
 }
 .row.drop-before::before {
   top: -1px;
@@ -394,7 +394,7 @@ input {
   pointer-events: none;
   background: rgba(110, 231, 255, 0.13);
   border: 2px dashed var(--accent);
-  border-radius: 6px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -429,31 +429,11 @@ input {
   overflow: hidden;
 }
 
-.sidebar-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.brand-mark {
-  color: var(--accent);
-}
-.brand-text {
-  font-family: var(--mono);
-}
 
 .dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
   flex: none;
 }
 .dot.ok {
@@ -480,7 +460,7 @@ input {
   min-width: 0;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: 5px 24px 5px 9px;
   outline: none;
 }
@@ -518,7 +498,7 @@ input {
 
 .tree-session {
   margin-bottom: 6px;
-  border-radius: var(--radius);
+  border-radius: 0;
 }
 .tree-session.active {
   background: rgba(110, 231, 255, 0.04);
@@ -530,7 +510,7 @@ input {
   display: flex;
   align-items: center;
   gap: 2px;
-  border-radius: 5px;
+  border-radius: 0;
   min-height: 28px;
   padding-right: 2px;
 }
@@ -564,7 +544,7 @@ input {
 .busy {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: 0;
   flex: none;
   background: var(--accent);
   box-shadow: none;
@@ -664,7 +644,7 @@ input {
   display: flex;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: 2px;
   gap: 2px;
 }
@@ -672,7 +652,7 @@ input {
   flex: 1;
   background: none;
   border: 0;
-  border-radius: 2px;
+  border-radius: 0;
   color: var(--fg-dim);
   cursor: pointer;
   padding: 4px 0;
@@ -701,7 +681,7 @@ input {
   gap: 4px;
   background: none;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: 0;
   color: var(--fg-dim);
   cursor: pointer;
   padding: 1px 5px;
@@ -717,7 +697,7 @@ input {
 .overview .ov i {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--fg-faint);
 }
 .overview .ov.working {
@@ -751,7 +731,7 @@ input {
   margin-left: auto;
   background: none;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: 0;
   color: var(--fg-dim);
   cursor: pointer;
   padding: 1px 7px;
@@ -804,7 +784,7 @@ input {
   width: 100%;
   background: none;
   border: 0;
-  border-radius: 5px;
+  border-radius: 0;
   color: var(--fg-dim);
   cursor: pointer;
   padding: 5px 4px;
@@ -846,7 +826,7 @@ input {
 .state-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: 0;
   flex: none;
   margin: 9px 5px 0 6px;
   align-self: flex-start;
@@ -916,7 +896,7 @@ input {
   font-size: 9.5px;
   line-height: 14px;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: 0;
   background: var(--bg-3);
   color: var(--fg-dim);
 }
@@ -946,7 +926,7 @@ input {
 .tally i {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: 0;
   background: var(--fg-faint);
 }
 .tally.working i {
@@ -974,7 +954,7 @@ input {
 
 .badge {
   background: var(--bg-3);
-  border-radius: 3px;
+  border-radius: 0;
   padding: 0 4px;
   line-height: 15px;
   color: var(--fg-dim);
@@ -1012,7 +992,7 @@ input {
   gap: 1px;
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
   padding: 1px;
 }
@@ -1026,7 +1006,7 @@ input {
   color: var(--fg-dim);
   cursor: pointer;
   padding: 3px 5px;
-  border-radius: 4px;
+  border-radius: 0;
   line-height: 1;
 }
 .row-tools button:hover {
@@ -1043,7 +1023,7 @@ input {
   min-width: 0;
   background: var(--bg);
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 3px 6px;
   outline: none;
 }
@@ -1117,7 +1097,7 @@ input {
   place-items: center;
   background: none;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 0;
   color: var(--fg-dim);
   font-size: 14px;
   cursor: pointer;
@@ -1142,7 +1122,7 @@ input {
   min-width: 0;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: 5px 9px;
   font-family: var(--mono);
   outline: none;
@@ -1170,7 +1150,7 @@ input {
   min-width: 40px;
   background: var(--bg-2);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 0;
   padding: 6px 8px;
   cursor: pointer;
   font-family: var(--mono);
@@ -1208,7 +1188,7 @@ input {
 .modal {
   background: var(--bg-1);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 0;
   width: min(880px, 100%);
   max-height: 85dvh;
   display: flex;
@@ -1261,7 +1241,7 @@ input {
   font-family: var(--mono);
   background: var(--bg-3);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: 0;
   font-size: 11px;
   white-space: nowrap;
 }
@@ -1286,7 +1266,7 @@ input {
 .dialog {
   background: var(--bg-1);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 0;
   width: min(440px, 100%);
   padding: 20px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
@@ -1313,7 +1293,7 @@ input {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: 8px 10px;
   margin-bottom: 16px;
   outline: none;
@@ -1339,7 +1319,7 @@ input {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: 6px 10px;
   margin-bottom: 10px;
   outline: none;
@@ -1373,7 +1353,7 @@ input {
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
   border-left: 3px solid var(--red);
-  border-radius: var(--radius);
+  border-radius: 0;
   padding: 8px 14px;
   max-width: 420px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -1430,7 +1410,7 @@ input {
   flex-direction: column;
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: 0;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
   overflow: hidden;
   pointer-events: none; /* 覗くだけ。ポインタは下の行に通す */
@@ -1581,7 +1561,7 @@ input {
   place-items: center;
   background: none;
   border: 0;
-  border-radius: 3px;
+  border-radius: 0;
   color: var(--fg-faint);
   font-size: 11px;
   line-height: 1;
@@ -1603,7 +1583,7 @@ input {
   width: 2px;
   margin: 4px 0;
   background: var(--accent);
-  border-radius: 1px;
+  border-radius: 0;
   box-shadow: none;
 }
 
@@ -1621,7 +1601,7 @@ input {
   place-items: center;
   background: none;
   border: 0;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--fg-dim);
   font-size: 13px;
   line-height: 1;
@@ -1653,7 +1633,7 @@ input {
   flex-direction: column;
   background: var(--bg-1);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 0;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
   overflow: hidden;
   animation: dialog-in 0.12s ease;
@@ -1677,7 +1657,7 @@ input {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: 0;
   cursor: pointer;
 }
 .sw-row.on {
@@ -1752,7 +1732,7 @@ kbd {
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
-  border-radius: 3px;
+  border-radius: 0;
   padding: 0 4px;
   margin-right: 2px;
 }
@@ -1798,7 +1778,7 @@ input:focus-visible,
   padding: 6px 12px;
   background: var(--bg-2);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: 0;
   color: var(--fg);
   font: inherit;
   line-height: 1.45;
@@ -1881,7 +1861,7 @@ input:focus-visible,
     color: var(--fg);
     background: var(--bg-2);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 0;
     font: 16px/1.4 var(--sans);
   }
   .mobile-input textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -1906,7 +1886,7 @@ input:focus-visible,
   min-height: 0;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
 }
 .file-header { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); }
@@ -1916,7 +1896,7 @@ input:focus-visible,
 .file-breadcrumbs { display: flex; gap: 4px; overflow-x: auto; padding: 8px; flex: none; }
 .file-breadcrumbs .btn { flex: none; }
 .file-controls { display: flex; gap: 6px; padding: 8px; flex: none; }
-.file-controls input, .file-controls select { color: var(--fg); background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; padding: 6px; min-width: 0; }
+.file-controls input, .file-controls select { color: var(--fg); background: var(--bg-2); border: 1px solid var(--border); border-radius: 0; padding: 6px; min-width: 0; }
 .file-controls input { width: 100%; }
 .file-controls select { flex: none; }
 .file-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
@@ -1960,7 +1940,7 @@ input:focus-visible,
 
 /* タブ数が増えても各スロットを潰さず、列の中だけスクロールする。 */
 .tablist { overscroll-behavior-x: contain; touch-action: pan-x; }
-.tab-picker { width: 112px; min-width: 0; height: 28px; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg-1); color: var(--fg); font: inherit; }
+.tab-picker { width: 112px; min-width: 0; height: 28px; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: 0; background: var(--bg-1); color: var(--fg); font: inherit; }
 .mobile-sidebar-button, .sidebar-backdrop { display: none; }
 /* 起動操作は、他のツールバーと同じ小さなアイコンとしてまとめる。 */
 .agent-launchers { position: relative; display: flex; align-items: center; gap: 2px; margin-left: 4px; padding-left: 7px; flex: none; }
@@ -2000,7 +1980,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 
 .device-name { flex: none; max-width: 32vw; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 
-.screen-viewer { width: min(1400px, 96vw); height: min(900px, 92dvh); display: flex; flex-direction: column; min-height: 0; background: var(--bg); border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; }
+.screen-viewer { width: min(1400px, 96vw); height: min(900px, 92dvh); display: flex; flex-direction: column; min-height: 0; background: var(--bg); border: 1px solid var(--border-strong); border-radius: 0; overflow: hidden; }
 .screen-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .screen-head strong { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
 .screen-controls { display: flex; flex: none; flex-wrap: wrap; gap: 6px; padding: 8px; }
@@ -2054,7 +2034,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .app-modal {
   width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 0;
   color: var(--fg); background: var(--bg-1); border: 1px solid var(--border-strong);
-  border-radius: var(--radius); box-shadow: 0 16px 48px #0008; overflow: auto;
+  border-radius: 0; box-shadow: 0 16px 48px #0008; overflow: auto;
 }
 .app-modal::backdrop { background: #0008; }
 .app-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border-strong); }
@@ -2068,7 +2048,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .project-field { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--fg); min-width: 0; }
 .project-field input, .project-field select, .project-field textarea, .recent-filter input {
   width: 100%; min-width: 0; padding: 8px 10px; font: inherit; font-size: 13px; line-height: 1.5;
-  color: var(--fg); background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  color: var(--fg); background: var(--bg); border: 1px solid var(--border-strong); border-radius: 0;
 }
 .project-field textarea { resize: vertical; min-height: 84px; max-height: 220px; }
 .project-field input:focus-visible, .project-field select:focus-visible, .project-field textarea:focus-visible, .recent-filter input:focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
@@ -2090,7 +2070,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .recent-body > p { padding: 0 4px; }
 .recent-filter { display: flex; align-items: center; gap: 4px; margin: 4px 0 8px; }
 .recent-filter input { padding: 5px 8px; font-size: 12px; }
-.recent-row { display: flex; width: 100%; align-items: center; gap: 8px; padding: 9px 6px; text-align: left; border: 0; border-radius: var(--radius); background: transparent; cursor: pointer; }
+.recent-row { display: flex; width: 100%; align-items: center; gap: 8px; padding: 9px 6px; text-align: left; border: 0; border-radius: 0; background: transparent; cursor: pointer; }
 .recent-row > span:first-child { flex: 1; min-width: 0; }
 .recent-row strong, .recent-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-row strong { font-size: 12px; font-weight: 500; }
@@ -2154,7 +2134,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .device-row > span:nth-child(2) { flex: 1; min-width: 0; }
 .device-row small { display: block; color: var(--fg-dim); overflow-wrap: anywhere; }
 
-/* デスクトップを隠しても端末DOM・WebSocketを維持する。 */
+/* デスクトップを隠しても端末DOMと配置を維持する。 */
 .desktop-shell { height: var(--app-height, 100dvh); display: flex; flex-direction: column; min-width: 0; }
 .desktop-bar { display: flex; flex: none; min-height: 34px; padding: var(--safe-top) var(--safe-right) 0 var(--safe-left); gap: 2px; align-items: stretch; background: #181818; border-bottom: 1px solid var(--border-strong); }
 .desktop-tabs { display: flex; align-items: stretch; min-width: 0; overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain; }
