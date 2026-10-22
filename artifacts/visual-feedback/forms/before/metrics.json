@@ -1,0 +1,73 @@
+[
+  {
+    "screen": "desktop-controls",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1020,
+        "headerWidth": 954
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "project-desktop",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1020,
+        "headerWidth": 954
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "ThinkPad · プロジェクトを開く",
+        "width": 560
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "devices-modal",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 296
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "デバイス接続",
+        "width": 358
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "project-modal",
+    "width": 390,
+    "height": 640,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 296
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "ThinkPad · プロジェクトを開く",
+        "width": 358
+      }
+    ],
+    "errors": []
+  }
+]
