@@ -1,3 +1,5 @@
+import { activateTab, addTab, allLeaves, closeTab, findByTarget, findLeaf, findTab, makeLeaf, type LayoutNode } from './layout';
+
 export interface Desktop { id: string; name: string }
 export interface Desktops { activeId: string; items: Desktop[] }
 export const INITIAL_DESKTOPS: Desktops = { activeId: 'main', items: [{ id: 'main', name: 'デスクトップ1' }] };
@@ -30,4 +32,29 @@ export function removeDesktop(state: Desktops, id: string): Desktops {
   if (index < 0) return state;
   const items = state.items.filter(item => item.id !== id);
   return { items, activeId: state.activeId === id ? items[Math.min(index, items.length - 1)].id : state.activeId };
+}
+
+/** Mounted desktops expose their current layout so transfers never use stale storage. */
+export interface DesktopLayoutHandle {
+  read(): { layout: LayoutNode | null; focusedId: string | null };
+  write(layout: LayoutNode | null, focusedId: string | null): void;
+}
+export type DesktopLayoutRegistry = Map<string, DesktopLayoutHandle>;
+
+/** Move only the browser tab; tmux windows and running processes stay in place. */
+export function transferDesktopTab(source: LayoutNode, destination: LayoutNode | null, tabId: string, focusedId: string | null) {
+  const found = findTab(source, tabId);
+  if (!found) return null;
+  const remaining = closeTab(source, tabId);
+  if (!destination) {
+    const leaf = makeLeaf(found.tab);
+    return { source: remaining, destination: leaf, focusedId: leaf.id };
+  }
+  const existing = findByTarget(destination, found.tab.sessionId, found.tab.windowId);
+  const target = existing?.leaf ?? findLeaf(destination, focusedId ?? '') ?? allLeaves(destination)[0];
+  return {
+    source: remaining,
+    destination: existing ? activateTab(destination, existing.tab.id) : addTab(destination, target.id, found.tab),
+    focusedId: target.id,
+  };
 }
