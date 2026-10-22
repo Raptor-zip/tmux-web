@@ -191,6 +191,64 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     fitRef.current = fit;
     safeFitRef.current();
 
+    /**
+     * 描画の自己修復。
+     * canvas レンダラは、変わったセルだけを描き直す。ブラウザが canvas の中身を捨てる
+     * （背面のタブ・GPU の再初期化・メモリ逼迫・画面の拡大率や接続モニタの変更）と、
+     * 描き直した所だけが残って他が空白になり、文字が欠けた表示になる（リロードで直る）。
+     * そこで、捨てられそうな契機（表示に戻る・フォーカス・canvas の context 喪失/復帰・拡大率の変化）と、
+     * 表示中の一定間隔で、グリフのキャッシュを捨てて全体を描き直す。
+     */
+    let repaintTimer = 0;
+    const repaint = (clearAtlas: boolean) => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        if (clearAtlas) term.clearTextureAtlas();
+        term.refresh(0, Math.max(0, term.rows - 1));
+      } catch {
+        /* 破棄済みなら何もしない */
+      }
+    };
+    const scheduleRepaint = (clearAtlas = true) => {
+      window.clearTimeout(repaintTimer);
+      repaintTimer = window.setTimeout(() => repaint(clearAtlas), 80);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') scheduleRepaint();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    window.addEventListener('pageshow', onVisible);
+    // canvas の context が失われたら、復帰時に描き直す（preventDefault しないと復帰しない）
+    const watched = new WeakSet<HTMLCanvasElement>();
+    const onCtxLost = (e: Event) => e.preventDefault();
+    const onCtxRestored = () => scheduleRepaint();
+    const watchCanvases = () => {
+      innerRef.current?.querySelectorAll('canvas').forEach((c) => {
+        if (watched.has(c)) return;
+        watched.add(c);
+        c.addEventListener('contextlost', onCtxLost);
+        c.addEventListener('contextrestored', onCtxRestored);
+      });
+    };
+    watchCanvases();
+    const canvasObserver = new MutationObserver(watchCanvases);
+    if (innerRef.current) canvasObserver.observe(innerRef.current, { childList: true, subtree: true });
+    // 画面の拡大率（モニタの付け替え・ブラウザのズーム）が変わったら描き直す
+    let dprQuery: MediaQueryList | null = null;
+    const onDprChange = () => {
+      scheduleRepaint();
+      bindDpr();
+    };
+    const bindDpr = () => {
+      dprQuery?.removeEventListener('change', onDprChange);
+      dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      dprQuery.addEventListener('change', onDprChange);
+    };
+    bindDpr();
+    // 契機が拾えない場合の保険。表示中だけ、数秒おきに全体を描き直す（見た目は変わらない。atlas は捨てない）
+    const repaintInterval = window.setInterval(() => repaint(false), 5000);
+
     // ResizeObserver が監視するのは外側の枠だけにする。
     // xterm が描画する内側を監視すると fit() → DOM 変化 → fit() の無限ループになる。
     const ro = new ResizeObserver(() => safeFitRef.current());
@@ -395,6 +453,13 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     return () => {
       ro.disconnect();
       cancelAnimationFrame(rafRef.current);
+      window.clearTimeout(repaintTimer);
+      window.clearInterval(repaintInterval);
+      canvasObserver.disconnect();
+      dprQuery?.removeEventListener('change', onDprChange);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.removeEventListener('pageshow', onVisible);
       host.removeEventListener('touchstart', touchStart, true);
       host.removeEventListener('touchmove', touchMove, true);
       host.removeEventListener('touchend', touchEnd, true);
