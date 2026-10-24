@@ -1138,6 +1138,43 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     return () => window.removeEventListener('keydown', onKey, true);
   }, [active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
+  const workspaceActions = (
+    <Toolbar
+      session={currentSession}
+      window={currentWindow}
+      activePane={activePane}
+      mode={mode}
+      showStatusBar={showStatusBar}
+      showKeyBar={showKeyBar}
+      onAction={doAction}
+      onNewTab={() => newTerminal(focusedIdRef.current)}
+      onLaunchAgent={launchAgent}
+      launchingAgent={launchingAgent}
+      onToggleSidebar={() => setSidebarOpen((v) => !v)}
+      onSplitNewWindow={splitIntoNewWindow}
+      onToggle={onToggle}
+      onCopyPane={copyPane}
+      onKillPane={killPane}
+      onRemoteControl={() => activePane && setRemotePane(activePane.id)}
+      onOpenScreen={() => setScreenOpen(activeDevice.id)}
+      onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
+      onOpenSwitcher={() => setSwitcherOpen(true)}
+      onOpenCheatSheet={() => setCheatOpen(true)}
+      onSendCommand={() =>
+        activePane &&
+        setDialog({
+          kind: 'prompt',
+          title: `ペイン ${activePane.index} (${paneCommand(activePane)}) にコマンドを送る`,
+          placeholder: 'コマンド',
+          confirmLabel: '送信',
+          onSubmit: (cmd) =>
+            cmd.trim() && doAction('runCommand', { target: activePane.id, command: cmd }),
+        })
+      }
+      onOpenMenu={(items, x, y) => setMenu({ x, y, items })}
+    />
+  );
+
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
       <nav className="activitybar">
@@ -1218,54 +1255,16 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       />
 
       <main className={`main ${drag ? 'dragging' : ''}`}>
-        <Toolbar
-          deviceName={devices.find(d => d.id === deviceOf(focusedTab?.sessionId || ""))?.name || activeDevice.name}
-          session={currentSession}
-          window={currentWindow}
-          activePane={activePane}
-          home={home}
-          tileCount={leaves.length}
-          tabCount={focusedLeaf?.tabs.length ?? 0}
-          mode={mode}
-          showStatusBar={showStatusBar}
-          showKeyBar={showKeyBar}
-          connected={termStatus.connected}
-          statusMessage={termStatus.message}
-          onAction={doAction}
-          onNewTab={() => newTerminal(focusedIdRef.current)}
-          onLaunchAgent={launchAgent}
-          launchingAgent={launchingAgent}
-          onToggleSidebar={() => setSidebarOpen((v) => !v)}
-          onSplitNewWindow={splitIntoNewWindow}
-          onToggle={onToggle}
-          onCopyPane={copyPane}
-          onKillPane={killPane}
-          onNewProject={() => setProjectMode('new')}
-          onRemoteControl={() => activePane && setRemotePane(activePane.id)}
-          onOpenScreen={() => setScreenOpen(activeDevice.id)}
-          onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
-          onOpenSwitcher={() => setSwitcherOpen(true)}
-          onOpenCheatSheet={() => setCheatOpen(true)}
-          onSendCommand={() =>
-            activePane &&
-            setDialog({
-              kind: 'prompt',
-              title: `ペイン ${activePane.index} (${paneCommand(activePane)}) にコマンドを送る`,
-              placeholder: 'コマンド',
-              confirmLabel: '送信',
-              onSubmit: (cmd) =>
-                cmd.trim() && doAction('runCommand', { target: activePane.id, command: cmd }),
-            })
-          }
-          onOpenMenu={(items, x, y) => setMenu({ x, y, items })}
-        />
+
 
         {approval.pending && <ApprovalNotice pending={approval.pending} onOpen={() => setApprovalOpen(true)} />}
 
+        {!layout && workspaceActions}
         <div className="workspace">
           <div className="terminal-wrap">
             {layout ? (
               <SplitView
+                actions={workspaceActions}
                 active={active}
                 tree={layout}
                 statuses={termStatuses}

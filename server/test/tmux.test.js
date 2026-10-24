@@ -40,3 +40,15 @@ test('tmux session, window and pane formats preserve IDs and working directories
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test('Claude background workflow progress below the input prompt is busy', async () => {
+  const { hasRunningWorkflow } = await import('../src/tmux.js');
+  const progress = '  ◯ paper-ja-translation  ▰▰▰▰▱▱  3/4 · 1m02s · ↓ 99.1k tokens';
+  const prompt = '────────────────────────\n❯ \n────────────────────────\n  ⏵⏵ auto mode on';
+  assert.equal(hasRunningWorkflow(`${prompt}\n\n${progress}\n`), true);
+  assert.equal(hasRunningWorkflow(`${prompt}\n${progress}\n  ◯ verify ▰▱ 1/2`), true);
+  assert.equal(hasRunningWorkflow(`${progress}\n● Workflow completed\n${prompt}\n`), false);
+  assert.equal(hasRunningWorkflow(`● Running in background\n${prompt}\n`), false);
+  assert.equal(hasRunningWorkflow(`${prompt}\n`), false);
+  assert.equal(hasRunningWorkflow(progress), false);
+});

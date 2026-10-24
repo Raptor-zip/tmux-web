@@ -1,24 +1,14 @@
-import { paneCommand, windowName } from '../windows';
 import { Icon } from './Icon';
-import { Fragment, type ReactElement } from 'react';
-import { projectName, tildePath } from '../paths';
 import type { Pane, Session, TmuxWindow } from '../types';
 import { SEP, type MenuEntry } from './ContextMenu';
 
 interface Props {
-  deviceName: string;
   session: Session | null;
   window: TmuxWindow | null;
   activePane: Pane | null;
-  /** ホームディレクトリ。パンくずのパスを `~` に畳むのに使う */
-  home: string;
-  tileCount: number;
-  tabCount: number;
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
   showKeyBar: boolean;
-  connected: boolean;
-  statusMessage?: string;
   onAction(action: string, params: Record<string, unknown>): void;
   /** 新しいウィンドウを作って、いまのタイルにタブで足す */
   onNewTab(): void;
@@ -31,7 +21,6 @@ interface Props {
   onCopyPane(): void;
   onKillPane(): void;
   onOpenFiles(): void;
-  onNewProject(): void;
   onRemoteControl(): void;
   onOpenScreen(): void;
   onOpenSwitcher(): void;
@@ -41,24 +30,14 @@ interface Props {
   onOpenMenu(items: MenuEntry[], x: number, y: number): void;
 }
 
-/**
- * VS Code のエディタ上部に倣った細い操作バー。
- * 左にパンくず、右によく使うアイコンだけを置き、残りは「⋯」にしまう。
- * ボタンを 20 個並べておくより、目当てのものに届くまでが短い。
- */
+/** タブ列に置く一覧ボタンと作業メニュー。 */
 export function Toolbar({
-  deviceName,
   session,
   window: win,
   activePane,
-  home,
-  tileCount,
-  tabCount,
   mode,
   showStatusBar,
   showKeyBar,
-  connected,
-  statusMessage,
   onAction,
   onNewTab,
   onLaunchAgent,
@@ -69,7 +48,6 @@ export function Toolbar({
   onCopyPane,
   onKillPane,
   onOpenFiles,
-  onNewProject,
   onRemoteControl,
   onOpenScreen,
   onOpenSwitcher,
@@ -78,12 +56,9 @@ export function Toolbar({
   onOpenMenu,
 }: Props) {
   const pane = activePane?.id;
-  // パンくずの先頭はプロジェクト名。セッション名やウィンドウ番号より、
-  // 「どのプロジェクトを触っているか」のほうが手を止めずに確かめたい
-  const project = projectName(activePane, home);
-
   const moreItems = (): MenuEntry[] => [
-    { label: '新しいプロジェクトを作る…', run: onNewProject },
+    { label: '新しい端末をタブで開く', hint: 'Alt+T', run: onNewTab },
+    { label: '作業フォルダーのファイルを見る', run: onOpenFiles, disabled: !pane },
     ...(activePane?.proc?.agent === 'Claude' ? [
       { label: 'Claude アプリに接続…', run: onRemoteControl },
       { label: 'Claude を終了する', run: () => pane && onAction('runCommand', { target: pane, command: '/exit' }), disabled: activePane.busy },
@@ -119,118 +94,11 @@ export function Toolbar({
     { label: 'tmux チートシート', hint: 'Alt+/', run: onOpenCheatSheet },
   ];
 
-  /**
-   * パンくず。先頭はプロジェクト名で、そこから tmux 側の居場所へ降りていく。
-   * セッション名がプロジェクト名と同じときは繰り返さない（同じ語が 2 つ並ぶだけ）。
-   */
-  const crumbs = (): ReactElement[] =>
-    [
-      project ? (
-        <span className="crumb project" title={tildePath(activePane?.path ?? '', home)}>
-          {project}
-        </span>
-      ) : null,
-      session && session.name !== project ? (
-        <span className="crumb strong">{session.name}</span>
-      ) : null,
-      win ? (
-        <span className="crumb">
-          {win.index}:{windowName(win, activePane)}
-        </span>
-      ) : null,
-      activePane ? (
-        <span className="crumb dim">
-          pane {activePane.index} · {paneCommand(activePane)}
-        </span>
-      ) : null,
-    ].filter((node): node is ReactElement => node !== null);
-
   return (
-    <div className="editorbar">
-      <button className="icon-btn workspace-sidebar-button" onClick={onToggleSidebar} aria-label="セッション一覧の開閉" title="セッション一覧 (Alt+B)"><Icon name="menu" /></button>
-      <div className="crumbs"><span className="input-target-label">入力先</span><span className="toolbar-device" title={deviceName}>{deviceName}</span>
-        {session ? (
-          <>
-            {crumbs().map((node, i) => (
-              <Fragment key={i}>
-                {i > 0 && <span className="sep">›</span>}
-                {node}
-              </Fragment>
-            ))}
-            {tileCount > 1 && <span className="tile-count">{tileCount} 分割</span>}
-            {tabCount > 1 && <span className="tile-count">{tabCount} タブ</span>}
-          </>
-        ) : (
-          <span className="dim">開いているタブがありません</span>
-        )}
-      </div>
-
-      <div className="editorbar-actions">
-        <button className="icon-btn mobile-sidebar-button" onClick={onToggleSidebar}
-          aria-label="セッション一覧の開閉" title="セッション一覧"><Icon name="menu" /></button>
-        <button className="icon-btn file-open-button" disabled={!activePane} onClick={onOpenFiles}
-          aria-label="作業フォルダーを開く" title="作業フォルダのファイル一覧とプレビュー"><Icon name="folder" /></button>
-        <button className="icon-btn" aria-label="デバイスの画面を見る" title="デバイスのデスクトップ画面を見る"
-          onClick={onOpenScreen}><Icon name="screen" /></button>
-        <div className="agent-launchers" role="group" aria-label="エージェントを起動">
-        {(['claude', 'codex'] as const).map((agent) => (
-          <button key={agent} className="icon-btn agent-launch" data-agent={agent}
-            disabled={!session || launchingAgent !== null} aria-busy={launchingAgent === agent}
-            aria-label={`${agent === 'claude' ? 'Claude' : 'Codex'} を新しいタブで起動`}
-            title={`現在の作業フォルダーで ${agent === 'claude' ? 'Claude' : 'Codex'} を新しいタブで起動`}
-            onClick={() => onLaunchAgent(agent)}>
-            <Icon name={launchingAgent === agent ? 'loading' : agent}
-              className={launchingAgent === agent ? 'agent-launch-spinner' : undefined} />
-          </button>
-        ))}
-        </div>
-        {statusMessage && !connected && <span className="term-status">{statusMessage}</span>}
-        <button
-          className="icon-btn toolbar-new-tab"
-          title="新しい端末をタブで開く (Alt+T)"
-          aria-label="新しい端末をタブで開く"
-          onClick={onNewTab}
-        >
-          <Icon name="plus" />
-        </button>
-        <button
-          className="icon-btn split-button"
-          disabled={!win}
-          title="新しい端末を右に並べる"
-          aria-label="新しい端末を右に並べる"
-          onClick={() => onSplitNewWindow('right')}
-        >
-          <Icon name="splitRight" />
-        </button>
-        <button
-          className="icon-btn split-button"
-          disabled={!win}
-          title="新しい端末を下に並べる"
-          aria-label="新しい端末を下に並べる"
-          onClick={() => onSplitNewWindow('bottom')}
-        >
-          <Icon name="splitBottom" />
-        </button>
-        <button
-          className="icon-btn toolbar-switcher"
-          title="ウィンドウを切り替える (Alt+P)"
-          aria-label="ウィンドウを切り替える"
-          onClick={onOpenSwitcher}
-        >
-          <Icon name="switch" />
-        </button>
-        <button
-          className="icon-btn"
-          title="その他の操作"
-          aria-label="その他の操作"
-          onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            onOpenMenu(moreItems(), r.right, r.bottom);
-          }}
-        >
-          <Icon name="more" />
-        </button>
-      </div>
+    <div className="workspace-actions">
+      <button className="icon-btn" onClick={onToggleSidebar} aria-label="セッション一覧の開閉" title="セッション一覧 (Alt+B)"><Icon name="menu" /></button>
+      <button className="icon-btn" title="作業の操作" aria-label="作業の操作" aria-haspopup="menu"
+        onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onOpenMenu(moreItems(), r.right, r.bottom); }}><Icon name="more" /></button>
     </div>
   );
 }

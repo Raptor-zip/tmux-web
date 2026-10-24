@@ -100,6 +100,20 @@ function splitTitle(raw) {
   };
 }
 
+/** Claude は入力欄を表示したまま dynamic workflow を実行する。
+ * 過去の実行ログではなく、最後の入力欄より下にある現在の進捗だけを見る。
+ */
+export function hasRunningWorkflow(screen) {
+  const lines = screen.split('\n');
+  let separator = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*[─━-]{8,}/u.test(lines[i])) separator = i;
+  }
+  if (separator < 0) return false;
+  return lines.slice(separator + 1).some(line =>
+    /^\s*[◯○]\s+.+[▰▱]+\s+\d+\s*\/\s*\d+/u.test(line));
+}
+
 // ---------------------------------------------------------------------------
 // 読み取り
 // ---------------------------------------------------------------------------
@@ -222,7 +236,18 @@ export async function snapshot() {
     listPanes(),
   ]);
   // 端末タイトルは中のプロセスが終わっても残るので、実際の中身はプロセスから見る
-  const panes = await inspectPanes(rawPanes);
+  const inspected = await inspectPanes(rawPanes);
+  // 同じペインが複数セッションから見えていても capture は一度だけ。
+  const workflows = new Map();
+  for (const pane of inspected) {
+    if (!pane.busy && !pane.dead && !pane.inMode && pane.proc?.agent === 'Claude' && !workflows.has(pane.id)) {
+      workflows.set(pane.id, capturePane(pane.id, { lines: 0, escapes: false }).then(hasRunningWorkflow));
+    }
+  }
+  const panes = await Promise.all(inspected.map(async pane => ({
+    ...pane,
+    busy: pane.busy || (workflows.has(pane.id) && await workflows.get(pane.id)),
+  })));
   // tmux サーバが入れ替わると id ($1 や @3) は全部振り直される。画面側は
   // この pid の変化で「再起動された」と判断し、保存した配置を名前で繋ぎ直す。
   return { sessions, windows, panes, serverPid: sessions[0]?.serverPid ?? null, ts: Date.now() };
