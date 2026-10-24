@@ -254,11 +254,6 @@ export function SplitView({
 
   return (
     <div className={`panel-workspace ${single ? 'single-panel' : ''}`}>
-      {(closableTile || tiles.some(t=>t.leaf.tabs.length > 1)) && <div className="panel-navigation">
-        <button className="panel-overview-button" onClick={openOverview} aria-haspopup="dialog" aria-label="タブ・パネルの一覧を開く"><Icon name="grid" /><strong>パネル {tiles.findIndex(t=>t.leaf.id===selectedId)+1}/{tiles.length}</strong><span>· {tiles.reduce((n,t)=>n+t.leaf.tabs.length,0)} タブ</span></button>
-        <span className="panel-view-label">{single ? (focusMode ? '集中表示' : '幅に合わせて集中表示') : '分割表示'}</span>
-        {closableTile && <button className="panel-focus-button" aria-label={single ? '分割表示に戻す' : 'このパネルを広げる'} title="パネルを広げる / 戻す (Alt+Enter)" aria-pressed={single} onClick={()=>{if(single){if(focusMode) onToggleFocus();setForceSplit(true);}else{setForceSplit(false);onToggleFocus();}}}><Icon name={single ? 'splitRight' : 'expand'} /><span>{single ? '戻す' : '広げる'}</span></button>}
-      </div>}
     <div className="splitview" ref={hostRef}>
 
       {tiles.map(({ leaf, rect }) => {
@@ -281,7 +276,16 @@ export function SplitView({
               actions={focused ? actions : null}
               leaf={leaf}
               onOverview={openOverview}
-              onToggleFocus={() => { onFocus(leaf.id); onToggleFocus(); }}
+              onToggleFocus={() => {
+                onFocus(leaf.id);
+                if (single) {
+                  if (focusMode) onToggleFocus();
+                  setForceSplit(true);
+                } else {
+                  setForceSplit(false);
+                  onToggleFocus();
+                }
+              }}
               focused={focused}
               devices={devices}
               viewOf={viewOf}

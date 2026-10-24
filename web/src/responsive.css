@@ -20,15 +20,9 @@
 .editorbar-actions { width:auto; gap:4px; flex:none; }
 .editorbar-actions .icon-btn,.workspace-sidebar-button { width:32px; height:32px; min-width:32px; min-height:32px; border-radius: 0; }
 .editorbar-actions .toolbar-new-tab,.editorbar-actions .toolbar-switcher,.editorbar-actions .split-button { display:none; }
-.icon-btn:active:not(:disabled),.strip-btn:active:not(:disabled),.panel-navigation button:active { background:var(--bg-selected); }
+.icon-btn:active:not(:disabled),.strip-btn:active:not(:disabled) { background:var(--bg-selected); }
 .panel-workspace { display:flex; flex-direction:column; height:100%; min-width:0; min-height:0; }
 .panel-workspace .splitview { flex:1; height:auto; min-height:0; }
-.panel-navigation { display:flex; align-items:center; gap:8px; padding:0 8px; height:36px; flex:none; background:var(--bg); border-bottom:1px solid var(--border); }
-.panel-navigation button { display:flex; align-items:center; justify-content:center; gap:7px; border:0; background:transparent; color:var(--fg); min-height:30px; padding:0 8px; border-radius: 0; font:inherit; cursor:pointer; }
-.panel-overview-button strong { font-weight:600; }
-.panel-overview-button span,.panel-view-label { font-size:11px; color:var(--fg-dim); }
-.panel-view-label { margin-left:auto; }
-.panel-focus-button span { font-size:11px; }
 .tile { container-type:inline-size; container-name:panel; border:1px solid var(--border-strong); border-radius: 0; overflow:hidden; }
 .tile.focused { border-color:var(--accent); }
 .tile[hidden] { display:none !important; }
@@ -89,12 +83,6 @@
  .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; height:44px; min-width:44px; min-height:44px; }
  .editorbar .crumbs { height:auto; flex:1; gap:5px; }
  .input-target-label { display:none; }
- .panel-navigation { height:44px; padding:0 4px; gap:0; }
- .panel-navigation button { min-height:44px; }
- .panel-view-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
- .panel-focus-button { display:none !important; }
- .panel-navigation .panel-overview-button { gap:5px; }
- .panel-overview-button strong { font-size:12px; }
  .tabstrip { height:46px; }
  .tab { min-width:150px; max-width:220px; }
  .strip-btn { width:44px; height:44px; }

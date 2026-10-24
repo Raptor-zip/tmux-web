@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import Desktops from './Desktops';
+import '@fontsource-variable/noto-sans-jp';
 import './styles.css';
 import './responsive.css';
 import { registerAppWorker } from './pwa';
