@@ -22,6 +22,20 @@ export default function Desktops() {
   const [dropDesktopId, setDropDesktopId] = useState<string | null>(null);
   const dragCleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => dragCleanup.current?.(), []);
+  const moveDesktopTab = useCallback((sourceId: string, tabId: string, destinationId: string) => {
+    const source = desktopLayouts.current.get(sourceId);
+    const sourceState = source?.read();
+    if (!source || !sourceState?.layout) return;
+    flushSync(() => setVisited(prev => new Set([...prev, destinationId])));
+    const destination = desktopLayouts.current.get(destinationId);
+    if (!destination) return;
+    const target = destination.read();
+    const result = transferDesktopTab(sourceState.layout, target.layout, tabId, target.focusedId);
+    if (!result) return;
+    source.write(result.source, sourceState.focusedId);
+    destination.write(result.destination, result.focusedId);
+    setState(prev => ({ ...prev, activeId: destinationId }));
+  }, []);
   const startDesktopDrag = useCallback((sourceId: string, payload: DragPayload, endSource: () => void) => {
     dragCleanup.current?.();
     if (!payload.fromTabId) return;
@@ -158,7 +172,7 @@ export default function Desktops() {
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
-        {visited.has(desktop.id) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} />}
+        {visited.has(desktop.id) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
       </section>)}
     </div>
     {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}

@@ -167,7 +167,7 @@ export function Sidebar({
   const pending = useRef<{ x: number; y: number; payload: DragPayload } | null>(null);
 
   const armDrag = (e: React.PointerEvent, payload: DragPayload) => {
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (e.pointerType !== 'mouse' || e.button !== 0 || (e.target as HTMLElement).closest('input, .row-tools, .twisty')) return;
     pending.current = { x: e.clientX, y: e.clientY, payload };
 
     const move = (ev: PointerEvent) => {

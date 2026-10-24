@@ -237,3 +237,25 @@
 @media (max-width:760px) {
   .sidebar { position:fixed; width:min(var(--sidebar-w),calc(100vw - 32px)); max-width:none; }
 }
+
+.tab-menu { display:none; }
+.touch-menu-close { display:none; }
+@media (any-pointer:coarse) {
+  /* Browsing and scrolling the chrome must not start native text selection. */
+  .desktop-bar,.tabstrip,.sidebar,.workspace-actions,.statusbar,.keybar,.ctxmenu,.overview-list {
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+  }
+  .terminal-host { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  :root input,:root textarea { -webkit-user-select:text; user-select:text; -webkit-touch-callout:default; }
+  button,summary { touch-action:manipulation; }
+  .tablist,.desktop-tabs { touch-action:pan-x; overscroll-behavior-x:contain; }
+  .tree { touch-action:pan-y; overscroll-behavior-y:contain; }
+  .tab-menu { display:grid; place-items:center; flex:none; width:44px; min-width:44px; height:44px; padding:0; border:0; background:transparent; color:var(--fg-dim); }
+  .tab-menu:active { background:var(--bg-selected); color:var(--fg); }
+  .tab { min-width:220px; max-width:300px; }
+  .tabstrip,.desktop-tabs { min-height:48px; }
+  .strip-tools .strip-btn,.workspace-actions .icon-btn { min-width:44px; min-height:44px; }
+  .ctxmenu { left:8px !important; top:auto !important; bottom:calc(8px + var(--safe-bottom)); width:calc(100vw - 16px); max-width:560px; max-height:calc(var(--app-height,100dvh) - 24px - var(--safe-top) - var(--safe-bottom)); padding:6px; overscroll-behavior:contain; }
+  .ctxmenu button { min-height:48px; padding:10px 12px; }
+  .ctxmenu .touch-menu-close { display:flex; justify-content:flex-end; position:sticky; top:0; background:var(--bg-1); border-bottom:1px solid var(--border); z-index:1; }
+}
