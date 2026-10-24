@@ -742,8 +742,11 @@ export function Sidebar({
           <button className="btn ghost" title="デバイス接続" aria-label="デバイス接続を管理" onClick={onManageDevices}>＋</button>
           <button className="icon-btn sidebar-close" aria-label="一覧を閉じる" onClick={onClose}><Icon name="close" /></button>
         </div>
-        <button className="btn primary block" onClick={onNewProject}>＋ プロジェクトを作る</button>
-        <button className="btn block open-folder-button" onClick={onOpenFolder}>フォルダーを開く</button>
+        <details className="project-actions">
+          <summary>プロジェクトを追加…</summary>
+          <button className="btn ghost block" onClick={onNewProject}>プロジェクトを作る</button>
+          <button className="btn ghost block" onClick={onOpenFolder}>フォルダーを開く</button>
+        </details>
 
         <div className="group-switch" role="group" aria-label="一覧の並べ方">
           <button
@@ -827,7 +830,7 @@ export function Sidebar({
               <>
                 セッションがありません。
                 <br />
-                上のボタンから作成してください。
+                上の「プロジェクトを追加…」から作成してください。
               </>
             )}
           </p>

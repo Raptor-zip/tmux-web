@@ -1,6 +1,6 @@
 import { ContextMenu, SEP, type MenuEntry } from './ContextMenu';
 import type { Device } from '../devices';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './Icon';
 import type { DragPayload } from './SplitView';
 import type { LeafNode, TabRef } from '../layout';
@@ -8,6 +8,7 @@ import type { Session } from '../types';
 import { whereWithSession, type WindowView } from '../windows';
 
 interface Props {
+  actions: ReactNode;
   devices: Device[];
   leaf: LeafNode;
   focused: boolean;
@@ -39,6 +40,7 @@ interface Props {
  * 掴んで並べ替え／別のタイルへ移動・空きをダブルクリックで新しい端末）。
  */
 export function TabStrip({
+  actions,
   devices,
   leaf,
   focused,
@@ -207,6 +209,7 @@ export function TabStrip({
         {caret === null && mark}
       </div>
 
+      {actions}
       <div className="strip-tools">
         {leaf.tabs.length > 1 && <button className="strip-btn tab-count" title="このパネルのタブを一覧で見る" aria-label={`このパネルの${leaf.tabs.length}タブを一覧で見る`} onClick={onOverview}>{leaf.tabs.length}</button>}
         <button className="strip-btn" title="新しい端末を開く" aria-label="新しい端末をタブで開く" aria-haspopup="menu"

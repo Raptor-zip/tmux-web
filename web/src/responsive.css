@@ -224,3 +224,11 @@
 @media (forced-colors: active) {
   :root select, :root input[type="checkbox"] { appearance: auto; background-image: none; }
 }
+
+/* 操作はタブ列に収め、現在地の重複行を作らない。 */
+.workspace-actions { display:flex; align-items:center; flex:none; gap:2px; padding:0 2px; }
+.workspace-actions .icon-btn { width:30px; min-width:30px; height:34px; min-height:34px; }
+.project-actions { margin:6px 0; color:var(--fg-dim); font-size:11px; }
+.project-actions summary { cursor:pointer; padding:6px 2px; }
+.project-actions[open] summary { margin-bottom:4px; }
+.project-actions .btn { font-size:11px; text-align:left; }
