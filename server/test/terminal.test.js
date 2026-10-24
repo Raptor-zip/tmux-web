@@ -56,6 +56,28 @@ for (const useXdg of [false, true]) {
     assert.equal(run(['show-options', '-gv', 'mouse']), 'on');
     assert.equal(run(['show-options', '-gv', 'prefix']), 'C-a');
 
+    // Reloads/plugins can replace wheel bindings after setup. A new browser
+    // attachment repairs them without rerunning the installer or restarting tmux.
+    run(['bind-key', '-n', 'WheelUpPane', 'copy-mode', '-e']);
+    run(['bind-key', '-n', 'WheelDownPane', 'send-keys', 'Down']);
+    const oldSocket = process.env.TMUX_WEB_SOCKET_PATH;
+    const oldName = process.env.TMUX_WEB_SOCKET_NAME;
+    const oldMouse = process.env.TMUX_WEB_MOUSE;
+    try {
+      process.env.TMUX_WEB_SOCKET_PATH = socket;
+      delete process.env.TMUX_WEB_SOCKET_NAME;
+      delete process.env.TMUX_WEB_MOUSE;
+      const { createAttachment } = await import('../src/attach.js');
+      const attachment = await createAttachment({ sessionId: 'scroll' });
+      await attachment.dispose();
+      assert.match(run(['list-keys', '-T', 'root', 'WheelUpPane']), /PPage/);
+      assert.match(run(['list-keys', '-T', 'root', 'WheelDownPane']), /NPage/);
+    } finally {
+      for (const [key, value] of Object.entries({ TMUX_WEB_SOCKET_PATH: oldSocket, TMUX_WEB_SOCKET_NAME: oldName, TMUX_WEB_MOUSE: oldMouse })) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
+
     client = pty.spawn('tmux', ['-S', socket, 'attach-session', '-t', 'scroll'], {
       env, cwd: home, cols: 80, rows: 24,
     });
