@@ -125,6 +125,30 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const [groupBy, setGroupBy] = usePersisted<GroupBy>('tw.groupBy', 'project');
   const [fontSize, setFontSize] = usePersisted('tw.fontSize', 13);
   const [lineHeight, setLineHeight] = usePersisted('tw.lineHeight', 1.15);
+  useEffect(() => {
+    let accumulated = 0;
+    let lastTime = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || !(event.target instanceof Element) ||
+          !event.target.closest('.terminal-wrap')) return;
+      // xterm/tmux にスクロールを送らず、ブラウザのページ拡大も抑える。
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.deltaY) return;
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 800 : 1);
+      const now = performance.now();
+      if (now - lastTime > 200 || Math.sign(delta) !== Math.sign(accumulated)) accumulated = 0;
+      lastTime = now;
+      accumulated += delta;
+      // 高精度トラックパッドの微小なイベントで急激に変わらないようにする。
+      if (Math.abs(accumulated) < 40) return;
+      const step = accumulated < 0 ? 1 : -1;
+      accumulated = 0;
+      setFontSize(size => Math.min(28, Math.max(6, size + step)));
+    };
+    window.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    return () => window.removeEventListener('wheel', onWheel, true);
+  }, [setFontSize]);
   // 狭い画面ではサイドバーが全面を覆ってしまうので、最初は畳んでおく
   const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
   // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
@@ -1357,7 +1381,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           </button>
           <button
             className="sb-item"
-            title="文字サイズを変える"
+            title="文字サイズを変える（端末上で Ctrl＋スクロールでも変更）"
             onClick={(e) => openStatusMenu(e, 'fontSize')}
           >
             {fontSize}px
