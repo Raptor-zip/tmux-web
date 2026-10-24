@@ -14,7 +14,7 @@ test('launches each agent in a new window at the requested cwd and preserves the
   const bin = path.join(temp, 'bin');
   await fs.mkdir(cwd); await fs.mkdir(bin);
   for (const agent of ['claude', 'codex']) {
-    await fs.writeFile(path.join(bin, agent), `#!/bin/sh\npwd > "${temp}/${agent}.cwd"\nprintf '${agent} started\\n'\n`, { mode: 0o755 });
+    await fs.writeFile(path.join(bin, agent), `#!/bin/sh\npwd > "${temp}/${agent}.cwd"\nprintf '%s' \"$CLAUDE_CODE_NO_FLICKER\" > \"${temp}/${agent}.fullscreen\"\nprintf '${agent} started\\n'\n`, { mode: 0o755 });
   }
   const env = { ...process.env, TMUX: '', PATH: `${bin}:${process.env.PATH}` };
   const run = (args) => execFileSync('tmux', ['-S', socket, ...args], { env, encoding: 'utf8' }).trim();
@@ -43,6 +43,7 @@ test('launches each agent in a new window at the requested cwd and preserves the
     }
     const output = run(['capture-pane', '-p', '-t', id]);
     assert.match(output, new RegExp(`${agent} started`));
+    if (agent === 'claude') assert.equal(await fs.readFile(path.join(temp, 'claude.fullscreen'), 'utf8'), '1');
     assert.equal((await fs.readFile(path.join(temp, `${agent}.cwd`), 'utf8')).trim(), cwd);
     assert.match(run(['capture-pane', '-p', '-t', id]), new RegExp(`${agent} started`));
     assert.equal(run(['display-message', '-p', '-t', id, '#{pane_dead}']), '0');

@@ -47,7 +47,7 @@ test('new and resumed Claude sessions use the shared tmux socket, preserve promp
   const socket = path.join(home,'socket');
   const bin=path.join(home,'bin');await fs.mkdir(bin);
   const log=path.join(home,'launch.json');
-  await fs.writeFile(path.join(bin,'claude'), `#!/usr/bin/env node\nrequire('fs').writeFileSync(${JSON.stringify(log)},JSON.stringify({args:process.argv.slice(2),cwd:process.cwd()}));\n`,{mode:0o755});
+  await fs.writeFile(path.join(bin,'claude'), `#!/usr/bin/env node\nrequire('fs').writeFileSync(${JSON.stringify(log)},JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),fullscreen:process.env.CLAUDE_CODE_NO_FLICKER}));\n`,{mode:0o755});
   const env={...process.env,TMUX:'',PATH:`${bin}:${process.env.PATH}`};
   const tm=(args)=>execFileSync('tmux',['-S',socket,...args],{env,encoding:'utf8'}).trim();
   tm(['-f','/dev/null','new-session','-d','-s','qa']);tm(['set-option','-g','default-shell','/bin/sh']);tm(['set-environment','-g','PATH',env.PATH]);
@@ -58,7 +58,7 @@ test('new and resumed Claude sessions use the shared tmux socket, preserve promp
   const prompt="Handle 'quotes', $(literal) and\nmultiple lines";
   const created=await service.start({mode:'new',name:'notes',agent:'claude',prompt,remoteControl:true});
   for(let i=0;i<40;i++){try{await fs.access(log);break;}catch{}await new Promise(r=>setTimeout(r,25));}
-  assert.deepEqual(JSON.parse(await fs.readFile(log,'utf8')),{args:['--remote-control','--',prompt],cwd:created.cwd});
+  assert.deepEqual(JSON.parse(await fs.readFile(log,'utf8')),{args:['--remote-control','--',prompt],cwd:created.cwd,fullscreen:'1'});
   assert.equal(tm(['display-message','-p','-t',created.paneId,'#{pane_dead}']),'0');
   await fs.unlink(log);
   const resumeId='11111111-1111-4111-8111-111111111111';

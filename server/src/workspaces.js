@@ -88,7 +88,7 @@ export function createWorkspaces({ home = os.homedir(), runTmux = tmux, run = ex
       if (remoteControl) args.push('--remote-control');
     }
     if (prompt.trim()) args.push('--', prompt);
-    const command = agent === 'shell' ? null : `${args.map(quote).join(' ')}; exec "$SHELL" -l`;
+    const command = agent === 'shell' ? null : `${agent === 'claude' ? 'CLAUDE_CODE_NO_FLICKER=1 ' : ''}${args.map(quote).join(' ')}; exec "$SHELL" -l`;
     const tmuxArgs = ['new-session', '-d', '-P', '-F', '#{session_id}\t#{window_id}\t#{pane_id}', '-c', cwd, '-x', '140', '-y', '40'];
     if (command) tmuxArgs.push(command);
     let result;
