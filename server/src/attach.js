@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { tmux, TMUX_BIN, listWindows, listSessions } from './tmux.js';
 
@@ -38,6 +39,13 @@ export async function createAttachment({
   const sessions = await listSessions();
   const target = sessions.find((s) => s.id === sessionId || s.name === sessionId);
   if (!target) throw new Error(`session not found: ${sessionId}`);
+
+  // A tmux reload or plugin can replace the wheel bindings while the server
+  // stays alive. Reapply our scrolling policy on every browser attachment.
+  // Use the repository copy, so installed config copies cannot go stale.
+  if (process.env.TMUX_WEB_MOUSE !== '0') {
+    await tmux(['source-file', fileURLToPath(new URL('../../tmux/terminal.conf', import.meta.url))]);
+  }
 
   let attachTarget = target.id;
   let mirrorName = null;
