@@ -22,12 +22,12 @@ export function MobileInput({ connected, onPaste, onSend }: Props) {
   };
   return (
     <div className="mobile-input">
-      <div className="mobile-input-toggle-row"><button className="input-toggle" aria-expanded={expanded} onClick={()=>{setExpanded(v=>!v); if (!expanded) requestAnimationFrame(()=>input.current?.focus());}}><Icon name="keyboard" />{expanded ? '入力欄を閉じる' : text ? '下書きを開く' : '日本語入力・貼り付け'}</button><button className="input-enter" disabled={!connected || composing} onClick={()=>onSend('\r')}>Enter ↵</button></div>
+      <div className="mobile-input-toggle-row"><button className="input-toggle" aria-expanded={expanded} onClick={()=>{if (expanded) { input.current?.blur(); setComposing(false); } setExpanded(v=>!v); if (!expanded) requestAnimationFrame(()=>input.current?.focus());}}><Icon name="keyboard" />{expanded ? '入力欄を閉じる' : text ? '下書きを開く' : '文字入力・貼り付け'}</button><button className="input-enter" disabled={!connected || composing} onClick={()=>onSend('\r')}>Enter ↵</button></div>
       <div className="mobile-input-draft" hidden={!expanded}>
       <textarea
         ref={input}
-        aria-label="日本語入力・貼り付け用の下書き"
-        placeholder="ここで日本語入力・長押し貼り付け"
+        aria-label="文字入力・貼り付け用の下書き"
+        placeholder="ここで文字入力・長押し貼り付け"
         value={text}
         rows={2}
         autoCapitalize="none"

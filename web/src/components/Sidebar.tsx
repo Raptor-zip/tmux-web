@@ -50,6 +50,8 @@ interface Props {
   onSelectWindow(win: TmuxWindow): void;
   onAction(action: string, params: Record<string, unknown>): void;
   onClose(): void;
+  width: number;
+  onResize(width: number): void;
   onNewSession(): void;
   onNewProject(): void;
   onOpenFolder(): void;
@@ -86,6 +88,8 @@ export function Sidebar({
   onSelectWindow,
   onAction,
   onClose,
+  width,
+  onResize,
   onNewSession,
   onNewProject,
   onOpenFolder,
@@ -742,11 +746,6 @@ export function Sidebar({
           <button className="btn ghost" title="デバイス接続" aria-label="デバイス接続を管理" onClick={onManageDevices}>＋</button>
           <button className="icon-btn sidebar-close" aria-label="一覧を閉じる" onClick={onClose}><Icon name="close" /></button>
         </div>
-        <details className="project-actions">
-          <summary>プロジェクトを追加…</summary>
-          <button className="btn ghost block" onClick={onNewProject}>プロジェクトを作る</button>
-          <button className="btn ghost block" onClick={onOpenFolder}>フォルダーを開く</button>
-        </details>
 
         <div className="group-switch" role="group" aria-label="一覧の並べ方">
           <button
@@ -767,19 +766,7 @@ export function Sidebar({
 
         {groupBy === 'session' && <button className="btn block" onClick={onNewSession}>＋ tmux セッションを作る</button>}
 
-        <div className="filter-wrap">
-          <input
-            className="sidebar-filter"
-            placeholder="作業内容・パス・状態で絞り込む…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          {filter && (
-            <button className="filter-clear" title="クリア" onClick={() => setFilter('')}>
-              <Icon name="close" />
-            </button>
-          )}
-        </div>
+
 
         {/* 全体の要約。押すとその状態で絞り込む。畳んだグループの中身も数に入る */}
         {overall.all.length > 0 && (
@@ -830,7 +817,7 @@ export function Sidebar({
               <>
                 セッションがありません。
                 <br />
-                上の「プロジェクトを追加…」から作成してください。
+                下の「その他・検索…」から作成してください。
               </>
             )}
           </p>
@@ -858,9 +845,41 @@ export function Sidebar({
         <RecentWork key={selectedDevice} deviceId={selectedDevice} home={home} onStarted={onProjectStarted} />
       </nav>
 
+      <div className="sidebar-resize" role="separator" aria-label="セッション一覧の幅" aria-orientation="vertical"
+        aria-valuemin={200} aria-valuemax={600} aria-valuenow={width} tabIndex={0}
+        onKeyDown={e => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault(); onResize(width + (e.key === 'ArrowRight' ? 20 : -20));
+          }
+        }}
+        onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); }}
+        onPointerMove={e => {
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) onResize(e.clientX - e.currentTarget.parentElement!.getBoundingClientRect().left);
+        }}
+        onPointerUp={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} />
       <HoverPreview target={preview} />
 
       <footer className="sidebar-foot">
+        <details className="sidebar-more">
+          <summary>その他・検索…</summary>
+          <div className="sidebar-more-content">
+            <button className="btn ghost block" onClick={onNewProject}>プロジェクトを作る</button>
+            <button className="btn ghost block" onClick={onOpenFolder}>フォルダーを開く</button>
+        <div className="filter-wrap">
+          <input
+            className="sidebar-filter"
+            placeholder="作業内容・パス・状態で絞り込む…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          {filter && (
+            <button className="filter-clear" title="クリア" onClick={() => setFilter('')}>
+              <Icon name="close" />
+            </button>
+          )}
+        </div>
+          </div>
+        </details>
         <span>{serverVersion ?? ''}</span>
       </footer>
     </aside>

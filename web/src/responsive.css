@@ -220,3 +220,20 @@
 .project-actions summary { cursor:pointer; padding:6px 2px; }
 .project-actions[open] summary { margin-bottom:4px; }
 .project-actions .btn { font-size:11px; text-align:left; }
+
+/* Fill the standalone viewport; include the home indicator inside the status bar. */
+.app { padding-bottom:0; grid-template-rows:minmax(0,1fr) calc(22px + var(--safe-bottom)); }
+.statusbar { height:auto; padding-bottom:var(--safe-bottom); }
+.sidebar { position:relative; min-width:0; }
+.sidebar-close { display:inline-flex; margin-left:auto; flex:none; }
+.sidebar-resize { position:absolute; top:0; bottom:0; right:-5px; width:10px; z-index:5; cursor:col-resize; touch-action:none; }
+.sidebar-resize:hover,.sidebar-resize:focus-visible { background:var(--accent); outline:none; }
+.app.sidebar-hidden .sidebar { visibility:hidden; }
+.sidebar-foot { position:relative; flex-wrap:wrap; gap:6px; }
+.sidebar-more { width:100%; }
+.sidebar-more summary { cursor:pointer; padding:8px 0; }
+.sidebar-more-content { display:flex; flex-direction:column; gap:8px; padding-bottom:8px; }
+.sidebar-more-content .filter-wrap { width:100%; }
+@media (max-width:760px) {
+  .sidebar { position:fixed; width:min(var(--sidebar-w),calc(100vw - 32px)); max-width:none; }
+}

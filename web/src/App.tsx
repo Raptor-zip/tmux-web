@@ -152,6 +152,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   // 狭い画面ではサイドバーが全面を覆ってしまうので、最初は畳んでおく
   const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
   // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
+  const [sidebarWidth, setSidebarWidth] = usePersisted('tw.sidebarWidth', 260);
   const [sidebarOpen, setSidebarOpen] = usePersisted('tw.sidebar', !isNarrow());
   const pendingWindows = useRef<Set<string>>(new Set());
   const pendingSessions = useRef<Set<string>>(new Set());
@@ -1176,7 +1177,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   );
 
   return (
-    <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
+    <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={{ '--sidebar-w': `${Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}px` } as React.CSSProperties}>
       <nav className="activitybar">
         <button
           className={`act-btn ${sidebarOpen ? 'on' : ''}`}
@@ -1209,6 +1210,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="セッション一覧を閉じる"
         onClick={() => setSidebarOpen(false)} />}
       <Sidebar
+        width={Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}
+        onResize={width => setSidebarWidth(Math.min(600, Math.max(200, width)))}
         devices={devices}
         selectedDevice={activeDevice.id}
         onSelectDevice={setSelectedDevice}

@@ -133,13 +133,13 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     },
     send(data: string) {
       sendInputRef.current(data);
-      termRef.current?.focus();
+      if (!window.matchMedia('(any-pointer: coarse)').matches) termRef.current?.focus();
     },
     paste(data: string) {
       if (wsRef.current?.readyState === WebSocket.OPEN) termRef.current?.paste(data);
     },
     focus() {
-      termRef.current?.focus();
+      if (!window.matchMedia('(any-pointer: coarse)').matches) termRef.current?.focus();
     },
     fit() {
       safeFitRef.current();
@@ -174,6 +174,17 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     term.loadAddon(uni);
     term.unicode.activeVersion = '11';
     term.open(innerRef.current!);
+    // Touch devices use the visible draft for every language. Prevent xterm's
+    // hidden textarea from summoning the software keyboard, including focus().
+    const touchKeyboard = window.matchMedia('(any-pointer: coarse)');
+    const updateKeyboard = () => {
+      if (!term.textarea) return;
+      term.textarea.readOnly = touchKeyboard.matches;
+      term.textarea.inputMode = touchKeyboard.matches ? 'none' : 'text';
+      if (touchKeyboard.matches) term.blur();
+    };
+    updateKeyboard();
+    touchKeyboard.addEventListener('change', updateKeyboard);
     /**
      * OSC 52 を受け取ってブラウザのクリップボードに入れる。
      * tmux 側でマウス選択してコピーしたとき（copy-selection）、tmux は
@@ -472,6 +483,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       host.removeEventListener('mouseup', swallowRightButton, true);
       host.removeEventListener('contextmenu', onContextMenu, true);
       host.removeEventListener('mouseup', copySelection);
+      touchKeyboard.removeEventListener('change', updateKeyboard);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

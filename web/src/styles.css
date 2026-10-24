@@ -1842,7 +1842,7 @@ input:focus-visible,
 /* 日本語の変換と貼り付けはスマホの標準入力欄で行う。 */
 .app { height: var(--app-height, 100dvh); }
 .mobile-input { display: none; }
-@media (max-width: 760px), (pointer: coarse) {
+@media (max-width: 760px), (any-pointer: coarse) {
   .mobile-input {
     display: flex;
     flex-direction: column;
