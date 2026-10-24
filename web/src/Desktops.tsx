@@ -81,7 +81,10 @@ export default function Desktops() {
     if (!viewport) return;
     const update = () => { if (viewport.scale === 1) document.documentElement.style.setProperty('--app-height', `${viewport.height}px`); };
     update(); viewport.addEventListener('resize', update);
-    return () => { viewport.removeEventListener('resize', update); document.documentElement.style.removeProperty('--app-height'); };
+    viewport.addEventListener('scroll', update);
+    window.addEventListener('pageshow', update);
+    window.addEventListener('resize', update);
+    return () => { viewport.removeEventListener('scroll', update); window.removeEventListener('pageshow', update); window.removeEventListener('resize', update); viewport.removeEventListener('resize', update); document.documentElement.style.removeProperty('--app-height'); };
   }, []);
   const select = (id: string) => {
     setVisited(prev => new Set([...prev, id]));
