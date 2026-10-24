@@ -127,9 +127,9 @@ process.stdin.on('data', data => {
     client.write('\x03');
     await waitFor(() => run(['display-message', '-p', '#{alternate_on}']) === '0');
 
-    // Claude/Codex が alternate screen を使わない場合も、描画済みの
-    // tmux 履歴ではなくアプリへスクロールキーを渡す。実プロセス名で判定する。
-    for (const name of ['claude', 'codex']) {
+    // Codex は通常画面でもアプリへ送る。classic Claude は無視するため
+    // 履歴を使い、fullscreen Claude は alternate/mouse の経路で扱う。
+    for (const name of ['codex', 'claude']) {
       const executable = path.join(temp, name);
       const normalApp = path.join(temp, `${name}-app.cjs`);
       const normalReport = path.join(temp, `${name}-input`);
@@ -147,6 +147,17 @@ process.stdout.write('normal-agent-ready');
       await waitFor(() => run(['capture-pane', '-p']).includes('normal-agent-ready'));
       assert.equal(run(['display-message', '-p', '#{alternate_on}']), '0');
       client.write(wheelUp);
+      if (name === 'claude') {
+        // Classic Claude has no internal viewport and ignores PageUp. Keep its
+        // rendered history scrollable without feeding keys into the composer.
+        await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '1');
+        client.write('q');
+        await waitFor(() => run(['display-message', '-p', '#{pane_in_mode}']) === '0');
+        await assert.rejects(fs.access(normalReport));
+        client.write('\x03');
+        await waitFor(() => run(['display-message', '-p', '#{pane_current_command}']) === 'bash');
+        continue;
+      }
       await waitFor(async () => { try { return (await fs.readFile(normalReport, 'utf8')).includes('\x1b[5~'); } catch { return false; } });
       client.resize(120, 24);
       await waitFor(() => run(['display-message', '-p', '#{pane_width}']) === '120');

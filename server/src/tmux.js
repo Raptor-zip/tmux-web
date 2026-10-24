@@ -317,7 +317,7 @@ export const actions = {
     if (!target) throw new TmuxError('起動先のセッションがありません');
     const args = ['new-window', '-P', '-F', '#{window_id}', '-t', target, '-n', agent];
     if (cwd) args.push('-c', cwd);
-    args.push(`${agent}; exec "$SHELL" -l`);
+    args.push(`${agent === 'claude' ? 'CLAUDE_CODE_NO_FLICKER=1 ' : ''}${agent}; exec "$SHELL" -l`);
     return tmux(args);
   },
   killWindow: ({ target }) => tmux(['kill-window', '-t', target]),
