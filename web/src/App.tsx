@@ -84,9 +84,11 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
   return [value, setValue] as const;
 }
 
-export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag }: {
+export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
   desktopLayouts: DesktopLayoutRegistry;
+  desktopTargets: { id: string; name: string }[];
+  onMoveDesktopTab(sourceId: string, tabId: string, destinationId: string): void;
   onDesktopDrag(sourceId: string, payload: DragPayload, end: () => void): void;
 }) {
   const { state, devices, connected, unauthorized, authUrl, refresh, reloadDevices } = connection;
@@ -919,6 +921,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         x,
         y,
         items: [
+          { label: '左へ移動', disabled: at === 0, run: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at - 1]?.id) : prev) },
+          { label: '右へ移動', disabled: at === leaf.tabs.length - 1, run: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at + 2]?.id ?? null) : prev) },
+          ...desktopTargets.filter(d => d.id !== workspaceId).map(d => ({ label: `${d.name} へ移動`, run: () => onMoveDesktopTab(workspaceId, tabId, d.id) })),
+          SEP,
           { label: 'タブを閉じる', hint: 'Alt+W', run: () => closeTabById(tabId) },
           {
             label: '他のタブを閉じる',
@@ -986,7 +992,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         ],
       });
     },
-    [windows, closeTabById, setLayout, onDrop, doAction, killWindow],
+    [windows, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
   );
 
   /**

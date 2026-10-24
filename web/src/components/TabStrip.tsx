@@ -152,7 +152,7 @@ export function TabStrip({
                 onPointerDown={(e) => {
                   // 中クリックはブラウザのオートスクロールが始まってしまう
                   if (e.button === 1) e.preventDefault();
-                  if ((e.target as HTMLElement).closest('.tab-close')) return;
+                  if ((e.target as HTMLElement).closest('button')) return;
                   if (e.pointerType === 'mouse' && e.button === 0) onActivate(tab.id);
                   armDrag(e, {
                     kind: 'window',
@@ -163,7 +163,7 @@ export function TabStrip({
                   });
                 }}
                 onClick={(e) => {
-                  if (!(e.target as HTMLElement).closest('.tab-close')) onActivate(tab.id);
+                  if (!(e.target as HTMLElement).closest('button')) onActivate(tab.id);
                 }}
                 onAuxClick={(e) => {
                   if (e.button === 1) {
@@ -191,6 +191,10 @@ export function TabStrip({
                 <span className="tab-device" title={device?.error}><span className="device-full">{device?.name || "このPC"}</span><span className="device-short" aria-hidden="true">{device?.local ? "PC" : (device?.name || "接続先").replace(/[^A-Za-z0-9一-龯ぁ-んァ-ヶ]/g, "").slice(0,2).toUpperCase()}</span>{device && !device.connected ? " · 切断" : ""}</span>
                 <span className="tab-caption"><span className="tab-name">{label}</span><span className="tab-task">{view?.primary || tab.windowName || "端末"}</span></span>
                 <span className="tab-where">{where}</span>
+                <button className="tab-menu" aria-label={`${label} のタブを移動・操作`} title="タブを移動・操作" aria-haspopup="menu"
+                  onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onContextMenu(tab.id, r.left, r.bottom); }}>
+                  <Icon name="more" />
+                </button>
                 <button
                   className="tab-close"
                   aria-label={`${label} のタブを閉じる`}

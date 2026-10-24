@@ -33,7 +33,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])].find(button => button.getClientRects().length > 0)?.focus();
     return () => { if (document.activeElement === document.body) previous?.focus(); };
   }, []);
 
@@ -74,7 +74,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     <div
       role="menu" aria-label="操作メニュー"
       onKeyDown={e => {
-        const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+        const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])].filter(button => button.getClientRects().length > 0);
         const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
         let next = index;
         if (e.key === "ArrowDown") next = (index + 1) % buttons.length;
@@ -91,6 +91,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       onPointerDown={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <button className="touch-menu-close" role="menuitem" onClick={onClose}>閉じる</button>
       {items.map((item, i) =>
         item === SEP ? (
           <hr role="separator" key={`s${i}`} />

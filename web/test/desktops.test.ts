@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { addDesktop, desktopKey, INITIAL_DESKTOPS, removeDesktop, restoreDesktops, transferDesktopTab } from '../src/desktops';
 
-import { allLeaves, allTabs, makeLeaf, makeTab, splitWithTab } from '../src/layout';
+import { allLeaves, allTabs, makeLeaf, makeTab, moveTab, splitWithTab } from '../src/layout';
 
 test('legacy terminal layout stays on the first desktop and new desktops use independent keys', () => {
   assert.equal(desktopKey('main', 'tw.layout'), 'tw.layout');
@@ -65,4 +65,18 @@ test('an already open destination window is activated without duplication', () =
   assert.equal(result.focusedId, destination.id);
   assert.deepEqual(allTabs(result.destination).map(item => item.tab.id), [existing.id]);
   assert.equal(transferDesktopTab(makeLeaf(tab), destination, 'missing', null), null);
+});
+
+
+test('tap-based tab reordering preserves tabs and activates the moved tab', () => {
+  const a = makeTab('$1', '@1'), b = makeTab('$1', '@2'), c = makeTab('$1', '@3');
+  const leaf = makeLeaf([a, b, c]);
+  const left = moveTab(leaf, b.id, leaf.id, a.id);
+  assert.deepEqual(allTabs(left).map(({tab}) => tab.id), [b.id, a.id, c.id]);
+  assert.equal(allLeaves(left)[0].activeId, b.id);
+  const right = moveTab(left, b.id, leaf.id, c.id);
+  assert.deepEqual(allTabs(right).map(({tab}) => tab.id), [a.id, b.id, c.id]);
+  const last = moveTab(right, b.id, leaf.id, null);
+  assert.deepEqual(allTabs(last).map(({tab}) => tab.id), [a.id, c.id, b.id]);
+  assert.deepEqual(allTabs(last).find(({tab}) => tab.id === b.id)?.tab, b);
 });
