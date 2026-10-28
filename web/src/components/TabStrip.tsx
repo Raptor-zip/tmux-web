@@ -190,9 +190,8 @@ export function TabStrip({
                 }}
               >
                 <span className={`state-dot ${kind}`} />
-                <span className="tab-device" title={device?.error}><span className="device-full">{device?.name || "このPC"}</span><span className="device-short" aria-hidden="true">{device?.local ? "PC" : (device?.name || "接続先").replace(/[^A-Za-z0-9一-龯ぁ-んァ-ヶ]/g, "").slice(0,2).toUpperCase()}</span>{device && !device.connected ? " · 切断" : ""}</span>
-                <span className="tab-caption"><span className="tab-name">{label}</span><span className="tab-task">{view?.primary || tab.windowName || "端末"}</span></span>
-                <span className="tab-where">{where}</span>
+                <span className="tab-name">{label}</span>
+                {device && !device.local && <span className="tab-device" title={device.error}>{device.connected ? device.name : `${device.name} · 切断`}</span>}
                 <button className="tab-menu" aria-label={`${label} のタブを移動・操作`} title="タブを移動・操作" aria-haspopup="menu"
                   onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onContextMenu(tab.id, r.left, r.bottom); }}>
                   <Icon name="more" />

@@ -259,3 +259,18 @@
   .ctxmenu button { min-height:48px; padding:10px 12px; }
   .ctxmenu .touch-menu-close { display:flex; justify-content:flex-end; position:sticky; top:0; background:var(--bg-1); border-bottom:1px solid var(--border); z-index:1; }
 }
+
+/* タブ列：状態の点・名前・（別デバイスのときだけ）接続先・閉じる、を 1 行に収める。
+   細かい説明（実行中のコマンド・場所）は title に回し、幅を取らない。 */
+.tab { min-width:84px; max-width:168px; gap:6px; padding:0 2px 0 9px; }
+.tab-name { min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; }
+.tab-device { flex:none; max-width:64px; overflow:hidden; text-overflow:ellipsis; padding:1px 4px; border:1px solid var(--border-strong); font-size:9.5px; line-height:1.3; color:var(--fg-dim); }
+.tab-close { width:20px; min-width:20px; height:24px; }
+.tablist:has(.tab-slot:only-child) .tab { max-width:none; }
+@media (pointer:coarse), (any-pointer:coarse) {
+  .tab { min-width:104px; max-width:176px; }
+  .tab-close { width:32px; min-width:32px; height:44px; }
+  /* 操作メニューは前面のタブにだけ出す（全タブに 44px ずつ付けると幅を食う） */
+  .tab-menu { display:none; }
+  .tab.active .tab-menu { display:grid; width:32px; min-width:32px; }
+}
