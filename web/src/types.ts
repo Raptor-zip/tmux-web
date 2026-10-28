@@ -81,11 +81,6 @@ export interface TmuxState {
   server?: { version: string; prefix: string; socketName: string; home: string; device?: { name: string; color: string; accent: string; fingerprint: string } };
 }
 
-export interface KeyBinding {
-  table: string;
-  key: string;
-  command: string;
-}
 
 export type ActionName =
   | 'newSession'

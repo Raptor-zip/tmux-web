@@ -14,7 +14,6 @@ import { fetchCapture, runAction, useTmuxState, type StartedProject } from './ap
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { Toolbar, workspaceMenuItems } from './components/Toolbar';
 import { KeyBar } from './components/KeyBar';
-import { CheatSheet } from './components/CheatSheet';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, type DragPayload, type DropTarget } from './components/SplitView';
 import { Switcher, type SwitchItem } from './components/Switcher';
@@ -164,7 +163,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const [remotePane, setRemotePane] = useState<string | null>(null);
   const [screenOpen, setScreenOpen] = useState<string | null>(null);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
-  const [cheatOpen, setCheatOpen] = useState(false);
   const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
   const launchInFlight = useRef(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -1133,9 +1131,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       } else if (key === 't') {
         stop();
         newTerminal(focusedIdRef.current);
-      } else if (key === '/') {
-        stop();
-        setCheatOpen((v) => !v);
       } else if (key === 'w' && focusedTab) {
         stop();
         closeTabById(focusedTab.id);
@@ -1165,7 +1160,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onOpenScreen: () => setScreenOpen(activeDevice.id),
       onOpenFiles: () => activePane && setFilesPaneId(activePane.id),
       onOpenSwitcher: () => setSwitcherOpen(true),
-      onOpenCheatSheet: () => setCheatOpen(true),
       onSendCommand: () =>
         activePane &&
         setDialog({
@@ -1198,15 +1192,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           onClick={() => setSwitcherOpen(true)}
         >
           <Icon name="switch" />
-        </button>
-        <span className="spacer" />
-        <button
-          className="act-btn"
-          title="tmux チートシート (Alt+/)"
-          aria-label="tmux チートシート"
-          onClick={() => setCheatOpen(true)}
-        >
-          <Icon name="help" />
         </button>
       </nav>
 
@@ -1418,7 +1403,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         />
       )}
 
-      {cheatOpen && <CheatSheet deviceId={activeDevice.id} prefix={prefix} onClose={() => setCheatOpen(false)} />}
 
       {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
 
