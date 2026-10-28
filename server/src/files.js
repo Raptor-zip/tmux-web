@@ -129,6 +129,20 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
     } catch (error) { handleError(res, error); }
   });
 
+  // スマホなどから添付したファイルを一時フォルダに保存し、端末に貼れる絶対パスを返す
+  app.post('/api/paste-file', express.raw({ type: '*/*', limit: '50mb' }), async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || !req.body.length) throw fail(400, 'ファイルがありません');
+      const raw = path.basename(String(req.query.name || 'file')).replace(/[\x00-\x1f\x7f/\\]/g, '_').replace(/^\.+/, '');
+      const name = (raw || 'file').slice(-120);
+      const dir = path.join(os.tmpdir(), 'tmux-web-paste');
+      await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
+      const file = path.join(dir, `${Date.now()}-${randomBytes(3).toString('hex')}-${name}`);
+      await fsp.writeFile(file, req.body, { flag: 'wx', mode: 0o600 });
+      res.json({ path: file });
+    } catch (error) { handleError(res, error); }
+  });
+
   app.post('/api/files/archive', async (req, res) => {
     try {
       const root = await rootFor(req.body?.pane);

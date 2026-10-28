@@ -10,7 +10,7 @@ import { FileBrowser } from './components/FileBrowser';
 import { MobileInput } from './components/MobileInput';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { fetchCapture, runAction, useTmuxState, type StartedProject } from './api';
+import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { Toolbar, workspaceMenuItems } from './components/Toolbar';
 import { KeyBar } from './components/KeyBar';
@@ -1338,6 +1338,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           connected={!!focusedId && !!termStatuses[focusedId]?.connected}
           onPaste={(text) => focusedTerm()?.paste(text)}
           onSend={(data) => focusedTerm()?.send(data)}
+          onAttach={async (files) => {
+            const sid = focusedTab?.sessionId ?? '';
+            const paths: string[] = [];
+            for (const file of files) paths.push(await uploadAttachment(sid, file));
+            focusedTerm()?.paste(paths.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ') + ' ');
+          }}
         />
         {showKeyBar && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
       </main>
