@@ -241,3 +241,13 @@ export async function uploadPasteImage(scopedId: string, image: Blob) {
   if (!res.ok) throw new Error(res.status === 413 ? '画像は20MBまでです。' : body.error || '画像を貼り付けできませんでした');
   return (body as { path: string }).path;
 }
+
+/** 添付したファイルをサーバーへ送り、端末に貼れるファイルパスを受け取る */
+export async function uploadAttachment(scopedId: string, file: File) {
+  const res = await fetch(devicePath(deviceOf(scopedId), `/api/paste-file?${new URLSearchParams({ name: file.name })}`), {
+    method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(res.status === 413 ? '1ファイルは50MBまでです。' : body.error || '添付できませんでした');
+  return (body as { path: string }).path;
+}
