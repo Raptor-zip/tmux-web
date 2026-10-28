@@ -26,12 +26,18 @@ interface Props {
   onOpenSwitcher(): void;
   onOpenCheatSheet(): void;
   onSendCommand(): void;
-  /** 右端の「⋯」で開くメニュー。中身をここで組み立てて親に渡す */
-  onOpenMenu(items: MenuEntry[], x: number, y: number): void;
 }
 
-/** タブ列に置く一覧ボタンと作業メニュー。 */
-export function Toolbar({
+/** タブ列に置く一覧ボタン。作業メニューの中身は workspaceMenuItems で組み、タブ列の「⋯」に足す。 */
+export function Toolbar({ onToggleSidebar }: Pick<Props, 'onToggleSidebar'>) {
+  return (
+    <div className="workspace-actions">
+      <button className="icon-btn" onClick={onToggleSidebar} aria-label="セッション一覧の開閉" title="セッション一覧 (Alt+B)"><Icon name="menu" /></button>
+    </div>
+  );
+}
+
+export function workspaceMenuItems({
   session,
   window: win,
   activePane,
@@ -42,7 +48,6 @@ export function Toolbar({
   onNewTab,
   onLaunchAgent,
   launchingAgent,
-  onToggleSidebar,
   onSplitNewWindow,
   onToggle,
   onCopyPane,
@@ -53,10 +58,9 @@ export function Toolbar({
   onOpenSwitcher,
   onOpenCheatSheet,
   onSendCommand,
-  onOpenMenu,
-}: Props) {
+}: Omit<Props, 'onToggleSidebar'>): MenuEntry[] {
   const pane = activePane?.id;
-  const moreItems = (): MenuEntry[] => [
+  return [
     { label: '新しい端末をタブで開く', hint: 'Alt+T', run: onNewTab },
     { label: '作業フォルダーのファイルを見る', run: onOpenFiles, disabled: !pane },
     ...(activePane?.proc?.agent === 'Claude' ? [
@@ -93,12 +97,4 @@ export function Toolbar({
     SEP,
     { label: 'tmux チートシート', hint: 'Alt+/', run: onOpenCheatSheet },
   ];
-
-  return (
-    <div className="workspace-actions">
-      <button className="icon-btn" onClick={onToggleSidebar} aria-label="セッション一覧の開閉" title="セッション一覧 (Alt+B)"><Icon name="menu" /></button>
-      <button className="icon-btn" title="作業の操作" aria-label="作業の操作" aria-haspopup="menu"
-        onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onOpenMenu(moreItems(), r.right, r.bottom); }}><Icon name="more" /></button>
-    </div>
-  );
 }

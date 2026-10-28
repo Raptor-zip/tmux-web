@@ -1,3 +1,4 @@
+import type { MenuEntry } from './ContextMenu';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
 import { deviceOf, type Device } from '../devices';
@@ -35,6 +36,8 @@ export type DropTarget =
 
 interface Props {
   actions: ReactNode;
+  /** フォーカス中のタイルの「⋯」に足す作業メニュー */
+  workspaceMenu(): MenuEntry[];
   active: boolean;
   devices: Device[];
   tree: LayoutNode;
@@ -69,6 +72,7 @@ interface Props {
   onStatus(leafId: string, status: { connected: boolean; message?: string }): void;
   /** 端末で選択した内容がクリップボードに入った */
   onCopied(text: string): void;
+  onNotice(text: string): void;
   onTerminalContextMenu(leafId: string, x: number, y: number): void;
   onTabContextMenu(tabId: string, x: number, y: number): void;
   registerTerm(leafId: string, handle: TerminalHandle | null): void;
@@ -99,6 +103,7 @@ export function SplitView({
   active,
   devices,
   actions,
+  workspaceMenu,
   tree,
   focusMode,
   statuses,
@@ -124,6 +129,7 @@ export function SplitView({
   onRatio,
   onStatus,
   onCopied,
+  onNotice,
   onTerminalContextMenu,
   onTabContextMenu,
   registerTerm,
@@ -274,6 +280,7 @@ export function SplitView({
           >
             <TabStrip
               actions={focused ? actions : null}
+              workspaceMenu={focused ? workspaceMenu : undefined}
               leaf={leaf}
               onOverview={openOverview}
               onToggleFocus={() => {
@@ -318,6 +325,7 @@ export function SplitView({
                   onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
                   onStatus={(s) => onStatus(leaf.id, s)}
                   onCopied={onCopied}
+                  onNotice={onNotice}
                 />
               ) : null}
               {status && !status.connected && <div className="panel-connection" role="status"><strong>{device?.name || '端末'} · 未接続</strong><span>{status.message || '接続を確認しています…'}</span><button onClick={()=>setRetries(v=>({...v,[leaf.id]:(v[leaf.id]||0)+1}))}>再接続</button></div>}

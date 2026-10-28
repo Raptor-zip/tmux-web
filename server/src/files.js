@@ -1,4 +1,5 @@
 import path from 'node:path';
+import os from 'node:os';
 import express from 'express';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -114,6 +115,20 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
       }
     } catch (error) { handleError(res, error); }
   });
+  // ブラウザで貼り付けた画像を一時フォルダに保存し、端末に貼れる絶対パスを返す
+  app.post('/api/paste-image', express.raw({ type: 'image/*', limit: '20mb' }), async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || !req.body.length) throw fail(400, '画像がありません');
+      const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }[req.headers['content-type']?.split(';')[0]];
+      if (!ext) throw fail(415, 'PNG / JPEG / GIF / WebP の画像だけ貼り付けできます');
+      const dir = path.join(os.tmpdir(), 'tmux-web-paste');
+      await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
+      const file = path.join(dir, `paste-${Date.now()}-${randomBytes(3).toString('hex')}${ext}`);
+      await fsp.writeFile(file, req.body, { flag: 'wx', mode: 0o600 });
+      res.json({ path: file });
+    } catch (error) { handleError(res, error); }
+  });
+
   app.post('/api/files/archive', async (req, res) => {
     try {
       const root = await rootFor(req.body?.pane);

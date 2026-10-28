@@ -9,6 +9,7 @@ import { whereWithSession, type WindowView } from '../windows';
 
 interface Props {
   actions: ReactNode;
+  workspaceMenu?(): MenuEntry[];
   devices: Device[];
   leaf: LeafNode;
   focused: boolean;
@@ -41,6 +42,7 @@ interface Props {
  */
 export function TabStrip({
   actions,
+  workspaceMenu,
   devices,
   leaf,
   focused,
@@ -226,7 +228,8 @@ export function TabStrip({
             {label:'タブ・パネルの一覧',run:onOverview},
             {label:'このパネルを広げる / 元に戻す',hint:'Alt+Enter',run:onToggleFocus},
             {label:'選択中のタブの操作…',run:()=>onContextMenu(leaf.activeId,r.right,r.bottom)},
-            ...(closableTile ? [SEP,{label:`このパネルを閉じる（${leaf.tabs.length}タブ）`,run:onCloseTile}] : []),
+            ...(closableTile ? [{label:`このパネルを閉じる（${leaf.tabs.length}タブ）`,run:onCloseTile}] : []),
+            ...(workspaceMenu ? [SEP,...workspaceMenu()] : []),
           ]}); }}><Icon name="more" /></button>
       </div>
       {menu && <ContextMenu {...menu} onClose={()=>setMenu(null)} />}

@@ -6,7 +6,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { CanvasAddon } from '@xterm/addon-canvas';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
-import { wsUrl } from '../api';
+import { uploadPasteImage, wsUrl } from '../api';
 
 // Tokyo Night (night), with soft bright colors to avoid fluorescent highlights.
 // Palette: https://github.com/folke/tokyonight.nvim
@@ -49,6 +49,8 @@ interface Props {
   onStatus?: (s: { connected: boolean; message?: string }) => void;
   /** クリップボードに入ったことを知らせる（選択したのに入っていないと分からないため） */
   onCopied?: (text: string) => void;
+  /** 画像の貼り付けに失敗した等、ユーザーに知らせたい内容 */
+  onNotice?: (text: string) => void;
 }
 
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
@@ -64,6 +66,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     onContextMenu,
     onStatus,
     onCopied,
+    onNotice,
   },
   ref,
 ) {
@@ -125,6 +128,10 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   onContextMenuRef.current = onContextMenu;
   const onCopiedRef = useRef(onCopied);
   onCopiedRef.current = onCopied;
+  const onNoticeRef = useRef(onNotice);
+  onNoticeRef.current = onNotice;
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
 
   useImperativeHandle(ref, () => ({
     selectWindow(index: number) {
@@ -459,6 +466,24 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     host.addEventListener('mousedown', swallowRightButton, true);
     host.addEventListener('mouseup', swallowRightButton, true);
     host.addEventListener('contextmenu', onContextMenu, true);
+
+    /**
+     * 画像のペースト。xterm は文字しか扱わないので、クリップボードに画像があれば
+     * サーバーの一時フォルダへ保存し、そのパスを貼り付ける（Claude / Codex は
+     * 画像のパスを渡すと読み込める）。文字も一緒にあるときは通常のペーストに任せる。
+     */
+    const onPasteImage = (e: Event) => {
+      const data = (e as ClipboardEvent).clipboardData;
+      if (!data || data.getData('text/plain')) return;
+      const image = [...data.files].find((f) => f.type.startsWith('image/'));
+      if (!image) return;
+      e.preventDefault();
+      e.stopPropagation();
+      uploadPasteImage(sessionIdRef.current ?? '', image)
+        .then((file) => term.paste(file.includes(' ') ? `'${file}'` : file))
+        .catch((err) => onNoticeRef.current?.((err as Error).message));
+    };
+    host.addEventListener('paste', onPasteImage, true);
     host.addEventListener('mouseup', copySelection);
 
     return () => {
@@ -482,6 +507,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       host.removeEventListener('mousedown', swallowRightButton, true);
       host.removeEventListener('mouseup', swallowRightButton, true);
       host.removeEventListener('contextmenu', onContextMenu, true);
+      host.removeEventListener('paste', onPasteImage, true);
       host.removeEventListener('mouseup', copySelection);
       touchKeyboard.removeEventListener('change', updateKeyboard);
       term.dispose();
