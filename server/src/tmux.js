@@ -260,22 +260,6 @@ export async function capturePane(target, { lines = 2000, escapes = true } = {})
   return out ?? '';
 }
 
-/** ユーザーの .tmux.conf 由来の実際のキーバインドを返す（チートシート用） */
-export async function listKeys(table = 'prefix') {
-  const out = await tmux(['list-keys', '-T', table], { allowFailure: true });
-  if (!out) return [];
-  return out
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      // 例: bind-key    -T prefix c    new-window
-      const m = line.match(/^bind-key\s+(?:-r\s+)?-T\s+(\S+)\s+(\S+)\s+(.*)$/);
-      if (!m) return null;
-      return { table: m[1], key: m[2], command: m[3].trim() };
-    })
-    .filter(Boolean);
-}
-
 export async function serverInfo() {
   const version = (await tmux(['-V'], { allowFailure: true }))?.trim() ?? 'unknown';
   const prefix =

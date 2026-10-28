@@ -9,7 +9,6 @@ import {
   snapshot,
   serverInfo,
   capturePane,
-  listKeys,
   actions,
   isKnownAction,
   TmuxError,
@@ -96,14 +95,6 @@ app.get('/api/capture', async (req, res) => {
       escapes: plain !== '1',
     });
     res.json({ target, text });
-  } catch (err) {
-    res.status(500).json({ error: String(err.message || err) });
-  }
-});
-
-app.get('/api/keys', async (req, res) => {
-  try {
-    res.json({ keys: await listKeys(String(req.query.table || 'prefix')) });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }

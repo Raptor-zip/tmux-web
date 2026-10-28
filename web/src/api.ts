@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { deviceOf, unscoped, scoped, devicePath, scopeState, routeAction, type Device } from './devices';
-import type { ActionName, KeyBinding, TmuxState } from './types';
+import type { ActionName, TmuxState } from './types';
 
 // 古いブックマークに含まれた固定トークンは読み取らず、URLから取り除く。
 const cleanUrl = new URL(location.href);
@@ -54,9 +54,6 @@ export function fetchCapture(target: string, lines = 2000, plain = false) {
     `/api/capture?target=${encodeURIComponent(unscoped(target))}&lines=${lines}${plain ? '&plain=1' : ''}`));
 }
 
-export function fetchKeys(table = 'prefix', device = 'local') {
-  return request<{ keys: KeyBinding[] }>(devicePath(device, `/api/keys?table=${encodeURIComponent(table)}`));
-}
 
 export function wsUrl(path: string, params: Record<string, string | number> = {}, device = 'local') {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';

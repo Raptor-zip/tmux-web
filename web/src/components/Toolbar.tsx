@@ -24,7 +24,6 @@ interface Props {
   onRemoteControl(): void;
   onOpenScreen(): void;
   onOpenSwitcher(): void;
-  onOpenCheatSheet(): void;
   onSendCommand(): void;
 }
 
@@ -56,45 +55,31 @@ export function workspaceMenuItems({
   onRemoteControl,
   onOpenScreen,
   onOpenSwitcher,
-  onOpenCheatSheet,
   onSendCommand,
 }: Omit<Props, 'onToggleSidebar'>): MenuEntry[] {
   const pane = activePane?.id;
   return [
     { label: '新しい端末をタブで開く', hint: 'Alt+T', run: onNewTab },
-    { label: '作業フォルダーのファイルを見る', run: onOpenFiles, disabled: !pane },
+    { label: '新しい端末を右に並べる', run: () => onSplitNewWindow('right'), disabled: !win },
+    { label: '新しい端末を下に並べる', run: () => onSplitNewWindow('bottom'), disabled: !win },
+    { label: 'ウィンドウを切り替える…', hint: 'Alt+P', run: onOpenSwitcher },
+    SEP,
+    { label: 'Claude を新しいタブで起動', run: () => onLaunchAgent('claude'), disabled: !session || launchingAgent !== null },
+    { label: 'Codex を新しいタブで起動', run: () => onLaunchAgent('codex'), disabled: !session || launchingAgent !== null },
     ...(activePane?.proc?.agent === 'Claude' ? [
       { label: 'Claude アプリに接続…', run: onRemoteControl },
       { label: 'Claude を終了する', run: () => pane && onAction('runCommand', { target: pane, command: '/exit' }), disabled: activePane.busy },
     ] : []),
     SEP,
-    { label: 'Claude を新しいタブで起動', run: () => onLaunchAgent('claude'), disabled: !session || launchingAgent !== null },
-    { label: 'Codex を新しいタブで起動', run: () => onLaunchAgent('codex'), disabled: !session || launchingAgent !== null },
-    SEP,
-    { label: 'デバイスの画面を見る', run: onOpenScreen },
-    { label: 'ウィンドウを切り替える…', hint: 'Alt+P', run: onOpenSwitcher },
+    { label: '作業フォルダーのファイルを見る', run: onOpenFiles, disabled: !pane },
     { label: 'コマンドを送る…', run: onSendCommand, disabled: !pane },
-    { label: '新しい端末を右に並べる', run: () => onSplitNewWindow('right'), disabled: !win },
-    { label: '新しい端末を下に並べる', run: () => onSplitNewWindow('bottom'), disabled: !win },
     { label: '本文をコピー', run: onCopyPane, disabled: !pane },
-    SEP,
-    {
-      label: 'ペインを全画面 / 元に戻す',
-      run: () => pane && onAction('zoomPane', { target: pane }),
-      disabled: !pane,
-    },
+    { label: 'ペインを全画面 / 元に戻す', run: () => pane && onAction('zoomPane', { target: pane }), disabled: !pane },
     { label: 'ペインを閉じる…', run: onKillPane, disabled: !pane },
     SEP,
+    { label: 'デバイスの画面を見る', run: onOpenScreen },
     { label: `キーバーを${showKeyBar ? '隠す' : '表示'}`, run: () => onToggle('showKeyBar') },
-    {
-      label: `tmux のステータス行を${showStatusBar ? '隠す' : '表示'}`,
-      run: () => onToggle('showStatusBar'),
-    },
-    {
-      label: mode === 'mirror' ? '直接接続に切り替える' : 'ミラー接続に切り替える',
-      run: () => onToggle('mode'),
-    },
-    SEP,
-    { label: 'tmux チートシート', hint: 'Alt+/', run: onOpenCheatSheet },
+    { label: `tmux のステータス行を${showStatusBar ? '隠す' : '表示'}`, run: () => onToggle('showStatusBar') },
+    { label: mode === 'mirror' ? '直接接続に切り替える' : 'ミラー接続に切り替える', run: () => onToggle('mode') },
   ];
 }
