@@ -12,7 +12,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, useTmuxState, type StartedProject } from './api';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
-import { Toolbar } from './components/Toolbar';
+import { Toolbar, workspaceMenuItems } from './components/Toolbar';
 import { KeyBar } from './components/KeyBar';
 import { CheatSheet } from './components/CheatSheet';
 import { Dialog, type DialogSpec } from './components/Dialog';
@@ -1145,29 +1145,28 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     return () => window.removeEventListener('keydown', onKey, true);
   }, [active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
-  const workspaceActions = (
-    <Toolbar
-      session={currentSession}
-      window={currentWindow}
-      activePane={activePane}
-      mode={mode}
-      showStatusBar={showStatusBar}
-      showKeyBar={showKeyBar}
-      onAction={doAction}
-      onNewTab={() => newTerminal(focusedIdRef.current)}
-      onLaunchAgent={launchAgent}
-      launchingAgent={launchingAgent}
-      onToggleSidebar={() => setSidebarOpen((v) => !v)}
-      onSplitNewWindow={splitIntoNewWindow}
-      onToggle={onToggle}
-      onCopyPane={copyPane}
-      onKillPane={killPane}
-      onRemoteControl={() => activePane && setRemotePane(activePane.id)}
-      onOpenScreen={() => setScreenOpen(activeDevice.id)}
-      onOpenFiles={() => activePane && setFilesPaneId(activePane.id)}
-      onOpenSwitcher={() => setSwitcherOpen(true)}
-      onOpenCheatSheet={() => setCheatOpen(true)}
-      onSendCommand={() =>
+  const toolbarProps = {
+      session: currentSession,
+      window: currentWindow,
+      activePane: activePane,
+      mode: mode,
+      showStatusBar: showStatusBar,
+      showKeyBar: showKeyBar,
+      onAction: doAction,
+      onNewTab: () => newTerminal(focusedIdRef.current),
+      onLaunchAgent: launchAgent,
+      launchingAgent: launchingAgent,
+      onToggleSidebar: () => setSidebarOpen((v) => !v),
+      onSplitNewWindow: splitIntoNewWindow,
+      onToggle: onToggle,
+      onCopyPane: copyPane,
+      onKillPane: killPane,
+      onRemoteControl: () => activePane && setRemotePane(activePane.id),
+      onOpenScreen: () => setScreenOpen(activeDevice.id),
+      onOpenFiles: () => activePane && setFilesPaneId(activePane.id),
+      onOpenSwitcher: () => setSwitcherOpen(true),
+      onOpenCheatSheet: () => setCheatOpen(true),
+      onSendCommand: () =>
         activePane &&
         setDialog({
           kind: 'prompt',
@@ -1176,11 +1175,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           confirmLabel: '送信',
           onSubmit: (cmd) =>
             cmd.trim() && doAction('runCommand', { target: activePane.id, command: cmd }),
-        })
-      }
-      onOpenMenu={(items, x, y) => setMenu({ x, y, items })}
-    />
-  );
+        }),
+  };
+  const workspaceActions = <Toolbar onToggleSidebar={toolbarProps.onToggleSidebar} />;
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={{ '--sidebar-w': `${Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}px` } as React.CSSProperties}>
@@ -1274,6 +1271,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             {layout ? (
               <SplitView
                 actions={workspaceActions}
+                workspaceMenu={() => workspaceMenuItems(toolbarProps)}
                 active={active}
                 tree={layout}
                 statuses={termStatuses}
@@ -1300,6 +1298,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                 onDragEnd={() => setDrag(null)}
                 onRatio={(id, r) => setLayout((prev) => (prev ? setRatio(prev, id, r) : prev))}
                 onStatus={handleStatus}
+                onNotice={(text) => toast(text)}
                 onCopied={(text) => {
                   const lines = text.split('\n').length;
                   toast(

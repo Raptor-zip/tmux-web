@@ -234,3 +234,13 @@ export interface Approval { id: string; cmd: string; cwd: string; detail: string
 export const fetchApproval = (signal?: AbortSignal) => request<{ pending: Approval | null; secure: boolean }>('/api/approvals', { signal, cache: 'no-store' });
 export const answerApproval = (id: string, password: string) => request('/api/approvals/answer', { method: 'POST', body: JSON.stringify({ id, password }) });
 export const cancelApproval = (id: string) => request('/api/approvals/cancel', { method: 'POST', body: JSON.stringify({ id }) });
+
+/** 貼り付けた画像をサーバーへ送り、端末に貼れるファイルパスを受け取る */
+export async function uploadPasteImage(scopedId: string, image: Blob) {
+  const res = await fetch(devicePath(deviceOf(scopedId), '/api/paste-image'), {
+    method: 'POST', body: image, headers: { 'Content-Type': image.type },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(res.status === 413 ? '画像は20MBまでです。' : body.error || '画像を貼り付けできませんでした');
+  return (body as { path: string }).path;
+}
