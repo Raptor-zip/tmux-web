@@ -20,6 +20,21 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 const hidden = (name) => name.startsWith('.') || HIDDEN.has(name);
 
+// Leave room for temporary prefixes and collision suffixes; never split UTF-8.
+function fitName(name, maxBytes, suffix = '') {
+  const ext = path.extname(name);
+  const extension = Buffer.byteLength(ext) < 64 ? ext : '';
+  const base = extension ? name.slice(0, -extension.length) : name;
+  const budget = maxBytes - Buffer.byteLength(suffix + extension);
+  let stem = '', used = 0;
+  for (const character of base) {
+    const size = Buffer.byteLength(character);
+    if (used + size > budget) break;
+    stem += character; used += size;
+  }
+  return stem + suffix + extension;
+}
+
 async function resolveFile(root, relative = '') {
   if (typeof relative !== 'string' || relative.includes('\0') || path.isAbsolute(relative)
       || relative.split(/[\\/]/).some((part) => part === '..' || hidden(part))) {
@@ -39,7 +54,7 @@ function handleError(res, error) {
 }
 
 /** 一覧と開く操作は既存の /api 認証を使用。メディアにはファイル限定の署名 URL を発行する。 */
-export function installFiles(app, getPane, { secret = randomBytes(32), now = Date.now } = {}) {
+export function installFiles(app, getPane, { secret = randomBytes(32), now = Date.now, pasteDir = path.join(os.tmpdir(), 'tmux-web-paste') } = {}) {
   const sign = (payload) => createHmac('sha256', secret).update(payload).digest('base64url');
   const issue = (data) => {
     const payload = Buffer.from(JSON.stringify({ ...data, expires: now() + 60 * 60 * 1000 })).toString('base64url');
@@ -101,13 +116,12 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
       if (req.query.root !== root) throw fail(409, '作業フォルダが変わりました。一覧を開き直してください');
       const directory = await resolveFile(root, req.query.path || '');
       const name = req.query.name;
-      if (typeof name !== 'string' || !name || name.length > 240 || /[/\\\x00-\x1f\x7f]/.test(name) || hidden(name)) throw fail(400, '通常のファイル名を指定してください');
+      if (typeof name !== 'string' || !name || /[/\\\x00-\x1f\x7f]/.test(name) || hidden(name)) throw fail(400, '通常のファイル名を指定してください');
       if (!Buffer.isBuffer(req.body)) throw fail(400, 'ファイルがありません');
       if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'アップロード先はフォルダを選んでください');
       let index = 1;
       while (true) {
-        const ext = path.extname(name);
-        const saved = index === 1 ? name : `${path.basename(name, ext)}-${index}${ext}`;
+        const saved = fitName(name, 240, index === 1 ? '' : `-${index}`);
         try {
           await fsp.writeFile(path.join(directory, saved), req.body, { flag: 'wx' });
           res.json({ name: saved }); return;
@@ -119,9 +133,10 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
   app.post('/api/paste-image', express.raw({ type: 'image/*', limit: '20mb' }), async (req, res) => {
     try {
       if (!Buffer.isBuffer(req.body) || !req.body.length) throw fail(400, '画像がありません');
-      const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }[req.headers['content-type']?.split(';')[0]];
+      const mime = req.headers['content-type']?.split(';')[0].trim().toLowerCase();
+      const ext = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }[mime];
       if (!ext) throw fail(415, 'PNG / JPEG / GIF / WebP の画像だけ貼り付けできます');
-      const dir = path.join(os.tmpdir(), 'tmux-web-paste');
+      const dir = pasteDir;
       await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
       const file = path.join(dir, `paste-${Date.now()}-${randomBytes(3).toString('hex')}${ext}`);
       await fsp.writeFile(file, req.body, { flag: 'wx', mode: 0o600 });
@@ -132,10 +147,10 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
   // スマホなどから添付したファイルを一時フォルダに保存し、端末に貼れる絶対パスを返す
   app.post('/api/paste-file', express.raw({ type: '*/*', limit: '50mb' }), async (req, res) => {
     try {
-      if (!Buffer.isBuffer(req.body) || !req.body.length) throw fail(400, 'ファイルがありません');
+      if (!Buffer.isBuffer(req.body)) throw fail(400, 'ファイルがありません');
       const raw = path.basename(String(req.query.name || 'file')).replace(/[\x00-\x1f\x7f/\\]/g, '_').replace(/^\.+/, '');
-      const name = (raw || 'file').slice(-120);
-      const dir = path.join(os.tmpdir(), 'tmux-web-paste');
+      const name = fitName(raw || 'file', 200);
+      const dir = pasteDir;
       await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
       const file = path.join(dir, `${Date.now()}-${randomBytes(3).toString('hex')}-${name}`);
       await fsp.writeFile(file, req.body, { flag: 'wx', mode: 0o600 });
@@ -174,7 +189,7 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
       const file = await resolveFile(data.root, data.path);
       if (data.archive) {
         if (!(await fsp.stat(file)).isDirectory()) throw fail(400, 'フォルダを選んでください');
-        const child = spawn('tar', ['-czf', '-', '--exclude=.*', '--exclude=node_modules', '--exclude=__pycache__', '-C', path.dirname(file), '--', path.basename(file)], { stdio: ['ignore', 'pipe', 'pipe'] });
+        const child = spawn('tar', ['-czf', '-', '--exclude=*/.*', '--exclude=*/node_modules', '--exclude=*/__pycache__', '-C', path.dirname(file), '--', path.basename(file)], { stdio: ['ignore', 'pipe', 'pipe'] });
         res.set({ 'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(file))}.tar.gz`, 'Cache-Control': 'private, no-store' });
         child.on('error', error => handleError(res, error));
         child.stderr.resume();
