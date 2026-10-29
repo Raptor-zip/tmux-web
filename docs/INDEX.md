@@ -29,3 +29,8 @@
 - 2026-10-30 01:47:26 [2026-10-30-17 switcher-live-focus-cause](logs/2026-10-30-17-switcher-live-focus-cause.md) — phase: ウィンドウ検索 / iter: 9 / status: partial
 - 2026-10-30 01:51:09 [2026-10-30-18 switcher-webkit-tab-check](logs/2026-10-30-18-switcher-webkit-tab-check.md) — phase: ウィンドウ検索 / iter: 9 / status: partial
 - 2026-10-30 01:54:17 [2026-10-30-19 switcher-input-verified](logs/2026-10-30-19-switcher-input-verified.md) — phase: ウィンドウ検索 / iter: 9 / status: success
+- 2026-10-30 01:57:31 [2026-10-30-20 terminal-window-target-start](logs/2026-10-30-20-terminal-window-target-start.md) — phase: 入力先検証 / iter: 10 / status: partial
+- 2026-10-30 01:58:38 [2026-10-30-21 terminal-window-target-cause](logs/2026-10-30-21-terminal-window-target-cause.md) — phase: 入力先検証 / iter: 10 / status: partial
+- 2026-10-30 02:02:35 [2026-10-30-22 terminal-window-identity-cause](logs/2026-10-30-22-terminal-window-identity-cause.md) — phase: 入力先検証 / iter: 10 / status: partial
+- 2026-10-30 02:07:39 [2026-10-30-23 terminal-window-target-verified](logs/2026-10-30-23-terminal-window-target-verified.md) — phase: 入力先検証 / iter: 10 / status: success
+- 2026-10-30 02:15:13 [2026-10-30-24 terminal-target-diff-check](logs/2026-10-30-24-terminal-target-diff-check.md) — phase: 入力先検証 / iter: 10 / status: success

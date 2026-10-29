@@ -127,6 +127,23 @@ test('a failed asynchronous window switch closes only its connection without rep
   assert.equal(f.disposed(), 1);
 });
 
+test('invalid window identities stop following input both before and after attachment', async () => {
+  for (const windowId of [null, '', '@-1', 'spark~@1', '@' + '1'.repeat(21), 1]) {
+    for (const early of [true, false]) {
+      const f = fixture();
+      if (!early) { f.ready(); await f.connection; }
+      f.send({ type: 'selectWindow', index: 0, windowId });
+      f.binary(Buffer.from('must-not-reach-the-old-window'));
+      if (early) { f.ready(); await f.connection; }
+      await setImmediate();
+      assert.equal(f.ws.closeCode, 1008);
+      assert.deepEqual(f.writes, []);
+      assert.deepEqual(f.selections, []);
+      assert.equal(f.disposed(), 1);
+    }
+  }
+});
+
 test('PTY write and disposal failures never escape as unhandled rejections', async () => {
   const f = fixture({ write() { throw new Error('PTY already closed'); }, dispose: async () => { throw new Error('cleanup failed'); } });
   f.ready(); await f.connection;

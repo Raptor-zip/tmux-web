@@ -39,6 +39,9 @@ export async function createAttachment({
   const sessions = await listSessions();
   const target = sessions.find((s) => s.id === sessionId || s.name === sessionId);
   if (!target) throw new Error(`session not found: ${sessionId}`);
+  if (windowId && !(await listWindows()).some(win => win.id === windowId && win.sessionId === target.id)) {
+    throw new Error(`window not found in session: ${windowId}`);
+  }
 
   // A tmux reload or plugin can replace the wheel bindings while the server
   // stays alive. Reapply our scrolling policy on every browser attachment.
@@ -93,12 +96,7 @@ export async function createAttachment({
     }
 
     if (windowId) {
-      const windows = await listWindows();
-      const win = windows.find((w) => w.id === windowId);
-      if (win) {
-        const sel = mirrorName ? `${mirrorName}:${win.index}` : windowId;
-        await tmux(['select-window', '-t', sel], { allowFailure: true });
-      }
+      await tmux(['select-window', '-t', `${mirrorName ?? target.id}:${windowId}`]);
     }
 
     child = pty.spawn(TMUX_BIN, [...socketArgs(), 'attach-session', '-t', attachTarget], {
@@ -124,11 +122,9 @@ export async function createAttachment({
     pty: child,
     mirrorName,
     attachTarget,
-    /** ミラーセッション側でウィンドウを切り替える（端末側の表示は変えない） */
-    selectWindowIndex: (index) =>
-      tmux(['select-window', '-t', `${mirrorName ?? target.name}:${index}`], {
-        allowFailure: true,
-      }),
+    /** IDがある場合は再利用された番号へ戻さない。失敗は入力キューへ伝える。 */
+    selectWindowIndex: (index, requestedWindowId) =>
+      tmux(['select-window', '-t', `${mirrorName ?? target.id}:${requestedWindowId ?? index}`]),
     dispose,
   };
 }

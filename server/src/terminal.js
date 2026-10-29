@@ -5,6 +5,7 @@ const MAX_PENDING_BYTES = 1024 * 1024;
 const MAX_PENDING_MESSAGES = 1024;
 const MAX_COLS = 2000;
 const MAX_ROWS = 1000;
+const INVALID_SELECTION = Symbol('invalid selection');
 const dimension = (value, fallback, max) => Number.isSafeInteger(value) && value >= 2 ? Math.min(value, max) : fallback;
 
 function parseMessage(value) {
@@ -14,8 +15,10 @@ function parseMessage(value) {
       && Number.isSafeInteger(value.rows) && value.rows >= 2) {
     return { type: 'resize', cols: Math.min(value.cols, MAX_COLS), rows: Math.min(value.rows, MAX_ROWS) };
   }
-  if (value.type === 'selectWindow' && Number.isSafeInteger(value.index) && value.index >= 0) {
-    return { type: 'selectWindow', index: value.index };
+  if (value.type === 'selectWindow') {
+    if (!Number.isSafeInteger(value.index) || value.index < 0
+        || (value.windowId !== undefined && (typeof value.windowId !== 'string' || !/^@[0-9]{1,20}$/.test(value.windowId)))) return INVALID_SELECTION;
+    return { type: 'selectWindow', index: value.index, windowId: value.windowId };
   }
   return null;
 }
@@ -72,7 +75,7 @@ export async function connectTerminal(ws, req, broadcastStateSoon, attach = crea
         pendingBytes -= bytes;
         if (message.type === 'input') attachment.pty.write(message.data);
         else if (message.type === 'resize') attachment.pty.resize(message.cols, message.rows);
-        else await attachment.selectWindowIndex(message.index);
+        else await attachment.selectWindowIndex(message.index, message.windowId);
       }
     } catch {
       fail('端末の操作に失敗しました。再接続してください。');
@@ -92,7 +95,9 @@ export async function connectTerminal(ws, req, broadcastStateSoon, attach = crea
   ws.on('message', (raw, isBinary) => {
     if (closed) return;
     try {
-      enqueue(parseMessage(isBinary ? { type: 'input', data: raw.toString('utf8') } : JSON.parse(raw.toString())));
+      const message = parseMessage(isBinary ? { type: 'input', data: raw.toString('utf8') } : JSON.parse(raw.toString()));
+      if (message === INVALID_SELECTION) fail('切り替え先が無効です。再接続してください。', 1008);
+      else enqueue(message);
     } catch { /* Ignore malformed frames before they enter the queue. */ }
   });
 
