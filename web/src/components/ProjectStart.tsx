@@ -19,6 +19,8 @@ export function ProjectStart({ home, deviceId = 'local', deviceName, initialMode
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
+  const initialInput = useRef<HTMLInputElement>(null);
+  useEffect(() => { initialInput.current?.focus(); }, [mode]);
   return <Modal title={`${deviceName || 'このPC'} · プロジェクトを開く`} onClose={onClose} busy={busy}>
     <form className="project-form" onSubmit={async e => {
       e.preventDefault(); if (inFlight.current) return;
@@ -33,10 +35,10 @@ export function ProjectStart({ home, deviceId = 'local', deviceName, initialMode
       </div>
       <fieldset disabled={busy}>
         {mode === 'new' ? <>
-          <label className="project-field">プロジェクト名<input autoFocus required maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="my-project" autoComplete="off" spellCheck={false} /></label>
+          <label className="project-field">プロジェクト名<input ref={initialInput} required maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="my-project" autoComplete="off" spellCheck={false} /></label>
           <div className="project-location"><p className="field-hint project-destination" title={parent.replace(/\/$/, '') + '/' + name.trim()}>{tildePath(parent.replace(/\/$/, '') + '/' + (name.trim() || 'my-project'), home)}</p><button type="button" aria-expanded={showLocation} onClick={() => setShowLocation(v => !v)}>保存先を変更</button></div>
           {showLocation && <label className="project-field">保存先<input required value={parent} onChange={e => setParent(e.target.value)} spellCheck={false} /></label>}
-        </> : <label className="project-field">フォルダーのパス<input autoFocus required value={dir} onChange={e => setDir(e.target.value)} placeholder="~/my-project" autoComplete="off" spellCheck={false} /></label>}
+        </> : <label className="project-field">フォルダーのパス<input ref={initialInput} required value={dir} onChange={e => setDir(e.target.value)} placeholder="~/my-project" autoComplete="off" spellCheck={false} /></label>}
         <div className="project-field-row">
           {mode === 'new' && <label className="project-field">テンプレート<select aria-label="テンプレート" value={template} onChange={e => setTemplate(e.target.value as typeof template)}><option value="none">なし</option><option value="node">Node.js</option><option value="python">Python</option></select></label>}
           <label className="project-field">起動するツール<select aria-label="起動するツール" value={agent} onChange={e => setAgent(e.target.value as typeof agent)}><option value="claude">Claude</option><option value="codex">Codex</option><option value="shell">ターミナル</option></select></label>
