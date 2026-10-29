@@ -24,3 +24,8 @@
 - 2026-10-30 01:35:01 [2026-10-30-12 attachment-cleanup-start](logs/2026-10-30-12-attachment-cleanup-start.md) — phase: 接続後片付け / iter: 8 / status: partial
 - 2026-10-30 01:36:55 [2026-10-30-13 attachment-cwd-and-allocation-cause](logs/2026-10-30-13-attachment-cwd-and-allocation-cause.md) — phase: 接続後片付け / iter: 8 / status: partial
 - 2026-10-30 01:38:43 [2026-10-30-14 attachment-cleanup-verified](logs/2026-10-30-14-attachment-cleanup-verified.md) — phase: 接続後片付け / iter: 8 / status: success
+- 2026-10-30 01:40:41 [2026-10-30-15 switcher-input-start](logs/2026-10-30-15-switcher-input-start.md) — phase: ウィンドウ検索 / iter: 9 / status: partial
+- 2026-10-30 01:43:33 [2026-10-30-16 switcher-composition-cause](logs/2026-10-30-16-switcher-composition-cause.md) — phase: ウィンドウ検索 / iter: 9 / status: partial
+- 2026-10-30 01:47:26 [2026-10-30-17 switcher-live-focus-cause](logs/2026-10-30-17-switcher-live-focus-cause.md) — phase: ウィンドウ検索 / iter: 9 / status: partial
+- 2026-10-30 01:51:09 [2026-10-30-18 switcher-webkit-tab-check](logs/2026-10-30-18-switcher-webkit-tab-check.md) — phase: ウィンドウ検索 / iter: 9 / status: partial
+- 2026-10-30 01:54:17 [2026-10-30-19 switcher-input-verified](logs/2026-10-30-19-switcher-input-verified.md) — phase: ウィンドウ検索 / iter: 9 / status: success

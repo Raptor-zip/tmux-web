@@ -1067,6 +1067,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         view: views.get(win.id)!,
         open: openIds.has(win.id),
         session: win.sessionName,
+        deviceName: devices.find(device => device.id === deviceOf(win.id))?.name || 'このPC',
       }))
       .filter((it) => it.view)
       .sort((a, b) => {
@@ -1077,7 +1078,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         const sb = STATUS_ORDER.indexOf(b.view.status.kind);
         return sa - sb || a.view.project.localeCompare(b.view.project);
       });
-  }, [windows, views, tabs, recent]);
+  }, [windows, views, tabs, recent, devices]);
 
   /**
    * ブラウザ側のショートカット。

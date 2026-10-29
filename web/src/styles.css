@@ -1627,8 +1627,12 @@ input {
 /* --------------------------------------------------- 切り替えパレット */
 
 .switcher {
-  width: min(680px, 100%);
+  width: min(680px, calc(100vw - max(24px, var(--safe-left)) - max(24px, var(--safe-right))));
+  max-width: none;
   max-height: 70dvh;
+  margin: auto;
+  padding: 0;
+  color: var(--fg);
   display: flex;
   flex-direction: column;
   background: var(--bg-1);
@@ -1638,6 +1642,8 @@ input {
   overflow: hidden;
   animation: dialog-in 0.12s ease;
 }
+.switcher:not([open]) { display: none; }
+.switcher::backdrop { background: rgba(0, 0, 0, 0.6); }
 .sw-input {
   flex: none;
   background: var(--bg);
