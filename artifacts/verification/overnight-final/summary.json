@@ -1,0 +1,341 @@
+{
+  "deadline": "2026-10-30T04:00:00+09:00",
+  "preparedAt": "2026-10-30T03:54:30.061082+09:00",
+  "finishedAt": "2026-10-30T04:00:52.072394+09:00",
+  "sourceCommit": "0bb42f1efbbc0269aeabef77ab366a5bf3261a82",
+  "automatedTests": {
+    "server": {
+      "passed": 72,
+      "failed": 0,
+      "sourceUnchangedSince": "32ce8f7"
+    },
+    "web": {
+      "passed": 40,
+      "failed": 0,
+      "sourceCommit": "0bb42f1"
+    }
+  },
+  "typescript": "passed",
+  "productionBuild": "passed",
+  "remainingBuildWarnings": [
+    "Vite entry chunk exceeds 500 kB before HTTP compression"
+  ],
+  "npmAudit": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "httpsDelivery": {
+    "httpsCertificateVerified": true,
+    "indexMatchesBuild": true,
+    "assets": [
+      {
+        "asset": "index-ovMmF_z2.js",
+        "sourceBytes": 698593,
+        "wireBodyBytes": 190722,
+        "encoding": "br",
+        "sourceExact": true,
+        "conditionalHTTP": 304
+      },
+      {
+        "asset": "index-uNyYJHbe.css",
+        "sourceBytes": 162091,
+        "wireBodyBytes": 45847,
+        "encoding": "br",
+        "sourceExact": true,
+        "conditionalHTTP": 304
+      }
+    ]
+  },
+  "latestJsCss": {
+    "sourceBytes": 860684,
+    "brotliBodyBytes": 236569,
+    "reductionPercent": 72.51
+  },
+  "compactViewports": {
+    "width": 320,
+    "height": 568,
+    "syntheticData": true,
+    "realOperatingSystemImeTested": false,
+    "scenes": {
+      "chromium": [
+        {
+          "screen": "mobile-panels",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 128
+            }
+          ],
+          "dialogs": [],
+          "errors": []
+        },
+        {
+          "screen": "switcher-mobile",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "ウィンドウを切り替える",
+              "width": 272,
+              "clientWidth": 270,
+              "scrollWidth": 270,
+              "clientHeight": 452,
+              "scrollHeight": 452
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "devices-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "デバイス接続",
+              "width": 288,
+              "clientWidth": 286,
+              "scrollWidth": 286,
+              "clientHeight": 546,
+              "scrollHeight": 546
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "project-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "ThinkPad · プロジェクトを開く",
+              "width": 288,
+              "clientWidth": 286,
+              "scrollWidth": 286,
+              "clientHeight": 546,
+              "scrollHeight": 546
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "desktop-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "リモートデスクトップ",
+              "width": 320,
+              "clientWidth": 318,
+              "scrollWidth": 318,
+              "clientHeight": 566,
+              "scrollHeight": 566
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "files-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "ファイル一覧とプレビュー",
+              "width": 320,
+              "clientWidth": 320,
+              "scrollWidth": 320,
+              "clientHeight": 568,
+              "scrollHeight": 568
+            }
+          ],
+          "errors": []
+        }
+      ],
+      "webkit": [
+        {
+          "screen": "mobile-panels",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 128
+            }
+          ],
+          "dialogs": [],
+          "errors": []
+        },
+        {
+          "screen": "switcher-mobile",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "ウィンドウを切り替える",
+              "width": 272
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "devices-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "デバイス接続",
+              "width": 288
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "project-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "ThinkPad · プロジェクトを開く",
+              "width": 288
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "desktop-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "リモートデスクトップ",
+              "width": 320
+            }
+          ],
+          "errors": []
+        },
+        {
+          "screen": "files-modal",
+          "width": 320,
+          "height": 568,
+          "overflow": false,
+          "visiblePanels": [
+            {
+              "width": 320,
+              "headerWidth": 178
+            }
+          ],
+          "dialogs": [
+            {
+              "label": "ファイル一覧とプレビュー",
+              "width": 320
+            }
+          ],
+          "errors": []
+        }
+      ]
+    }
+  },
+  "manualKeyboardChecks": {
+    "engines": [
+      "chromium",
+      "webkit"
+    ],
+    "projectInitialFocusAndModeSwitch": "passed",
+    "inlineRenameCompositionEnterEscape": "passed",
+    "dialogRenameCompositionEnter": "passed",
+    "ordinaryRenameEnterExactlyOnce": "passed"
+  },
+  "finalServiceState": {
+    "MainPID": "2160934",
+    "ActiveState": "active",
+    "SubState": "running"
+  },
+  "temporaryDevPortsClear": true,
+  "notes": [
+    "Compact Chromium capture preceded the final IME-only change; WebKit capture used the final build.",
+    "Real smartphone keyboard and Core Web Vitals were not measured.",
+    "npm ls exits successfully; native installation leaves four ignored gyp Makefiles in an otherwise metadata-free @homebridge/node-addon-api directory."
+  ],
+  "serviceObservation": {
+    "startedAt": "2026-10-30T03:55:28.271886+09:00",
+    "finishedAt": "2026-10-30T04:00:00.004149+09:00",
+    "newJournalLines": 0,
+    "errorPatternMatches": 0
+  },
+  "liveSmoke": {
+    "anonymousAuthHTTP": 401,
+    "authenticatedLiveAPI": true,
+    "liveEventFrames": 2,
+    "refresh": true
+  }
+}
