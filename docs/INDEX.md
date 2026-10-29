@@ -9,3 +9,5 @@
 - 2026-10-29 23:41:21 [2026-10-29-05 terminal-fixture-ready-cause](logs/2026-10-29-05-terminal-fixture-ready-cause.md) — phase: スクロール検証 / iter: 3 / status: partial
 - 2026-10-29 23:44:44 [2026-10-29-06 tablet-touch-verified](logs/2026-10-29-06-tablet-touch-verified.md) — phase: タッチ操作 / iter: 2 / status: success
 - 2026-10-29 23:44:44 [2026-10-29-07 terminal-readiness-verified](logs/2026-10-29-07-terminal-readiness-verified.md) — phase: スクロール検証 / iter: 3 / status: success
+- 2026-10-29 23:47:25 [2026-10-29-08 state-reconnect-start](logs/2026-10-29-08-state-reconnect-start.md) — phase: 接続の改善 / iter: 4 / status: partial
+- 2026-10-30 00:01:19 [2026-10-30-01 state-reconnect-verified](logs/2026-10-30-01-state-reconnect-verified.md) — phase: 接続の改善 / iter: 4 / status: success
