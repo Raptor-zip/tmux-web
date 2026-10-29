@@ -65,12 +65,21 @@ export function TabStrip({
   // 前面のタブが隠れていたら見える位置まで送る（キーボードで切り替えたときに要る）
   useEffect(() => {
     const list = listRef.current;
-    const el = list?.querySelector<HTMLElement>('.tab.active');
-    if (!list || !el) return;
-    const box = list.getBoundingClientRect();
-    const tabBox = el.getBoundingClientRect();
-    if (tabBox.left < box.left) list.scrollLeft -= box.left - tabBox.left;
-    else if (tabBox.right > box.right) list.scrollLeft += tabBox.right - box.right;
+    if (!list) return;
+    const reveal = () => {
+      const el = list.querySelector<HTMLElement>('.tab.active');
+      if (!el) return;
+      const box = list.getBoundingClientRect();
+      const tabBox = el.getBoundingClientRect();
+      // An oversized tab cannot fit both edges. Keep its name visible first;
+      // the user can still swipe horizontally to its trailing controls.
+      if (tabBox.width > box.width || tabBox.left < box.left) list.scrollLeft += tabBox.left - box.left;
+      else if (tabBox.right > box.right) list.scrollLeft += tabBox.right - box.right;
+    };
+    reveal();
+    const observer = new ResizeObserver(reveal);
+    observer.observe(list);
+    return () => observer.disconnect();
   }, [leaf.activeId, leaf.tabs.length]);
 
   /** 押してから 6px 動いたらドラッグ開始。押しただけで動き出すと切り替えられない */
