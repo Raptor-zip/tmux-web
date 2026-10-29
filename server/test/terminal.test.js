@@ -140,11 +140,13 @@ process.stdin.on('data', data => {
   fs.appendFileSync(${JSON.stringify(normalReport)}, data);
   if (data.includes(3)) process.exit();
 });
-process.stdout.write('normal-agent-ready');
+process.stdout.write('normal-agent-ready-${name}');
 `);
       client.write(`'${executable}' '${normalApp}'\r`);
       await waitFor(() => run(['display-message', '-p', '#{pane_current_command}']) === name);
-      await waitFor(() => run(['capture-pane', '-p']).includes('normal-agent-ready'));
+      // The previous agent's marker remains visible after it exits. Wait for
+      // this process to enter raw mode and install its input listener.
+      await waitFor(() => run(['capture-pane', '-p']).includes(`normal-agent-ready-${name}`));
       assert.equal(run(['display-message', '-p', '#{alternate_on}']), '0');
       client.write(wheelUp);
       if (name === 'claude') {
