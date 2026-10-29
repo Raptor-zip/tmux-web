@@ -9,6 +9,7 @@ import '@xterm/xterm/css/xterm.css';
 import { uploadPasteImage, wsUrl } from '../api';
 import { quotePath } from '../attachments';
 import { unscoped } from '../devices';
+import { TerminalSelection } from '../terminal-selection';
 
 // Tokyo Night (night), with soft bright colors to avoid fluorescent highlights.
 // Palette: https://github.com/folke/tokyonight.nvim
@@ -36,6 +37,12 @@ export interface TerminalHandle {
   clearSelection(): void;
 }
 
+export interface TerminalStatus {
+  connected: boolean;
+  message?: string;
+  selecting?: boolean;
+}
+
 interface Props {
   retryToken?: number;
   sessionId: string | null;
@@ -48,7 +55,7 @@ interface Props {
   lineHeight: number;
   /** 端末の上で右クリックされた。アプリ側のメニューを出す */
   onContextMenu?: (x: number, y: number) => void;
-  onStatus?: (s: { connected: boolean; message?: string }) => void;
+  onStatus?: (s: TerminalStatus) => void;
   /** クリップボードに入ったことを知らせる（選択したのに入っていないと分からないため） */
   onCopied?: (text: string) => void;
   /** 画像の貼り付けに失敗した等、ユーザーに知らせたい内容 */
@@ -137,11 +144,14 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   sessionIdRef.current = sessionId;
   const windowIdRef = useRef(windowId);
   windowIdRef.current = windowId;
+  const selectionRef = useRef<TerminalSelection | null>(null);
+  const requestSelectionRef = useRef<(index: number, windowId: string) => void>(() => {});
+  const canPasteRef = useRef<() => boolean>(() => false);
+  canPasteRef.current = () => readyRef.current && !!selectionRef.current?.canInput(windowIdRef.current ? unscoped(windowIdRef.current) : null);
 
   useImperativeHandle(ref, () => ({
     selectWindow(index: number, windowId: string) {
-      wsRef.current?.readyState === WebSocket.OPEN &&
-        wsRef.current.send(JSON.stringify({ type: 'selectWindow', index, windowId: unscoped(windowId) }));
+      requestSelectionRef.current(index, windowId);
     },
     send(data: string) {
       sendInputRef.current(data);
@@ -149,7 +159,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     },
     paste(data, target) {
       if (target && (sessionIdRef.current !== target.sessionId || windowIdRef.current !== target.windowId)) return false;
-      if (!readyRef.current || wsRef.current?.readyState !== WebSocket.OPEN || !termRef.current) return false;
+      if (!canPasteRef.current() || wsRef.current?.readyState !== WebSocket.OPEN || !termRef.current) return false;
       termRef.current.paste(data);
       return true;
     },
@@ -490,13 +500,13 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       const session = sessionIdRef.current;
       const window = windowIdRef.current;
       const socket = wsRef.current;
-      if (!session || !readyRef.current || socket?.readyState !== WebSocket.OPEN) {
+      if (!session || !canPasteRef.current() || socket?.readyState !== WebSocket.OPEN) {
         onNoticeRef.current?.('端末に接続してから画像を貼り付けてください。');
         return;
       }
       uploadPasteImage(session, image)
         .then((file) => {
-          if (!readyRef.current || sessionIdRef.current !== session || windowIdRef.current !== window || wsRef.current !== socket || socket.readyState !== WebSocket.OPEN) {
+          if (!canPasteRef.current() || sessionIdRef.current !== session || windowIdRef.current !== window || wsRef.current !== socket || socket.readyState !== WebSocket.OPEN) {
             onNoticeRef.current?.(`画像を保存しました。元の端末でこのパスを貼り付けてください：${quotePath(file)}`);
             return;
           }
@@ -586,6 +596,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     const start = () => {
       if (disposed) return;
+      clearTimeout(readyTimeout);
+      readyTimeout = undefined;
       readyRef.current = false;
       // 張り直しのたびに tmux が画面全体を描き直すので、二重描画を避けて消しておく
       term.reset();
@@ -611,13 +623,41 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       wsRef.current = ws;
       const socket = ws;
       const current = () => !disposed && wsRef.current === socket;
-      readyTimeout = setTimeout(() => { if (current() && !readyRef.current) socket.close(); }, 10000);
+      const selection = new TerminalSelection();
+      selectionRef.current = selection;
+      const armTimeout = () => {
+        if (readyTimeout !== undefined) return;
+        readyTimeout = setTimeout(() => {
+          if (!current()) return;
+          readyTimeout = undefined;
+          if (!readyRef.current) socket.close();
+        }, 10000);
+      };
+      const publishSelection = () => {
+        readyRef.current = selection.canInput(windowIdRef.current ? unscoped(windowIdRef.current) : null);
+        if (readyRef.current) {
+          clearTimeout(readyTimeout); readyTimeout = undefined;
+          attempt = 0;
+          onStatus?.({ connected: true });
+        } else {
+          armTimeout();
+          const selecting = selection.phase !== 'connecting';
+          onStatus?.({ connected: false, selecting, message: selecting ? '端末を切り替えています…' : '接続中…' });
+        }
+      };
+      requestSelectionRef.current = (index, windowId) => {
+        if (!current() || socket.readyState !== WebSocket.OPEN) return;
+        const message = selection.request(index, unscoped(windowId));
+        publishSelection();
+        try { socket.send(JSON.stringify(message)); } catch { socket.close(); }
+      };
+      armTimeout();
 
       ws.onopen = () => {
         if (!current()) return;
         // 接続直後に、UI が選んでいるウィンドウへ合わせる
         if (windowIndexRef.current != null && windowIdRef.current) {
-          socket.send(JSON.stringify({ type: 'selectWindow', index: windowIndexRef.current, windowId: unscoped(windowIdRef.current) }));
+          requestSelectionRef.current(windowIndexRef.current, windowIdRef.current);
         }
       };
       ws.onmessage = (ev) => {
@@ -629,10 +669,10 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         try {
           const msg = JSON.parse(ev.data);
           if (msg.type === 'ready') {
-            clearTimeout(readyTimeout);
-            readyRef.current = true;
-            attempt = 0;
-            onStatus?.({ connected: true });
+            selection.receiveReady(msg.selectionAck === true, typeof msg.windowId === 'string' ? msg.windowId : null);
+            publishSelection();
+          } else if (msg.type === 'selectedWindow') {
+            if (selection.confirm(msg.requestId, msg.windowId)) publishSelection();
           } else if (msg.type === 'error') {
             readyRef.current = false;
             onStatus?.({ connected: false, message: msg.message });
@@ -648,7 +688,9 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       ws.onclose = event => {
         if (!current()) return;
         clearTimeout(readyTimeout);
+        readyTimeout = undefined;
         readyRef.current = false;
+        selectionRef.current = null;
         if (event.code === 1009) onNoticeRef.current?.('端末への入力が大きすぎます。少量ずつ貼り付け直してください。');
         scheduleRetry();
       };
@@ -681,6 +723,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       ws?.close();
       wsRef.current = null;
       readyRef.current = false;
+      selectionRef.current = null;
+      requestSelectionRef.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, mode, showStatusBar, retryToken, pageVisible]);
@@ -688,10 +732,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   // 同じセッション内のウィンドウ切り替えは、再接続せずミラー側の表示だけ変える
   useEffect(() => {
     if (windowIndex == null || !windowId) return;
-    const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'selectWindow', index: windowIndex, windowId: unscoped(windowId) }));
-    }
+    requestSelectionRef.current(windowIndex, windowId);
   }, [windowIndex, windowId]);
 
   return (

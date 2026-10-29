@@ -98,6 +98,7 @@
 .tile-body { position:relative; }
 .panel-connection { position:absolute; z-index:2; top:12px; left:12px; right:12px; display:flex; align-items:flex-start; flex-wrap:wrap; gap:8px; background:var(--bg-1); border:1px solid var(--border-strong); border-left:3px solid var(--yellow); border-radius: 0; padding:12px; box-shadow:0 4px 16px #0005; }
 .panel-connection strong { width:100%; font-size:12px; }
+.panel-connection.selecting { border-left-color:var(--accent); }
 .panel-connection span { flex:1; min-width:100px; font-size:12px; color:var(--fg-dim); }
 .panel-connection button { background:var(--bg-2); color:var(--fg); border:1px solid var(--border-strong); border-radius: 0; padding:6px 10px; cursor:pointer; }
 .desktop-more { position:relative; }

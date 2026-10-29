@@ -14,7 +14,7 @@ import {
   type TabRef,
 } from '../layout';
 import { TabStrip } from './TabStrip';
-import { TerminalView, type TerminalHandle } from './Terminal';
+import { TerminalView, type TerminalHandle, type TerminalStatus } from './Terminal';
 import type { Session, TmuxWindow } from '../types';
 import type { WindowView } from '../windows';
 
@@ -41,7 +41,7 @@ interface Props {
   active: boolean;
   devices: Device[];
   tree: LayoutNode;
-  statuses: Record<string, {connected:boolean;message?:string}>;
+  statuses: Record<string, TerminalStatus>;
   focusMode: boolean;
   onToggleFocus(): void;
   focusedId: string | null;
@@ -69,7 +69,7 @@ interface Props {
   onStartDrag(payload: DragPayload): void;
   onDragEnd(): void;
   onRatio(splitId: string, ratio: number): void;
-  onStatus(leafId: string, status: { connected: boolean; message?: string }): void;
+  onStatus(leafId: string, status: TerminalStatus): void;
   /** 端末で選択した内容がクリップボードに入った */
   onCopied(text: string): void;
   onNotice(text: string): void;
@@ -328,7 +328,7 @@ export function SplitView({
                   onNotice={onNotice}
                 />
               ) : null}
-              {status && !status.connected && <div className="panel-connection" role="status"><strong>{device?.name || '端末'} · 未接続</strong><span>{status.message || '接続を確認しています…'}</span><button onClick={()=>setRetries(v=>({...v,[leaf.id]:(v[leaf.id]||0)+1}))}>再接続</button></div>}
+              {status && !status.connected && <div className={`panel-connection${status.selecting ? ' selecting' : ''}`} role="status"><strong>{device?.name || '端末'} · {status.selecting ? '切り替え中' : '未接続'}</strong><span>{status.message || '接続を確認しています…'}</span>{!status.selecting && <button onClick={()=>setRetries(v=>({...v,[leaf.id]:(v[leaf.id]||0)+1}))}>再接続</button>}</div>}
             </div>
           </div>
         );

@@ -17,8 +17,9 @@ function parseMessage(value) {
   }
   if (value.type === 'selectWindow') {
     if (!Number.isSafeInteger(value.index) || value.index < 0
-        || (value.windowId !== undefined && (typeof value.windowId !== 'string' || !/^@[0-9]{1,20}$/.test(value.windowId)))) return INVALID_SELECTION;
-    return { type: 'selectWindow', index: value.index, windowId: value.windowId };
+        || (value.windowId !== undefined && (typeof value.windowId !== 'string' || !/^@[0-9]{1,20}$/.test(value.windowId)))
+        || (value.requestId !== undefined && (!Number.isSafeInteger(value.requestId) || value.requestId < 1))) return INVALID_SELECTION;
+    return { type: 'selectWindow', index: value.index, windowId: value.windowId, requestId: value.requestId };
   }
   return null;
 }
@@ -75,7 +76,16 @@ export async function connectTerminal(ws, req, broadcastStateSoon, attach = crea
         pendingBytes -= bytes;
         if (message.type === 'input') attachment.pty.write(message.data);
         else if (message.type === 'resize') attachment.pty.resize(message.cols, message.rows);
-        else await attachment.selectWindowIndex(message.index, message.windowId);
+        else {
+          await attachment.selectWindowIndex(message.index, message.windowId);
+          if (!closed && ws.readyState === ws.OPEN && message.requestId !== undefined) {
+            if (ws.bufferedAmount > TERMINAL_MAX_PAYLOAD) {
+              fail('端末の配信が追いつきません。再接続してください。', 1013);
+              break;
+            }
+            ws.send(JSON.stringify({ type: 'selectedWindow', requestId: message.requestId, windowId: message.windowId }));
+          }
+        }
       }
     } catch {
       fail('端末の操作に失敗しました。再接続してください。');
@@ -117,7 +127,7 @@ export async function connectTerminal(ws, req, broadcastStateSoon, attach = crea
         // tmux must initialize its terminal before queued keystrokes are safe.
         if (!ready) {
           ready = true;
-          ws.send(JSON.stringify({ type: 'ready', attachTarget: attachment.attachTarget, mirrorName: attachment.mirrorName, mode }));
+          ws.send(JSON.stringify({ type: 'ready', attachTarget: attachment.attachTarget, mirrorName: attachment.mirrorName, mode, selectionAck: true, windowId }));
         }
         ws.send(Buffer.from(data, 'utf8'));
         void drain();
