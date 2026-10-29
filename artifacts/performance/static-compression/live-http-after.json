@@ -1,0 +1,38 @@
+[
+  {
+    "asset": "index-BJlzUKxi.js",
+    "encoding": "br",
+    "wireBytes": 190489,
+    "vary": "Accept-Encoding"
+  },
+  {
+    "asset": "index-BJlzUKxi.js",
+    "encoding": "gzip",
+    "wireBytes": 199660,
+    "vary": "Accept-Encoding"
+  },
+  {
+    "asset": "index-BJlzUKxi.js",
+    "encoding": "identity",
+    "wireBytes": 698484,
+    "vary": "Accept-Encoding"
+  },
+  {
+    "asset": "index-uNyYJHbe.css",
+    "encoding": "br",
+    "wireBytes": 45847,
+    "vary": "Accept-Encoding"
+  },
+  {
+    "asset": "index-uNyYJHbe.css",
+    "encoding": "gzip",
+    "wireBytes": 47273,
+    "vary": "Accept-Encoding"
+  },
+  {
+    "asset": "index-uNyYJHbe.css",
+    "encoding": "identity",
+    "wireBytes": 162091,
+    "vary": "Accept-Encoding"
+  }
+]

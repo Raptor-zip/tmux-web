@@ -24,6 +24,7 @@ import { createApprovals } from './approvals.js';
 import { cleanupOrphanMirrors } from './attach.js';
 import { connectTerminal, TERMINAL_MAX_PAYLOAD } from './terminal.js';
 import { visibleState, stateSignature } from './state.js';
+import { installWeb } from './web.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.resolve(__dirname, '../../web/dist');
@@ -122,11 +123,7 @@ app.post('/api/desktop/clipboard', async (req, res) => {
 
 // 本番ビルドがあれば静的配信する（開発時は Vite が担当）
 if (fs.existsSync(WEB_DIST)) {
-  app.use(express.static(WEB_DIST));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
-    res.sendFile(path.join(WEB_DIST, 'index.html'));
-  });
+  installWeb(app, WEB_DIST);
 }
 
 const server = http.createServer(app);

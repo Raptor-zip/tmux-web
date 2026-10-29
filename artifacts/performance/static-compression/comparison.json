@@ -1,0 +1,162 @@
+{
+  "before": [
+    {
+      "screen": "desktop-controls",
+      "conditions": {
+        "downloadKbps": 1500,
+        "latencyMs": 80,
+        "coldContext": true
+      },
+      "timings": {
+        "firstContentfulPaint": 5180,
+        "terminalReady": 5304.299999952316
+      },
+      "transfers": [
+        {
+          "asset": "index-uNyYJHbe.css",
+          "encoding": "identity",
+          "wireBodyBytes": 162091,
+          "decodedBytes": 162091
+        },
+        {
+          "asset": "index-BJlzUKxi.js",
+          "encoding": "identity",
+          "wireBodyBytes": 698484,
+          "decodedBytes": 698484
+        }
+      ]
+    },
+    {
+      "screen": "desktop-controls",
+      "conditions": {
+        "downloadKbps": 1500,
+        "latencyMs": 80,
+        "coldContext": true
+      },
+      "timings": {
+        "firstContentfulPaint": 5260,
+        "terminalReady": 5333
+      },
+      "transfers": [
+        {
+          "asset": "index-uNyYJHbe.css",
+          "encoding": "identity",
+          "wireBodyBytes": 162091,
+          "decodedBytes": 162091
+        },
+        {
+          "asset": "index-BJlzUKxi.js",
+          "encoding": "identity",
+          "wireBodyBytes": 698484,
+          "decodedBytes": 698484
+        }
+      ]
+    },
+    {
+      "screen": "desktop-controls",
+      "conditions": {
+        "downloadKbps": 1500,
+        "latencyMs": 80,
+        "coldContext": true
+      },
+      "timings": {
+        "firstContentfulPaint": 5264,
+        "terminalReady": 5399.399999976158
+      },
+      "transfers": [
+        {
+          "asset": "index-uNyYJHbe.css",
+          "encoding": "identity",
+          "wireBodyBytes": 162091,
+          "decodedBytes": 162091
+        },
+        {
+          "asset": "index-BJlzUKxi.js",
+          "encoding": "identity",
+          "wireBodyBytes": 698484,
+          "decodedBytes": 698484
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "screen": "desktop-controls",
+      "conditions": {
+        "downloadKbps": 1500,
+        "latencyMs": 80,
+        "coldContext": true
+      },
+      "timings": {
+        "firstContentfulPaint": 1544,
+        "terminalReady": 1662.8999999761581
+      },
+      "transfers": [
+        {
+          "asset": "index-uNyYJHbe.css",
+          "encoding": "br",
+          "wireBodyBytes": 45876,
+          "decodedBytes": 162091
+        },
+        {
+          "asset": "index-BJlzUKxi.js",
+          "encoding": "br",
+          "wireBodyBytes": 190590,
+          "decodedBytes": 698484
+        }
+      ]
+    },
+    {
+      "screen": "desktop-controls",
+      "conditions": {
+        "downloadKbps": 1500,
+        "latencyMs": 80,
+        "coldContext": true
+      },
+      "timings": {
+        "firstContentfulPaint": 1540,
+        "terminalReady": 1666.1999999284744
+      },
+      "transfers": [
+        {
+          "asset": "index-uNyYJHbe.css",
+          "encoding": "br",
+          "wireBodyBytes": 45876,
+          "decodedBytes": 162091
+        },
+        {
+          "asset": "index-BJlzUKxi.js",
+          "encoding": "br",
+          "wireBodyBytes": 190590,
+          "decodedBytes": 698484
+        }
+      ]
+    },
+    {
+      "screen": "desktop-controls",
+      "conditions": {
+        "downloadKbps": 1500,
+        "latencyMs": 80,
+        "coldContext": true
+      },
+      "timings": {
+        "firstContentfulPaint": 1544,
+        "terminalReady": 1663.6000000238419
+      },
+      "transfers": [
+        {
+          "asset": "index-uNyYJHbe.css",
+          "encoding": "br",
+          "wireBodyBytes": 45876,
+          "decodedBytes": 162091
+        },
+        {
+          "asset": "index-BJlzUKxi.js",
+          "encoding": "br",
+          "wireBodyBytes": 190590,
+          "decodedBytes": 698484
+        }
+      ]
+    }
+  ]
+}

@@ -40,3 +40,5 @@
 - 2026-10-30 02:38:41 [2026-10-30-28 selection-ack-webkit-ready-check](logs/2026-10-30-28-selection-ack-webkit-ready-check.md) — phase: 切替完了確認 / iter: 11 / status: partial
 - 2026-10-30 02:40:18 [2026-10-30-29 selection-ack-close-count-cause](logs/2026-10-30-29-selection-ack-close-count-cause.md) — phase: 切替完了確認 / iter: 11 / status: partial
 - 2026-10-30 02:43:47 [2026-10-30-30 terminal-selection-ack-verified](logs/2026-10-30-30-terminal-selection-ack-verified.md) — phase: 切替完了確認 / iter: 11 / status: success
+- 2026-10-30 02:45:22 [2026-10-30-31 initial-load-start](logs/2026-10-30-31-initial-load-start.md) — phase: 初回表示 / iter: 12 / status: partial
+- 2026-10-30 03:07:13 [2026-10-30-32 initial-load-verified](logs/2026-10-30-32-initial-load-verified.md) — phase: 初回表示 / iter: 12 / status: success

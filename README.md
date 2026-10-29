@@ -894,6 +894,7 @@ Serveの利用者ヘッダーは直接接続なら偽装できるため、同じ
 
 ```bash
 git pull --ff-only
+npm ci
 npm run build
 ./scripts/migrate-tailscale-auth.sh
 ```
