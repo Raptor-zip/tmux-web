@@ -21,3 +21,6 @@
 - 2026-10-30 01:11:15 [2026-10-30-09 file-browser-complete](logs/2026-10-30-09-file-browser-complete.md) — phase: ファイル操作 / iter: 6 / status: success
 - 2026-10-30 01:24:44 [2026-10-30-10 file-api-edge-cases-start](logs/2026-10-30-10-file-api-edge-cases-start.md) — phase: ファイルAPI / iter: 7 / status: partial
 - 2026-10-30 01:34:13 [2026-10-30-11 file-api-edge-cases-verified](logs/2026-10-30-11-file-api-edge-cases-verified.md) — phase: ファイルAPI / iter: 7 / status: success
+- 2026-10-30 01:35:01 [2026-10-30-12 attachment-cleanup-start](logs/2026-10-30-12-attachment-cleanup-start.md) — phase: 接続後片付け / iter: 8 / status: partial
+- 2026-10-30 01:36:55 [2026-10-30-13 attachment-cwd-and-allocation-cause](logs/2026-10-30-13-attachment-cwd-and-allocation-cause.md) — phase: 接続後片付け / iter: 8 / status: partial
+- 2026-10-30 01:38:43 [2026-10-30-14 attachment-cleanup-verified](logs/2026-10-30-14-attachment-cleanup-verified.md) — phase: 接続後片付け / iter: 8 / status: success
