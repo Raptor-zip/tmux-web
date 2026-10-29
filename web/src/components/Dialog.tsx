@@ -46,7 +46,8 @@ export function Dialog({ spec, onClose }: { spec: DialogSpec; onClose(): void })
             placeholder={spec.placeholder}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === 'Enter') submit();
             }}
           />
         )}
