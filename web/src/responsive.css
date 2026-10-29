@@ -269,8 +269,8 @@
 .tablist:has(.tab-slot:only-child) .tab { max-width:none; }
 @media (pointer:coarse), (any-pointer:coarse) {
   .tab { min-width:104px; max-width:176px; }
-  .tab-close { width:32px; min-width:32px; height:44px; }
+  .tab-close { width:44px; min-width:44px; height:44px; }
   /* 操作メニューは前面のタブにだけ出す（全タブに 44px ずつ付けると幅を食う） */
   .tab-menu { display:none; }
-  .tab.active .tab-menu { display:grid; width:32px; min-width:32px; }
+  .tab.active .tab-menu { display:grid; width:44px; min-width:44px; }
 }
