@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { Icon } from './Icon';
+import type { AttachmentResult } from '../attachments';
 
 interface Props {
   connected: boolean;
-  onPaste(text: string): void;
+  onPaste(text: string): boolean | undefined;
   onSend(data: string): void;
-  /** 添付ファイルを端末側へ送る。失敗したら例外で知らせる */
-  onAttach(files: File[]): Promise<void>;
+  /** 添付の入力結果と、下書きに回収するパスを返す。 */
+  onAttach(files: File[]): Promise<AttachmentResult>;
 }
 
 /** 通常の textarea に変換・選択・長押し貼り付けを任せ、確定後だけ端末へ渡す。 */
@@ -18,18 +19,28 @@ export function MobileInput({ connected, onPaste, onSend, onAttach }: Props) {
   const input = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const [attaching, setAttaching] = useState(false);
+  const attachLock = useRef(false);
   const attach = async (list: FileList | null) => {
     const files = list ? [...list] : [];
-    if (!files.length) return;
+    if (!files.length || attachLock.current) return;
+    attachLock.current = true;
     setAttaching(true);
-    try { await onAttach(files); setMessage(''); }
+    try {
+      const result = await onAttach(files);
+      if (!result.inserted) {
+        if (result.text) setText(old => old + (old && !/\s$/.test(old) ? ' ' : '') + result.text);
+        setExpanded(true);
+      }
+      setMessage(result.error || (result.inserted ? '' : '端末が切り替わったか切断されたため、添付パスを下書きに残しました。'));
+    }
     catch (err) { setMessage((err as Error).message); setExpanded(true); }
-    finally { setAttaching(false); if (picker.current) picker.current.value = ''; }
+    finally { attachLock.current = false; setAttaching(false); if (picker.current) picker.current.value = ''; }
   };
   const insert = () => {
     if (!connected || composing || !text) return;
-    onPaste(text);
+    if (!onPaste(text)) { setMessage('端末に再接続してから挿入してください。下書きは残っています。'); return; }
     setText('');
+    setMessage('');
     input.current?.focus();
   };
   return (

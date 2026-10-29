@@ -26,7 +26,7 @@ const scenes=[
  {name:"project-desktop",width:1280,height:800,sidebar:true,tree:leaf(1),action:"project"},
  {name:'desktop-four',width:1920,height:1080,tree:four()},
  {name:'laptop-four',width:1280,height:800,tree:four()},
- {name:'tablet-two',width:900,height:1024,sidebar:true,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:leaf(1,'spark')}},
+ {name:'tablet-two',width:900,height:1024,touch:true,sidebar:true,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:leaf(1,'spark')}},
  {name:'mobile-panels',width:390,height:844,touch:true,tree:four()},
  {name:'mobile-landscape',width:740,height:390,touch:true,tree:four()},
  {name:'many-tabs',width:1100,height:800,tree:leaf(1,'local',Array.from({length:11},(_,i)=>tab(i+2)))},
@@ -67,6 +67,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    else if(url.pathname.endsWith('/terminal')){terminalConnections++;activeTerminals++;ws.onClose(()=>{activeTerminals--;});if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});}
   });
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
+  if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project')await page.getByRole('button',{name:'＋ プロジェクトを作る',exact:true}).click();
@@ -111,19 +112,20 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(phase==='after' && scene.name==='mobile-panels'){
    assert.equal(activeTerminals,1,'only the visible mobile panel attaches');
    const layout=await page.evaluate(()=>localStorage.getItem('tw.layout'));
-   await page.getByRole('button',{name:'タブ・パネルの一覧を開く',exact:true}).click();
+   await page.getByRole('button',{name:'このパネルの2タブを一覧で見る',exact:true}).click();
    await page.getByRole('textbox',{name:'タブを検索'}).fill('DGX Spark');
    await page.keyboard.press('Alt+Enter');
    await page.screenshot({path:join(out,'panel-overview.png'),animations:'disabled'});
    await page.locator('.overview-tab').click();
    await page.waitForTimeout(100);
-   assert.match(await page.locator('.toolbar-device').textContent(),/DGX Spark/);
+   assert.equal(await page.locator('.tile:visible [role=tab][aria-selected=true]').getAttribute('data-tab-id'),'tab-spark-1');
    assert.equal(await page.locator('.tile:visible').count(),1);
    await page.setViewportSize({width:1920,height:1080});await page.waitForTimeout(150);
    assert.equal(await page.locator('.tile:visible').count(),4,'restores split after resize');
    assert.equal(activeTerminals,4,'only visible split panels retain websocket connections');
    await page.setViewportSize({width:900,height:1024});await page.waitForTimeout(150);
-   for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
+   for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close, .tile:visible .tab-menu:visible, .tile:visible .strip-btn, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
+   for(const list of await page.locator('.tile:visible .tablist').all()) assert.ok(await list.evaluate(el=>el.querySelector('.tab.active').getBoundingClientRect().left>=el.getBoundingClientRect().left-1),'selected tab keeps its leading label visible after resize');
    assert.equal(await page.evaluate(()=>localStorage.getItem('tw.layout')),layout,'responsive presentation preserves saved split tree');
   }
   if(phase==='after' && scene.name==='many-tabs'){

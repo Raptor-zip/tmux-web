@@ -81,6 +81,13 @@ test('REST relay drops legacy tokens and browser identity, strips cookies, prese
   assert.equal(JSON.parse(result.body).params.keys[0], '日本語');
   const upload = await (await api(prefix + '/api/files/upload?pane=%251', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: Buffer.from('raw\0bytes') })).json();
   assert.equal(upload.body, 'raw\0bytes');
+  for (const [route, type] of [['/api/paste-file?name=日本語.txt', 'application/octet-stream'], ['/api/paste-image', 'image/png']]) {
+    const attachment = await api(prefix + route, { method: 'POST', headers: { 'Content-Type': type }, body: Buffer.from('attachment\0bytes') });
+    assert.equal(attachment.status, 200, route);
+    const received = await attachment.json();
+    assert.equal(received.body, 'attachment\0bytes');
+    assert.equal(decodeURI(received.url), route);
+  }
   const file = await api(prefix + '/files/content?ticket=signed', { headers: { range: 'bytes=1-3' } });
   assert.equal(file.status, 206); assert.equal(file.headers.get('content-range'), 'bytes 1-3/5'); assert.equal(await file.text(), 'bcd');
   for (const route of ['/api/devices', '/api/approvals/answer', '/api/devices/evil/proxy/api/state']) assert.equal((await api(prefix + route)).status, 404);

@@ -11,6 +11,7 @@ import { MobileInput } from './components/MobileInput';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
+import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { Toolbar, workspaceMenuItems } from './components/Toolbar';
 import { KeyBar } from './components/KeyBar';
@@ -1339,10 +1340,18 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           onPaste={(text) => focusedTerm()?.paste(text)}
           onSend={(data) => focusedTerm()?.send(data)}
           onAttach={async (files) => {
-            const sid = focusedTab?.sessionId ?? '';
+            const target = focusedTab && { sessionId: focusedTab.sessionId, windowId: focusedTab.windowId };
+            const terminal = focusedTerm();
+            if (!target || !terminal) throw new Error('添付先の端末を選んでください。');
             const paths: string[] = [];
-            for (const file of files) paths.push(await uploadAttachment(sid, file));
-            focusedTerm()?.paste(paths.map((p) => (p.includes(' ') ? `'${p}'` : p)).join(' ') + ' ');
+            try {
+              for (const file of files) paths.push(await uploadAttachment(target.sessionId, file));
+            } catch (err) {
+              return { inserted: false, text: paths.length ? paths.map(quotePath).join(' ') + ' ' : '',
+                error: `${paths.length}件を保存済み。${(err as Error).message}${paths.length ? ' 保存済みの添付パスは下書きに残しました。' : ''}` };
+            }
+            const text = paths.map(quotePath).join(' ') + ' ';
+            return { text, inserted: terminal.paste(text, target) };
           }}
         />
         {showKeyBar && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
