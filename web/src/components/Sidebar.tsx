@@ -437,6 +437,7 @@ export function Sidebar({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={onDone}
       onKeyDown={(e) => {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
         if (e.key === 'Enter') onDone();
         if (e.key === 'Escape') setRenaming(null);
       }}
