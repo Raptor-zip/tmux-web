@@ -166,9 +166,9 @@ export interface FileListing {
 export function fetchFiles(pane: string, path = '', signal?: AbortSignal) {
   return request<FileListing>(devicePath(deviceOf(pane), `/api/files?${new URLSearchParams({ pane: unscoped(pane), path })}`), { signal });
 }
-export async function openFile(pane: string, path: string, root: string) {
+export async function openFile(pane: string, path: string, root: string, signal?: AbortSignal) {
   const device = deviceOf(pane);
-  const result = await request<{ url: string }>(devicePath(device, '/api/files/open'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root }) });
+  const result = await request<{ url: string }>(devicePath(device, '/api/files/open'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root }), signal });
   return { url: devicePath(device, result.url) };
 }
 
@@ -233,9 +233,9 @@ export async function uploadFile(pane: string, path: string, root: string, file:
   if (!res.ok) throw new Error(res.status === 413 ? '1ファイルは50MBまでです。' : body.error || 'アップロードできませんでした');
   return body as { name: string };
 }
-export const archiveFiles = async (pane: string, path: string, root: string) => {
+export const archiveFiles = async (pane: string, path: string, root: string, signal?: AbortSignal) => {
   const device = deviceOf(pane);
-  const result = await request<{ url: string }>(devicePath(device, '/api/files/archive'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root }) });
+  const result = await request<{ url: string }>(devicePath(device, '/api/files/archive'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root }), signal });
   return { url: devicePath(device, result.url) };
 };
 export interface Approval { id: string; cmd: string; cwd: string; detail: string; attempt: number; expiresAt: number }

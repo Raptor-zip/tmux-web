@@ -1,6 +1,6 @@
 // Presentation-only browser fixture: synthetic projects, terminals and errors.
 // Does not contact real tmux APIs or read an existing browser profile.
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const {join,resolve}=require('node:path');
 const fs=require('node:fs');
 const http=require('node:http');
@@ -35,19 +35,22 @@ const scenes=[
  {name:'project-modal',width:390,height:640,sidebar:true,tree:leaf(1),action:'project'},
  {name:'desktop-modal',width:390,height:844,tree:leaf(1),action:'desktop'},
  {name:'files-modal',width:390,height:844,tree:leaf(1),action:'files'},
+ {name:'files-desktop',width:1280,height:800,tree:leaf(1),action:'files'},
  {name:'offline-panel',width:900,height:700,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:leaf(1,'spark')},offline:true},
 ];
 const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[90m~/projects/atlas-web · feature/responsive-ui\x1b[0m\r\n\r\n\x1b[1mタスク：使いやすい端末ワークスペースを作る\x1b[0m\r\n\r\n  ✓ 接続先と作業名を確認\r\n  ✓ タブと分割の配置を保存\r\n  ✓ 狭い画面での操作を検証\r\n\r\n\x1b[1;32m実装の進捗\x1b[0m\r\n  狭いパネルでも作業名と状態が分かる構成にします。\r\n  デバイスごとの端末を同じ画面で操作できます。\r\n\r\n  src/components/Workspace.tsx    +24 −12\r\n  src/styles.css                 +48 −20\r\n\r\n\x1b[32m  18 tests passed\x1b[0m\r\n\x1b[90m  次にブラウザで表示を確認します。\x1b[0m\r\n\r\n────────────────────────────────────────\r\n\x1b[1m› 次の作業を入力…\x1b[0m\r\n';
 (async()=>{
  const app=express();app.use(express.static((process.env.STATIC_ROOT||join(root,'web/dist'))));app.get('*',(_q,r)=>r.sendFile(join(process.env.STATIC_ROOT||join(root,'web/dist'),'index.html')));
  const server=http.createServer(app);await new Promise(r=>server.listen(17656,'127.0.0.1',r));
- const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||'/home/somak/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome',args:['--no-sandbox']});
+ const browser=process.env.BROWSER_ENGINE==='webkit'
+  ? await webkit.launch({headless:true,...(process.env.WEBKIT_BIN?{executablePath:process.env.WEBKIT_BIN}:{})})
+  : await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||'/home/somak/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome',args:['--no-sandbox']});
  const results=[];
  try{
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now,keepStorage})=>{Date.now=()=>now;if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK});
-  const page=await context.newPage();if(process.env.CONNECTION_CHECK)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;
    let body={};let status=200;
@@ -91,11 +94,13 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   }
   const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^このパネルを広げる \/ 元に戻す/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
+  const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project')await page.getByRole('button',{name:'＋ プロジェクトを作る',exact:true}).click();
   if(scene.action==='desktop')await page.getByRole('button',{name:'デバイスの画面を見る',exact:true}).click();
-  if(scene.action==='files')await page.getByRole('button',{name:'作業フォルダーを開く',exact:true}).click();
+  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーのファイルを見る',exact:true}).click();}
+  if(checkFiles) await checkFiles();
   await page.waitForTimeout(120);await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});
   const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,visiblePanels:[...document.querySelectorAll('.tile')].filter(el=>!!el.getClientRects().length).map(el=>({width:Math.round(el.getBoundingClientRect().width),headerWidth:el.querySelector('.tablist')?.clientWidth||0})),dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].map(el=>({label:el.getAttribute('aria-label'),width:Math.round(el.getBoundingClientRect().width)}))}));
   results.push({screen:scene.name,width:scene.width,height:scene.height,...metrics,errors});

@@ -14,3 +14,8 @@
 - 2026-10-30 00:06:15 [2026-10-30-02 terminal-input-start](logs/2026-10-30-02-terminal-input-start.md) — phase: 端末接続 / iter: 5 / status: partial
 - 2026-10-30 00:14:04 [2026-10-30-03 terminal-pty-ready-cause](logs/2026-10-30-03-terminal-pty-ready-cause.md) — phase: 端末接続 / iter: 5 / status: partial
 - 2026-10-30 00:20:33 [2026-10-30-04 terminal-protocol-verified](logs/2026-10-30-04-terminal-protocol-verified.md) — phase: 端末接続 / iter: 5 / status: success
+- 2026-10-30 00:28:26 [2026-10-30-05 file-browser-transfer-start](logs/2026-10-30-05-file-browser-transfer-start.md) — phase: ファイル操作 / iter: 6 / status: partial
+- 2026-10-30 00:42:14 [2026-10-30-06 file-preview-frame-cause](logs/2026-10-30-06-file-preview-frame-cause.md) — phase: ファイル操作 / iter: 6 / status: partial
+- 2026-10-30 01:04:51 [2026-10-30-07 file-browser-verified](logs/2026-10-30-07-file-browser-verified.md) — phase: ファイル操作 / iter: 6 / status: success
+- 2026-10-30 01:08:34 [2026-10-30-08 file-preview-refresh-cause](logs/2026-10-30-08-file-preview-refresh-cause.md) — phase: ファイル操作 / iter: 6 / status: partial
+- 2026-10-30 01:11:15 [2026-10-30-09 file-browser-complete](logs/2026-10-30-09-file-browser-complete.md) — phase: ファイル操作 / iter: 6 / status: success
