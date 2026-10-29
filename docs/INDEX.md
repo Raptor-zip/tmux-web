@@ -44,3 +44,6 @@
 - 2026-10-30 03:07:13 [2026-10-30-32 initial-load-verified](logs/2026-10-30-32-initial-load-verified.md) — phase: 初回表示 / iter: 12 / status: success
 - 2026-10-30 03:10:59 [2026-10-30-33 dependency-patches-start](logs/2026-10-30-33-dependency-patches-start.md) — phase: 依存更新 / iter: 13 / status: partial
 - 2026-10-30 03:21:56 [2026-10-30-34 dependency-patches-verified](logs/2026-10-30-34-dependency-patches-verified.md) — phase: 依存更新 / iter: 13 / status: success
+- 2026-10-30 03:23:35 [2026-10-30-35 operation-docs-start](logs/2026-10-30-35-operation-docs-start.md) — phase: 操作説明 / iter: 14 / status: partial
+- 2026-10-30 03:29:22 [2026-10-30-36 operation-docs-entry-cause](logs/2026-10-30-36-operation-docs-entry-cause.md) — phase: 操作説明 / iter: 14 / status: partial
+- 2026-10-30 03:34:11 [2026-10-30-37 operation-docs-verified](logs/2026-10-30-37-operation-docs-verified.md) — phase: 操作説明 / iter: 14 / status: success

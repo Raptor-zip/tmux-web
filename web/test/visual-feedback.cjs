@@ -119,8 +119,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(checkSwitcher) await checkSwitcher();
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
-  if(scene.action==='project')await page.getByRole('button',{name:'＋ プロジェクトを作る',exact:true}).click();
-  if(scene.action==='desktop')await page.getByRole('button',{name:'デバイスの画面を見る',exact:true}).click();
+  if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
+  if(scene.action==='desktop'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'デバイスの画面を見る',exact:true}).click();}
   if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーのファイルを見る',exact:true}).click();}
   if(checkFiles) await checkFiles();
   await page.waitForTimeout(120);if(!(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection'))await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});
