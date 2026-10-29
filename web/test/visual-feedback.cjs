@@ -47,7 +47,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now,keepStorage})=>{Date.now=()=>now;if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK});
-  const page=await context.newPage();if(process.env.CONNECTION_CHECK)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();if(process.env.CONNECTION_CHECK)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;
    let body={};let status=200;
@@ -64,11 +64,31 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   await page.routeWebSocket(/\/ws\//,ws=>{
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
    if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}const send=()=>ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));send();ws.onMessage(send);}
-   else if(url.pathname.endsWith('/terminal')){terminalConnections++;activeTerminals++;ws.onClose(()=>{activeTerminals--;});if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});}
+   else if(url.pathname.endsWith('/terminal')){
+    terminalConnections++;activeTerminals++;ws.onClose(()=>{activeTerminals--;});
+    if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}
+    const ready=()=>{ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));};
+    if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels' && terminalConnections===1) releaseTerminalReady=ready;
+    else ready();
+    ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});
+   }
   });
   const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(checkStateConnection) await checkStateConnection();
+  if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
+   assert.equal(await page.locator('.mobile-input .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
+   assert.equal(await page.locator('.mobile-input .input-enter').isDisabled(),true,'transport open does not enable Enter before terminal ready');
+   await page.getByRole('button',{name:'文字入力・貼り付け',exact:true}).click();
+   await page.getByRole('textbox',{name:'文字入力・貼り付け用の下書き'}).fill('ready後に挿入');
+   assert.equal(await page.getByRole('button',{name:'端末に挿入',exact:true}).isDisabled(),true);
+   assert.equal(typeof releaseTerminalReady,'function');releaseTerminalReady();
+   await page.locator('.mobile-input .input-attach:enabled').waitFor();
+   await page.getByRole('button',{name:'端末に挿入',exact:true}).click();
+   assert.equal(terminalInputs.at(-1),'ready後に挿入');
+   await page.getByRole('button',{name:'入力欄を閉じる',exact:true}).click();
+   console.log('terminal controls wait for tmux readiness and preserve the draft');
+  }
   const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^このパネルを広げる \/ 元に戻す/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');

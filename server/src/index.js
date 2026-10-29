@@ -22,7 +22,7 @@ import { installFiles } from './files.js';
 import { installWorkspaces } from './workspaces.js';
 import { createApprovals } from './approvals.js';
 import { cleanupOrphanMirrors } from './attach.js';
-import { connectTerminal } from './terminal.js';
+import { connectTerminal, TERMINAL_MAX_PAYLOAD } from './terminal.js';
 import { visibleState, stateSignature } from './state.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -134,8 +134,8 @@ const server = http.createServer(app);
 // ---------------------------------------------------------------------------
 // WebSocket: 状態の push
 // ---------------------------------------------------------------------------
-const eventsWss = new WebSocketServer({ noServer: true });
-const terminalWss = new WebSocketServer({ noServer: true });
+const eventsWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+const terminalWss = new WebSocketServer({ noServer: true, maxPayload: TERMINAL_MAX_PAYLOAD });
 
 let lastStateJson = '';
 let pollTimer = null;

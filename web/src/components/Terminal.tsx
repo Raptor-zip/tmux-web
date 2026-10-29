@@ -89,6 +89,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const readyRef = useRef(false);
   const rafRef = useRef(0);
 
   /** tmux への入力はここだけを通す。空文字は送らない（IME 確定後の空振りを弾く） */
@@ -147,7 +148,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     },
     paste(data, target) {
       if (target && (sessionIdRef.current !== target.sessionId || windowIdRef.current !== target.windowId)) return false;
-      if (wsRef.current?.readyState !== WebSocket.OPEN || !termRef.current) return false;
+      if (!readyRef.current || wsRef.current?.readyState !== WebSocket.OPEN || !termRef.current) return false;
       termRef.current.paste(data);
       return true;
     },
@@ -488,13 +489,13 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       const session = sessionIdRef.current;
       const window = windowIdRef.current;
       const socket = wsRef.current;
-      if (!session || socket?.readyState !== WebSocket.OPEN) {
+      if (!session || !readyRef.current || socket?.readyState !== WebSocket.OPEN) {
         onNoticeRef.current?.('端末に接続してから画像を貼り付けてください。');
         return;
       }
       uploadPasteImage(session, image)
         .then((file) => {
-          if (sessionIdRef.current !== session || windowIdRef.current !== window || wsRef.current !== socket || socket.readyState !== WebSocket.OPEN) {
+          if (!readyRef.current || sessionIdRef.current !== session || windowIdRef.current !== window || wsRef.current !== socket || socket.readyState !== WebSocket.OPEN) {
             onNoticeRef.current?.(`画像を保存しました。元の端末でこのパスを貼り付けてください：${quotePath(file)}`);
             return;
           }
@@ -555,6 +556,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     let disposed = false;
     let ws: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    let readyTimeout: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
     const disposables: { dispose(): void }[] = [];
 
@@ -583,6 +585,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
     const start = () => {
       if (disposed) return;
+      readyRef.current = false;
       // 張り直しのたびに tmux が画面全体を描き直すので、二重描画を避けて消しておく
       term.reset();
       try {
@@ -605,35 +608,50 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       );
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
+      const socket = ws;
+      const current = () => !disposed && wsRef.current === socket;
+      readyTimeout = setTimeout(() => { if (current() && !readyRef.current) socket.close(); }, 10000);
 
       ws.onopen = () => {
-        attempt = 0;
-        onStatus?.({ connected: true });
+        if (!current()) return;
         // 接続直後に、UI が選んでいるウィンドウへ合わせる
         if (windowIndexRef.current != null) {
-          ws?.send(JSON.stringify({ type: 'selectWindow', index: windowIndexRef.current }));
+          socket.send(JSON.stringify({ type: 'selectWindow', index: windowIndexRef.current }));
         }
       };
       ws.onmessage = (ev) => {
+        if (!current()) return;
         if (ev.data instanceof ArrayBuffer) {
           term.write(new Uint8Array(ev.data));
           return;
         }
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === 'error') {
+          if (msg.type === 'ready') {
+            clearTimeout(readyTimeout);
+            readyRef.current = true;
+            attempt = 0;
+            onStatus?.({ connected: true });
+          } else if (msg.type === 'error') {
+            readyRef.current = false;
             onStatus?.({ connected: false, message: msg.message });
             term.writeln(`\r\n\x1b[31m接続エラー: ${msg.message}\x1b[0m`);
           } else if (msg.type === 'exit') {
+            readyRef.current = false;
             onStatus?.({ connected: false, message: 'デタッチしました' });
           }
         } catch {
           /* ignore */
         }
       };
-      ws.onclose = () => {
-        if (!disposed) scheduleRetry();
+      ws.onclose = event => {
+        if (!current()) return;
+        clearTimeout(readyTimeout);
+        readyRef.current = false;
+        if (event.code === 1009) onNoticeRef.current?.('端末への入力が大きすぎます。少量ずつ貼り付け直してください。');
+        scheduleRetry();
       };
+      ws.onerror = () => { if (current()) socket.close(); };
     };
 
     /** 復帰の合図が来たら、待ち時間を飛ばしてすぐ繋ぎに行く */
@@ -642,6 +660,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       const s = wsRef.current;
       if (s && (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CONNECTING)) return;
       clearTimeout(retry);
+      clearTimeout(readyTimeout);
       attempt = 0;
       start();
     };
@@ -654,11 +673,13 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       disposed = true;
       clearTimeout(timer);
       clearTimeout(retry);
+      clearTimeout(readyTimeout);
       window.removeEventListener('online', wake);
       document.removeEventListener('visibilitychange', wake);
       disposables.forEach((d) => d.dispose());
       ws?.close();
       wsRef.current = null;
+      readyRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, mode, showStatusBar, retryToken, pageVisible]);
