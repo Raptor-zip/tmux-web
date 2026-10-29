@@ -49,69 +49,76 @@ export async function createAttachment({
 
   let attachTarget = target.id;
   let mirrorName = null;
-
-  if (mode === 'mirror') {
-    mirrorName = `${MIRROR_PREFIX}${process.pid}-${++counter}`;
-    // -t でグループを指定すると、ウィンドウを共有する別セッションが作られる
-    await tmux(['new-session', '-d', '-s', mirrorName, '-t', target.name]);
-    await tmux(['set-option', '-t', mirrorName, 'status', showStatusBar ? 'on' : 'off'], {
-      allowFailure: true,
-    });
-    await tmux(['set-option', '-t', mirrorName, 'aggressive-resize', 'on'], {
-      allowFailure: true,
-    });
-
-    // ブラウザ側だけマウスを有効にする。ミラーはセッション単位なので、端末で開いて
-    // いる元セッションの mouse 設定は変わらない。TMUX_WEB_MOUSE=0 で無効にできる。
-    if (process.env.TMUX_WEB_MOUSE !== '0') {
-      await tmux(['set-option', '-t', mirrorName, 'mouse', 'on'], { allowFailure: true });
-    }
-    attachTarget = mirrorName;
-  }
-
-  // tmux のマウス選択（copy-selection）の結果をブラウザのクリップボードへ渡すには、
-  // tmux が OSC 52 をクライアントに送る必要がある。既定の 'external' はアプリ発の
-  // OSC 52 を中継するだけで、tmux 自身のコピーは送らないので 'on' にする。
-  // set-clipboard はサーバ単位のオプションで、セッションごとには持てない。
-  if (process.env.TMUX_WEB_SET_CLIPBOARD !== '0') {
-    await tmux(['set-option', '-s', 'set-clipboard', 'on'], { allowFailure: true });
-  }
-
-  if (windowId) {
-    const windows = await listWindows();
-    const win = windows.find((w) => w.id === windowId);
-    if (win) {
-      const sel = mirrorName ? `${mirrorName}:${win.index}` : windowId;
-      await tmux(['select-window', '-t', sel], { allowFailure: true });
-    }
-  }
-
-  const child = pty.spawn(TMUX_BIN, [...socketArgs(), 'attach-session', '-t', attachTarget], {
-    name: 'xterm-256color',
-    cols,
-    rows,
-    cwd: target.path || process.env.HOME,
-    env: {
-      ...process.env,
-      TMUX: '',
-      TERM: 'xterm-256color',
-      COLORTERM: 'truecolor',
-    },
-  });
-
-  let disposed = false;
-  const dispose = async () => {
-    if (disposed) return;
-    disposed = true;
-    try {
-      child.kill();
-    } catch {
-      /* すでに終了している */
-    }
-    if (mirrorName) {
-      await tmux(['kill-session', '-t', mirrorName], { allowFailure: true });
-    }
+  let mirrorCreated = false;
+  let child = null;
+  let disposal = null;
+  const dispose = () => {
+    if (disposal) return disposal;
+    disposal = (async () => {
+      try { child?.kill(); } catch { /* Already exited. */ }
+      if (mirrorCreated) {
+        await tmux(['kill-session', '-t', mirrorName], { allowFailure: true });
+      }
+    })();
+    return disposal;
   };
+
+  try {
+    if (mode === 'mirror') {
+      mirrorName = `${MIRROR_PREFIX}${process.pid}-${++counter}`;
+      // -t でグループを指定すると、ウィンドウを共有する別セッションが作られる
+      await tmux(['new-session', '-d', '-s', mirrorName, '-t', target.name]);
+      mirrorCreated = true;
+      await tmux(['set-option', '-t', mirrorName, 'status', showStatusBar ? 'on' : 'off'], {
+        allowFailure: true,
+      });
+      await tmux(['set-option', '-t', mirrorName, 'aggressive-resize', 'on'], {
+        allowFailure: true,
+      });
+
+      // ブラウザ側だけマウスを有効にする。ミラーはセッション単位なので、端末で開いて
+      // いる元セッションの mouse 設定は変わらない。TMUX_WEB_MOUSE=0 で無効にできる。
+      if (process.env.TMUX_WEB_MOUSE !== '0') {
+        await tmux(['set-option', '-t', mirrorName, 'mouse', 'on'], { allowFailure: true });
+      }
+      attachTarget = mirrorName;
+    }
+
+    // tmux のマウス選択（copy-selection）の結果をブラウザのクリップボードへ渡すには、
+    // tmux が OSC 52 をクライアントに送る必要がある。既定の 'external' はアプリ発の
+    // OSC 52 を中継するだけで、tmux 自身のコピーは送らないので 'on' にする。
+    // set-clipboard はサーバ単位のオプションで、セッションごとには持てない。
+    if (process.env.TMUX_WEB_SET_CLIPBOARD !== '0') {
+      await tmux(['set-option', '-s', 'set-clipboard', 'on'], { allowFailure: true });
+    }
+
+    if (windowId) {
+      const windows = await listWindows();
+      const win = windows.find((w) => w.id === windowId);
+      if (win) {
+        const sel = mirrorName ? `${mirrorName}:${win.index}` : windowId;
+        await tmux(['select-window', '-t', sel], { allowFailure: true });
+      }
+    }
+
+    child = pty.spawn(TMUX_BIN, [...socketArgs(), 'attach-session', '-t', attachTarget], {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      // This client only connects to tmux. The session's original directory may
+      // have moved or disappeared while its panes keep running elsewhere.
+      cwd: '/',
+      env: {
+        ...process.env,
+        TMUX: '',
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+      },
+    });
+  } catch (error) {
+    await dispose().catch(() => {});
+    throw error;
+  }
 
   return {
     pty: child,
