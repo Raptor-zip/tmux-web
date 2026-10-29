@@ -47,3 +47,6 @@
 - 2026-10-30 03:23:35 [2026-10-30-35 operation-docs-start](logs/2026-10-30-35-operation-docs-start.md) — phase: 操作説明 / iter: 14 / status: partial
 - 2026-10-30 03:29:22 [2026-10-30-36 operation-docs-entry-cause](logs/2026-10-30-36-operation-docs-entry-cause.md) — phase: 操作説明 / iter: 14 / status: partial
 - 2026-10-30 03:34:11 [2026-10-30-37 operation-docs-verified](logs/2026-10-30-37-operation-docs-verified.md) — phase: 操作説明 / iter: 14 / status: success
+- 2026-10-30 03:39:07 [2026-10-30-38 project-initial-focus-start](logs/2026-10-30-38-project-initial-focus-start.md) — phase: プロジェクト入力開始の確認 / iter: 15 / status: partial
+- 2026-10-30 03:39:51 [2026-10-30-39 project-initial-focus-cause](logs/2026-10-30-39-project-initial-focus-cause.md) — phase: 初回フォーカスの原因記録 / iter: 15 / status: partial
+- 2026-10-30 03:42:07 [2026-10-30-40 project-initial-focus-verified](logs/2026-10-30-40-project-initial-focus-verified.md) — phase: プロジェクト入力開始の確認 / iter: 15 / status: success
