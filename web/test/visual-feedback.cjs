@@ -30,6 +30,7 @@ const scenes=[
  {name:'mobile-panels',width:390,height:844,touch:true,tree:four()},
  {name:'mobile-landscape',width:740,height:390,touch:true,tree:four()},
  {name:'many-tabs',width:1100,height:800,tree:leaf(1,'local',Array.from({length:11},(_,i)=>tab(i+2)))},
+ {name:'terminal-target',width:1280,height:800,tree:leaf(1,'local',[tab(2),tab(1,'spark')])},
  {name:'switcher-desktop',width:1280,height:800,tree:leaf(1),action:'switcher'},
  {name:'switcher-mobile',width:390,height:844,touch:true,tree:leaf(1),action:'switcher'},
  {name:'switcher-landscape',width:740,height:390,touch:true,tree:leaf(1),action:'switcher'},
@@ -53,7 +54,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now,keepStorage})=>{Date.now=()=>now;if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK});
-  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;
    let body={};let status=200;
@@ -71,18 +72,19 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
    if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}const send=()=>ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));send();ws.onMessage(send);}
    else if(url.pathname.endsWith('/terminal')){
-    terminalConnections++;activeTerminals++;ws.onClose(()=>{activeTerminals--;});
+    terminalConnections++;activeTerminals++;terminalTransports.push({socket:ws,remote,window:url.searchParams.get('window')});ws.onClose(()=>{activeTerminals--;});
     if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}
     const ready=()=>{ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));};
     if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels' && terminalConnections===1) releaseTerminalReady=ready;
     else ready();
-    ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});
+    ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);else if(data.type==='selectWindow')terminalSelections.push({...data,remote});}catch{}});
    }
   });
   const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
   const checkSwitcher=process.env.SWITCHER_CHECK && scene.action==='switcher' ? await require('./switcher.cjs')(page,{state,scene}) : null;
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(checkStateConnection) await checkStateConnection();
+  if(process.env.TERMINAL_TARGET_CHECK && scene.name==='terminal-target') await require('./terminal-target.cjs')(page,{terminalTransports,terminalSelections});
   if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
    assert.equal(await page.locator('.mobile-input .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
    assert.equal(await page.locator('.mobile-input .input-enter').isDisabled(),true,'transport open does not enable Enter before terminal ready');

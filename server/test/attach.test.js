@@ -87,3 +87,34 @@ test('a native PTY startup failure removes only the acquired mirror and preserve
     assert.equal(run(['display-message', '-p', '-t', 'original', '#{pane_dead}']), '0');
   }
 });
+
+
+for (const requested of ['missing', 'another session']) {
+  test(`an initial window from ${requested} cannot fall back to a different target`, native, async t => {
+    const { temp, run, attach } = await fixture(t);
+    run(['-f', '/dev/null', 'new-session', '-d', '-s', 'original', '-c', temp, 'sleep', '60']);
+    run(['new-session', '-d', '-s', 'other', '-c', temp, 'sleep', '60']);
+    const windowId = requested === 'missing' ? '@999999' : run(['display-message', '-p', '-t', 'other', '#{window_id}']);
+    for (const mode of ['mirror', 'direct']) {
+      await assert.rejects(attach({ sessionId: 'original', windowId, mode }), /window.*not found/i);
+      assert.equal(run(['list-sessions', '-F', '#{session_name}']), 'original\nother');
+      for (const target of ['original', 'other']) assert.equal(run(['display-message', '-p', '-t', target, '#{pane_dead}']), '0');
+    }
+  });
+}
+
+
+test('a window ID from another session cannot select a target during an existing attachment', native, async t => {
+  const { temp, run, attach } = await fixture(t);
+  run(['-f', '/dev/null', 'new-session', '-d', '-s', 'original', '-c', temp, 'sleep', '60']);
+  run(['new-session', '-d', '-s', 'other', '-c', temp, 'sleep', '60']);
+  const original = run(['display-message', '-p', '-t', 'original', '#{window_id}']);
+  const other = run(['display-message', '-p', '-t', 'other', '#{window_id}']);
+  for (const mode of ['mirror', 'direct']) {
+    const attachment = await attach({ sessionId: 'original', mode });
+    await assert.rejects(attachment.selectWindowIndex(0, other));
+    assert.equal(run(['display-message', '-p', '-t', attachment.attachTarget, '#{window_id}']), original);
+    await attachment.dispose();
+    assert.equal(run(['list-sessions', '-F', '#{session_name}']), 'original\nother');
+  }
+});

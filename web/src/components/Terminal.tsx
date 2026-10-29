@@ -8,6 +8,7 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
 import { uploadPasteImage, wsUrl } from '../api';
 import { quotePath } from '../attachments';
+import { unscoped } from '../devices';
 
 // Tokyo Night (night), with soft bright colors to avoid fluorescent highlights.
 // Palette: https://github.com/folke/tokyonight.nvim
@@ -24,7 +25,7 @@ const THEME = {
 
 export interface TerminalHandle {
   /** ミラーセッション側で表示ウィンドウを切り替える */
-  selectWindow(index: number): void;
+  selectWindow(index: number, windowId: string): void;
   /** 生のキー列を tmux に送る（ツールバー用） */
   send(data: string): void;
   paste(data: string, target?: { sessionId: string; windowId: string | null }): boolean;
@@ -138,9 +139,9 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   windowIdRef.current = windowId;
 
   useImperativeHandle(ref, () => ({
-    selectWindow(index: number) {
+    selectWindow(index: number, windowId: string) {
       wsRef.current?.readyState === WebSocket.OPEN &&
-        wsRef.current.send(JSON.stringify({ type: 'selectWindow', index }));
+        wsRef.current.send(JSON.stringify({ type: 'selectWindow', index, windowId: unscoped(windowId) }));
     },
     send(data: string) {
       sendInputRef.current(data);
@@ -599,7 +600,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       ws = new WebSocket(
         wsUrl('/ws/terminal', {
           session: sessionId,
-          ...(windowId ? { window: windowId } : {}),
+          ...(windowIdRef.current ? { window: windowIdRef.current } : {}),
           cols,
           rows,
           mode,
@@ -615,8 +616,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       ws.onopen = () => {
         if (!current()) return;
         // 接続直後に、UI が選んでいるウィンドウへ合わせる
-        if (windowIndexRef.current != null) {
-          socket.send(JSON.stringify({ type: 'selectWindow', index: windowIndexRef.current }));
+        if (windowIndexRef.current != null && windowIdRef.current) {
+          socket.send(JSON.stringify({ type: 'selectWindow', index: windowIndexRef.current, windowId: unscoped(windowIdRef.current) }));
         }
       };
       ws.onmessage = (ev) => {
@@ -686,10 +687,10 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
 
   // 同じセッション内のウィンドウ切り替えは、再接続せずミラー側の表示だけ変える
   useEffect(() => {
-    if (windowIndex == null) return;
+    if (windowIndex == null || !windowId) return;
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'selectWindow', index: windowIndex }));
+      ws.send(JSON.stringify({ type: 'selectWindow', index: windowIndex, windowId: unscoped(windowId) }));
     }
   }, [windowIndex, windowId]);
 
