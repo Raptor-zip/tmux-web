@@ -1360,7 +1360,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
       {devicesOpen && <Devices devices={devices} onChanged={reloadDevices} onClose={() => setDevicesOpen(false)} />}
 
-      {filesPaneId && <FileBrowser deviceName={devices.find(d=>d.id===deviceOf(filesPaneId))?.name || activeDevice.name} paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
+      {filesPaneId && <FileBrowser key={filesPaneId} deviceName={devices.find(d=>d.id===deviceOf(filesPaneId))?.name || activeDevice.name} paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
 
       <footer className="statusbar">
         <button className="sb-item device-name" title="デバイス接続を管理" onClick={() => setDevicesOpen(true)}>{activeDevice.name}</button>
