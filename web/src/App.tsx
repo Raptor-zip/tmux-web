@@ -91,7 +91,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   onMoveDesktopTab(sourceId: string, tabId: string, destinationId: string): void;
   onDesktopDrag(sourceId: string, payload: DragPayload, end: () => void): void;
 }) {
-  const { state, devices, connected, unauthorized, authUrl, refresh, reloadDevices } = connection;
+  const { state, devices, devicesReady, connected, unauthorized, authUrl, refresh, reloadDevices } = connection;
   const activeRef = useRef(active);
   activeRef.current = active;
   const key = (name: string) => desktopKey(workspaceId, name);
@@ -256,7 +256,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    * 復元されるはずだった配置がそこで失われる。
    * 消えた・閉じたの後始末は、tmux に繋がっているあいだだけ行う。
    */
-  const serverDown = !state || sessions.length === 0;
+  // An incomplete device list cannot prove that saved remote tabs disappeared.
+  const serverDown = !devicesReady || !state || sessions.length === 0;
 
   /**
    * tmux を再起動したあとの繋ぎ直し。
@@ -1273,7 +1274,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                 fontSize={fontSize}
                 lineHeight={lineHeight}
                 drag={drag}
-                pendingRemap={needsRemap}
+                pendingRemap={needsRemap || !devicesReady}
                 onFocus={setFocusedId}
                 onActivateTab={activate}
                 onCloseTab={closeTabById}

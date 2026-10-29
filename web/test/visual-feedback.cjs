@@ -63,10 +63,13 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   });
   await page.routeWebSocket(/\/ws\//,ws=>{
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
-   if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));ws.onMessage(()=>{});}
+   if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}const send=()=>ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));send();ws.onMessage(send);}
    else if(url.pathname.endsWith('/terminal')){terminalConnections++;activeTerminals++;ws.onClose(()=>{activeTerminals--;});if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);}catch{}});}
   });
+  const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
+  if(checkStateConnection) await checkStateConnection();
+  const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^このパネルを広げる \/ 元に戻す/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
@@ -183,10 +186,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
     assert.equal(activeTerminals,4,'visible browser tab restores terminal connections');
     const count=terminalConnections;
     for(let i=0;i<3;i++){
-     await page.getByRole('button',{name:'このパネルを広げる',exact:true}).click();
+     await togglePanel();
      await page.waitForTimeout(120);
      assert.equal(activeTerminals,1,'focused panel is the only attached terminal');
-     await page.getByRole('button',{name:'分割表示に戻す',exact:true}).click();
+     await togglePanel();
      await page.waitForTimeout(120);
      assert.equal(activeTerminals,4,'restoring split does not accumulate connections');
     }
@@ -199,7 +202,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    const divider=page.locator('.divider.row').first();const box=await divider.boundingBox();
    await page.mouse.move(box.x+box.width/2,box.y+100);await page.mouse.down();await page.mouse.move(180,box.y+100);await page.mouse.up();await page.waitForTimeout(100);
    assert.equal(await page.locator('.tile:visible').count(),1,'narrow panel activates focus');
-   await page.getByRole('button',{name:'分割表示に戻す',exact:true}).click();assert.equal(await page.locator('.tile:visible').count(),4,'can recover split without resizing viewport');
+   await togglePanel();assert.equal(await page.locator('.tile:visible').count(),4,'can recover split without resizing viewport');
   }
   if(phase==='after' && scene.name==='focus-panel'){
    assert.equal(await page.locator('.tile:visible').count(),1);
