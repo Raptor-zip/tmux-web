@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
-const allowedApi = /^\/api\/(?:state|action|capture|keys|files(?:\/(?:open|upload|archive))?|projects\/(?:recent|start)|claude\/remote-control|desktop\/(?:ping|status|clipboard)|screen\/(?:status|stream))$/;
+const allowedApi = /^\/api\/(?:state|action|capture|keys|paste-(?:file|image)|files(?:\/(?:open|upload|archive))?|projects\/(?:recent|start)|claude\/remote-control|desktop\/(?:ping|status|clipboard)|screen\/(?:status|stream))$/;
 
 export function validateDevice(input) {
   if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80) throw fail(400, 'デバイス名を入力してください');

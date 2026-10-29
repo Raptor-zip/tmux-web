@@ -7,6 +7,7 @@ import { CanvasAddon } from '@xterm/addon-canvas';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
 import { uploadPasteImage, wsUrl } from '../api';
+import { quotePath } from '../attachments';
 
 // Tokyo Night (night), with soft bright colors to avoid fluorescent highlights.
 // Palette: https://github.com/folke/tokyonight.nvim
@@ -26,7 +27,7 @@ export interface TerminalHandle {
   selectWindow(index: number): void;
   /** 生のキー列を tmux に送る（ツールバー用） */
   send(data: string): void;
-  paste(data: string): void;
+  paste(data: string, target?: { sessionId: string; windowId: string | null }): boolean;
   focus(): void;
   fit(): void;
   /** xterm 側で選択されている文字列（tmux の選択はここには出ない） */
@@ -132,6 +133,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   onNoticeRef.current = onNotice;
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+  const windowIdRef = useRef(windowId);
+  windowIdRef.current = windowId;
 
   useImperativeHandle(ref, () => ({
     selectWindow(index: number) {
@@ -142,8 +145,11 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       sendInputRef.current(data);
       if (!window.matchMedia('(any-pointer: coarse)').matches) termRef.current?.focus();
     },
-    paste(data: string) {
-      if (wsRef.current?.readyState === WebSocket.OPEN) termRef.current?.paste(data);
+    paste(data, target) {
+      if (target && (sessionIdRef.current !== target.sessionId || windowIdRef.current !== target.windowId)) return false;
+      if (wsRef.current?.readyState !== WebSocket.OPEN || !termRef.current) return false;
+      termRef.current.paste(data);
+      return true;
     },
     focus() {
       if (!window.matchMedia('(any-pointer: coarse)').matches) termRef.current?.focus();
@@ -479,8 +485,21 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       if (!image) return;
       e.preventDefault();
       e.stopPropagation();
-      uploadPasteImage(sessionIdRef.current ?? '', image)
-        .then((file) => term.paste(file.includes(' ') ? `'${file}'` : file))
+      const session = sessionIdRef.current;
+      const window = windowIdRef.current;
+      const socket = wsRef.current;
+      if (!session || socket?.readyState !== WebSocket.OPEN) {
+        onNoticeRef.current?.('端末に接続してから画像を貼り付けてください。');
+        return;
+      }
+      uploadPasteImage(session, image)
+        .then((file) => {
+          if (sessionIdRef.current !== session || windowIdRef.current !== window || wsRef.current !== socket || socket.readyState !== WebSocket.OPEN) {
+            onNoticeRef.current?.(`画像を保存しました。元の端末でこのパスを貼り付けてください：${quotePath(file)}`);
+            return;
+          }
+          term.paste(quotePath(file));
+        })
         .catch((err) => onNoticeRef.current?.((err as Error).message));
     };
     host.addEventListener('paste', onPasteImage, true);
