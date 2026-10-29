@@ -34,3 +34,9 @@
 - 2026-10-30 02:02:35 [2026-10-30-22 terminal-window-identity-cause](logs/2026-10-30-22-terminal-window-identity-cause.md) — phase: 入力先検証 / iter: 10 / status: partial
 - 2026-10-30 02:07:39 [2026-10-30-23 terminal-window-target-verified](logs/2026-10-30-23-terminal-window-target-verified.md) — phase: 入力先検証 / iter: 10 / status: success
 - 2026-10-30 02:15:13 [2026-10-30-24 terminal-target-diff-check](logs/2026-10-30-24-terminal-target-diff-check.md) — phase: 入力先検証 / iter: 10 / status: success
+- 2026-10-30 02:19:18 [2026-10-30-25 terminal-selection-ack-start](logs/2026-10-30-25-terminal-selection-ack-start.md) — phase: 切替完了確認 / iter: 11 / status: partial
+- 2026-10-30 02:21:18 [2026-10-30-26 terminal-selection-ack-cause](logs/2026-10-30-26-terminal-selection-ack-cause.md) — phase: 切替完了確認 / iter: 11 / status: partial
+- 2026-10-30 02:31:53 [2026-10-30-27 selection-ack-fixture-close-cause](logs/2026-10-30-27-selection-ack-fixture-close-cause.md) — phase: 切替完了確認 / iter: 11 / status: partial
+- 2026-10-30 02:38:41 [2026-10-30-28 selection-ack-webkit-ready-check](logs/2026-10-30-28-selection-ack-webkit-ready-check.md) — phase: 切替完了確認 / iter: 11 / status: partial
+- 2026-10-30 02:40:18 [2026-10-30-29 selection-ack-close-count-cause](logs/2026-10-30-29-selection-ack-close-count-cause.md) — phase: 切替完了確認 / iter: 11 / status: partial
+- 2026-10-30 02:43:47 [2026-10-30-30 terminal-selection-ack-verified](logs/2026-10-30-30-terminal-selection-ack-verified.md) — phase: 切替完了確認 / iter: 11 / status: success

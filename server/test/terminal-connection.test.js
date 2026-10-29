@@ -103,6 +103,23 @@ test('input, resize and subsequent selections wait for a window switch to comple
   f.ws.close();
 });
 
+test('selection acknowledgement follows the completed operation and identifies its request', async () => {
+  let release;
+  const switching = new Promise(resolve => { release = resolve; });
+  const f = fixture({ select: () => switching });
+  f.ready(); await f.connection;
+  assert.equal(JSON.parse(f.ws.sent[0]).selectionAck, true);
+  f.send({ type: 'selectWindow', index: 1, windowId: '@2', requestId: 17 });
+  f.send({ type: 'input', data: 'after-selection' });
+  const acknowledgements = () => f.ws.sent.filter(value => typeof value === 'string').map(value => JSON.parse(value)).filter(value => value.type === 'selectedWindow');
+  assert.deepEqual(acknowledgements(), []);
+  assert.deepEqual(f.writes, []);
+  release(); await setImmediate();
+  assert.deepEqual(acknowledgements(), [{ type: 'selectedWindow', windowId: '@2', requestId: 17 }]);
+  assert.deepEqual(f.writes, ['after-selection']);
+  f.ws.close();
+});
+
 test('disconnecting during a window switch discards later queued input', async () => {
   let release;
   const switching = new Promise(resolve => { release = resolve; });
@@ -141,6 +158,18 @@ test('invalid window identities stop following input both before and after attac
       assert.deepEqual(f.selections, []);
       assert.equal(f.disposed(), 1);
     }
+  }
+});
+
+test('invalid selection request numbers discard following input', async () => {
+  for (const requestId of [0, -1, null, '1', 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    const f = fixture(); f.ready(); await f.connection;
+    f.send({ type: 'selectWindow', index: 0, windowId: '@1', requestId });
+    f.binary(Buffer.from('discarded'));
+    await setImmediate();
+    assert.equal(f.ws.closeCode, 1008);
+    assert.deepEqual(f.writes, []);
+    assert.equal(f.disposed(), 1);
   }
 });
 
@@ -202,6 +231,17 @@ test('a slow output consumer releases the PTY and stops accepting further output
   const count = f.ws.sent.length;
   f.output('discarded'); f.exit(0);
   assert.equal(f.ws.sent.length, count);
+  assert.equal(f.disposed(), 1);
+});
+
+test('selection acknowledgements obey the same slow-consumer limit as terminal output', async () => {
+  const f = fixture(); f.ready(); await f.connection;
+  f.ws.bufferedAmount = TERMINAL_MAX_PAYLOAD + 1;
+  f.send({ type: 'selectWindow', index: 0, windowId: '@1', requestId: 1 });
+  f.binary(Buffer.from('discarded-after-slow-consumer'));
+  await setImmediate();
+  assert.equal(f.ws.closeCode, 1013);
+  assert.deepEqual(f.writes, []);
   assert.equal(f.disposed(), 1);
 });
 

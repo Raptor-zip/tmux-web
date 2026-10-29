@@ -30,6 +30,7 @@ const scenes=[
  {name:'mobile-panels',width:390,height:844,touch:true,tree:four()},
  {name:'mobile-landscape',width:740,height:390,touch:true,tree:four()},
  {name:'many-tabs',width:1100,height:800,tree:leaf(1,'local',Array.from({length:11},(_,i)=>tab(i+2)))},
+ {name:'terminal-selection',width:390,height:844,touch:true,tree:leaf(1,'local',[tab(2)])},
  {name:'terminal-target',width:1280,height:800,tree:leaf(1,'local',[tab(2),tab(1,'spark')])},
  {name:'switcher-desktop',width:1280,height:800,tree:leaf(1),action:'switcher'},
  {name:'switcher-mobile',width:390,height:844,touch:true,tree:leaf(1),action:'switcher'},
@@ -72,18 +73,21 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
    if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}const send=()=>ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));send();ws.onMessage(send);}
    else if(url.pathname.endsWith('/terminal')){
-    terminalConnections++;activeTerminals++;terminalTransports.push({socket:ws,remote,window:url.searchParams.get('window')});ws.onClose(()=>{activeTerminals--;});
+    const acknowledge=!!process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection';
+    const transport={socket:ws,remote,window:url.searchParams.get('window'),selections:[]};
+    terminalConnections++;activeTerminals++;terminalTransports.push(transport);ws.onClose((code,reason)=>{transport.closeEvents=(transport.closeEvents||0)+1;if(transport.closed)return;transport.closed=true;activeTerminals--;void ws.close({code,reason}).catch(()=>{});});
     if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}
-    const ready=()=>{ws.send(JSON.stringify({type:'ready',mode:'mirror'}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));};
+    const ready=()=>{ws.send(JSON.stringify({type:'ready',mode:'mirror',...(acknowledge?{selectionAck:true,windowId:url.searchParams.get('window')}:{})}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));};
     if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels' && terminalConnections===1) releaseTerminalReady=ready;
     else ready();
-    ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);else if(data.type==='selectWindow')terminalSelections.push({...data,remote});}catch{}});
+    ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);else if(data.type==='selectWindow'){terminalSelections.push({...data,remote});transport.selections.push(data);}}catch{}});
    }
   });
   const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
   const checkSwitcher=process.env.SWITCHER_CHECK && scene.action==='switcher' ? await require('./switcher.cjs')(page,{state,scene}) : null;
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(checkStateConnection) await checkStateConnection();
+  if(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection') await require('./terminal-selection.cjs')(page,{terminalTransports,terminalInputs,phase,out});
   if(process.env.TERMINAL_TARGET_CHECK && scene.name==='terminal-target') await require('./terminal-target.cjs')(page,{terminalTransports,terminalSelections});
   if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
    assert.equal(await page.locator('.mobile-input .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
@@ -109,7 +113,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='desktop')await page.getByRole('button',{name:'デバイスの画面を見る',exact:true}).click();
   if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーのファイルを見る',exact:true}).click();}
   if(checkFiles) await checkFiles();
-  await page.waitForTimeout(120);await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});
+  await page.waitForTimeout(120);if(!(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection'))await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});
   const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,visiblePanels:[...document.querySelectorAll('.tile')].filter(el=>!!el.getClientRects().length).map(el=>({width:Math.round(el.getBoundingClientRect().width),headerWidth:el.querySelector('.tablist')?.clientWidth||0})),dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].map(el=>({label:el.getAttribute('aria-label'),width:Math.round(el.getBoundingClientRect().width)}))}));
   results.push({screen:scene.name,width:scene.width,height:scene.height,...metrics,errors});
   if(phase==='after'){assert.deepEqual(errors,[],scene.name+' runtime errors');assert.equal(metrics.overflow,false,scene.name+' horizontal page overflow');}
@@ -158,7 +162,9 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(await page.locator('.tile:visible').count(),1);
    await page.setViewportSize({width:1920,height:1080});await page.waitForTimeout(150);
    assert.equal(await page.locator('.tile:visible').count(),4,'restores split after resize');
-   assert.equal(activeTerminals,4,'only visible split panels retain websocket connections');
+   const splitDeadline=Date.now()+5000;
+   while(activeTerminals!==4 && Date.now()<splitDeadline)await page.waitForTimeout(20);
+   assert.equal(activeTerminals,4,'only visible split panels retain websocket connections '+JSON.stringify(terminalTransports.map(t=>({window:t.window,remote:t.remote,closes:t.closeEvents||0}))));
    await page.setViewportSize({width:900,height:1024});await page.waitForTimeout(150);
    for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close, .tile:visible .tab-menu:visible, .tile:visible .strip-btn, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
    for(const list of await page.locator('.tile:visible .tablist').all()) assert.ok(await list.evaluate(el=>el.querySelector('.tab.active').getBoundingClientRect().left>=el.getBoundingClientRect().left-1),'selected tab keeps its leading label visible after resize');

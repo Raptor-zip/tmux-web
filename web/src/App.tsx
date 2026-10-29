@@ -19,7 +19,7 @@ import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, type DragPayload, type DropTarget } from './components/SplitView';
 import { Switcher, type SwitchItem } from './components/Switcher';
 import { ContextMenu, SEP, type MenuEntry } from './components/ContextMenu';
-import type { TerminalHandle } from './components/Terminal';
+import type { TerminalHandle, TerminalStatus } from './components/Terminal';
 import {
   activateTab,
   activeTab,
@@ -173,7 +173,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [termStatuses, setTermStatuses] = useState<
-    Record<string, { connected: boolean; message?: string }>
+    Record<string, TerminalStatus>
   >({});
 
   /** 非同期の途中で使う「いまの木」。await のあいだに変わっていることがある */
@@ -488,7 +488,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   }, []);
 
   const handleStatus = useCallback(
-    (leafId: string, status: { connected: boolean; message?: string }) => {
+    (leafId: string, status: TerminalStatus) => {
       setTermStatuses((prev) => ({ ...prev, [leafId]: status }));
     },
     [],
