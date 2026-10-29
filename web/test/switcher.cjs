@@ -1,0 +1,82 @@
+const assert = require('node:assert/strict');
+
+// Live state and keyboard events use synthetic data in an isolated browser.
+module.exports = async function prepareSwitcher(page, { state, scene }) {
+  let local = state('local'), publish;
+  await page.routeWebSocket(url => url.pathname === '/ws/events', ws => {
+    publish = () => ws.send(JSON.stringify({ type: 'state', ...local }));
+    publish(); ws.onMessage(publish);
+  });
+  return async () => {
+    const failures = [];
+    const check = (condition, message) => { if (!condition) failures.push(message); };
+    const dialog = page.getByRole('dialog', { name: 'ウィンドウを切り替える', exact: true });
+    const input = dialog.locator('.sw-input');
+    const trigger = page.locator('.statusbar button[title="ウィンドウを切り替える (Alt+P)"]');
+    const dismiss = () => dialog.getByRole('button', { name: 'ウィンドウ一覧を閉じる', exact: true });
+    const open = async () => { await trigger.click(); await dialog.waitFor(); };
+    await dialog.waitFor();
+    check(await dialog.evaluate(node => node.contains(document.activeElement)), 'opening keeps focus inside the palette');
+    if (scene.touch) check(await input.evaluate(node => node !== document.activeElement), 'touch opening does not force the software keyboard');
+    await input.focus();
+    await input.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: true, bubbles: true, cancelable: true });
+    check(await dialog.isVisible(), 'IME confirmation must not select a window');
+    if (!await dialog.isVisible()) await open();
+    // WebKit can report the confirmation Enter with keyCode 229 after compositionend.
+    await input.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: false, bubbles: true, cancelable: true });
+    check(await dialog.isVisible(), 'IME fallback Enter must not select a window');
+    if (!await dialog.isVisible()) await open();
+    await input.focus();
+    const list = dialog.locator('.sw-list');
+    await list.evaluate(node => { node.scrollTop = 120; });
+    const scroll = await list.evaluate(node => node.scrollTop);
+    local = { ...local, panes: local.panes.map((pane, index) => index ? pane : { ...pane, title: 'fixture-updated-title' }) };
+    publish();
+    await dialog.getByText('fixture-updated-title', { exact: true }).waitFor({ state: 'attached' });
+    check(Math.abs(await list.evaluate(node => node.scrollTop) - scroll) < 2, 'live updates preserve manual list scrolling');
+    local = state('local'); publish();
+    await dialog.getByText('fixture-updated-title', { exact: true }).waitFor({ state: 'detached' });
+    await input.focus(); await page.keyboard.press('ArrowDown');
+    const selected = await dialog.locator('.sw-row.on .sub-rest').innerText();
+    local = { ...local, panes: local.panes.map(pane => ({ ...pane, busy: false })) };
+    publish();
+    await page.waitForFunction(() => document.querySelectorAll('.switcher .sw-row.st-working').length === 4);
+    check(await dialog.locator('.sw-row.on .sub-rest').innerText() === selected, 'status reordering keeps the chosen window selected');
+    await dismiss().focus(); await page.keyboard.press('Tab');
+    // WebKit can visit browser chrome (BODY) before cycling into the modal.
+    if (await page.evaluate(() => document.activeElement === document.body)) await page.keyboard.press('Tab');
+    check(await dialog.evaluate(node => node.contains(document.activeElement)), 'Tab from the close button cannot reach the workspace');
+    await trigger.evaluate(node => node.focus());
+    check(await trigger.evaluate(node => node !== document.activeElement), 'the native modal blocks background focus');
+    await dismiss().focus(); await page.keyboard.press('Escape');
+    check(!await dialog.isVisible(), 'Escape closes the palette from the close button');
+    if (await dialog.isVisible()) await dismiss().click();
+    check(await trigger.evaluate(node => document.activeElement === node), 'closing restores the opening control');
+    await open(); await input.focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await dialog.locator('.sw-row').count(), 24);
+    local = { ...local, windows: local.windows.slice(0, 1), panes: local.panes.slice(0, 1) };
+    publish();
+    await page.waitForFunction(() => document.querySelectorAll('.switcher .sw-row').length === 13);
+    check(await dialog.locator('.sw-row.on').count() === 1, 'live removal leaves a selected result');
+    const active = await input.getAttribute('aria-activedescendant');
+    check(!!active && await page.evaluate(id => document.getElementById(id)?.getAttribute('aria-selected') === 'true', active), 'the combobox identifies the selected option');
+    await page.keyboard.press('Enter');
+    check(!await dialog.isVisible(), 'Enter still opens a result after live removal');
+    if (await dialog.isVisible()) await dismiss().click();
+    local = state('local'); publish();
+    await open();
+    await page.waitForFunction(() => document.querySelectorAll('.switcher .sw-row').length === 24);
+    await input.fill('no-matching-fixture-window');
+    await dialog.locator('.sw-empty').waitFor();
+    await page.keyboard.press('Enter');
+    check(await dialog.isVisible(), 'Enter on an empty search keeps the palette open');
+    await input.fill('DGX Spark');
+    await page.waitForFunction(() => document.querySelectorAll('.switcher .sw-row').length === 12);
+    check((await dialog.locator('.sw-row .sub-rest').allTextContents()).every(text => text.includes('DGX Spark')), 'device search only returns the named device');
+    await input.fill('');
+    await page.waitForFunction(() => document.querySelectorAll('.switcher .sw-row').length === 24);
+    assert.deepEqual(failures, [], scene.name + ' keyboard and live state failures');
+    console.log(scene.name + ': composition, focus, device search, scrolling, reordering and live removal passed');
+  };
+};

@@ -30,6 +30,9 @@ const scenes=[
  {name:'mobile-panels',width:390,height:844,touch:true,tree:four()},
  {name:'mobile-landscape',width:740,height:390,touch:true,tree:four()},
  {name:'many-tabs',width:1100,height:800,tree:leaf(1,'local',Array.from({length:11},(_,i)=>tab(i+2)))},
+ {name:'switcher-desktop',width:1280,height:800,tree:leaf(1),action:'switcher'},
+ {name:'switcher-mobile',width:390,height:844,touch:true,tree:leaf(1),action:'switcher'},
+ {name:'switcher-landscape',width:740,height:390,touch:true,tree:leaf(1),action:'switcher'},
  {name:'focus-panel',width:1280,height:800,tree:four(),action:'focus'},
  {name:'devices-modal',width:390,height:844,tree:leaf(1),action:'devices'},
  {name:'project-modal',width:390,height:640,sidebar:true,tree:leaf(1),action:'project'},
@@ -77,6 +80,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    }
   });
   const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
+  const checkSwitcher=process.env.SWITCHER_CHECK && scene.action==='switcher' ? await require('./switcher.cjs')(page,{state,scene}) : null;
   await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(checkStateConnection) await checkStateConnection();
   if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
@@ -95,6 +99,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^このパネルを広げる \/ 元に戻す/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
+  if(scene.action==='switcher')await page.locator('.statusbar button[title="ウィンドウを切り替える (Alt+P)"]').click();
+  if(checkSwitcher) await checkSwitcher();
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project')await page.getByRole('button',{name:'＋ プロジェクトを作る',exact:true}).click();
