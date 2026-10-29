@@ -19,3 +19,5 @@
 - 2026-10-30 01:04:51 [2026-10-30-07 file-browser-verified](logs/2026-10-30-07-file-browser-verified.md) — phase: ファイル操作 / iter: 6 / status: success
 - 2026-10-30 01:08:34 [2026-10-30-08 file-preview-refresh-cause](logs/2026-10-30-08-file-preview-refresh-cause.md) — phase: ファイル操作 / iter: 6 / status: partial
 - 2026-10-30 01:11:15 [2026-10-30-09 file-browser-complete](logs/2026-10-30-09-file-browser-complete.md) — phase: ファイル操作 / iter: 6 / status: success
+- 2026-10-30 01:24:44 [2026-10-30-10 file-api-edge-cases-start](logs/2026-10-30-10-file-api-edge-cases-start.md) — phase: ファイルAPI / iter: 7 / status: partial
+- 2026-10-30 01:34:13 [2026-10-30-11 file-api-edge-cases-verified](logs/2026-10-30-11-file-api-edge-cases-verified.md) — phase: ファイルAPI / iter: 7 / status: success
