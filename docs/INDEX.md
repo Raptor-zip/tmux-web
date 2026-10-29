@@ -50,3 +50,7 @@
 - 2026-10-30 03:39:07 [2026-10-30-38 project-initial-focus-start](logs/2026-10-30-38-project-initial-focus-start.md) — phase: プロジェクト入力開始の確認 / iter: 15 / status: partial
 - 2026-10-30 03:39:51 [2026-10-30-39 project-initial-focus-cause](logs/2026-10-30-39-project-initial-focus-cause.md) — phase: 初回フォーカスの原因記録 / iter: 15 / status: partial
 - 2026-10-30 03:42:07 [2026-10-30-40 project-initial-focus-verified](logs/2026-10-30-40-project-initial-focus-verified.md) — phase: プロジェクト入力開始の確認 / iter: 15 / status: success
+- 2026-10-30 03:43:02 [2026-10-30-41 overnight-final-audit-start](logs/2026-10-30-41-overnight-final-audit-start.md) — phase: 最終監査 / iter: 16 / status: partial
+- 2026-10-30 03:48:25 [2026-10-30-42 rename-ime-guard-cause](logs/2026-10-30-42-rename-ime-guard-cause.md) — phase: 名称入力のIME確認 / iter: 17 / status: partial
+- 2026-10-30 03:51:18 [2026-10-30-43 rename-ime-guard-verified](logs/2026-10-30-43-rename-ime-guard-verified.md) — phase: 名称入力のIME確認 / iter: 17 / status: success
+- 2026-10-30 04:00:23 [2026-10-30-44 overnight-final-audit-complete](logs/2026-10-30-44-overnight-final-audit-complete.md) — phase: 最終監査 / iter: 16 / status: success
