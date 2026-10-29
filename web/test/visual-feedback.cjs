@@ -45,7 +45,9 @@ const scenes=[
 ];
 const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[90m~/projects/atlas-web · feature/responsive-ui\x1b[0m\r\n\r\n\x1b[1mタスク：使いやすい端末ワークスペースを作る\x1b[0m\r\n\r\n  ✓ 接続先と作業名を確認\r\n  ✓ タブと分割の配置を保存\r\n  ✓ 狭い画面での操作を検証\r\n\r\n\x1b[1;32m実装の進捗\x1b[0m\r\n  狭いパネルでも作業名と状態が分かる構成にします。\r\n  デバイスごとの端末を同じ画面で操作できます。\r\n\r\n  src/components/Workspace.tsx    +24 −12\r\n  src/styles.css                 +48 −20\r\n\r\n\x1b[32m  18 tests passed\x1b[0m\r\n\x1b[90m  次にブラウザで表示を確認します。\x1b[0m\r\n\r\n────────────────────────────────────────\r\n\x1b[1m› 次の作業を入力…\x1b[0m\r\n';
 (async()=>{
- const app=express();app.use(express.static((process.env.STATIC_ROOT||join(root,'web/dist'))));app.get('*',(_q,r)=>r.sendFile(join(process.env.STATIC_ROOT||join(root,'web/dist'),'index.html')));
+ const app=express();
+ if(process.env.COMPRESSED_STATIC){const {installWeb}=await import('../../server/src/web.js');installWeb(app,process.env.STATIC_ROOT||join(root,'web/dist'));}
+ else{app.use(express.static((process.env.STATIC_ROOT||join(root,'web/dist'))));app.get('*',(_q,r)=>r.sendFile(join(process.env.STATIC_ROOT||join(root,'web/dist'),'index.html')));}
  const server=http.createServer(app);await new Promise(r=>server.listen(17656,'127.0.0.1',r));
  const browser=process.env.BROWSER_ENGINE==='webkit'
   ? await webkit.launch({headless:true,...(process.env.WEBKIT_BIN?{executablePath:process.env.WEBKIT_BIN}:{})})
@@ -55,7 +57,15 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now,keepStorage})=>{Date.now=()=>now;if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK});
-  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];const transferTasks=[],transfers=[];page.on('pageerror',e=>errors.push(e.message));
+  if(process.env.TRANSFER_REPORT)page.on('requestfinished',request=>{
+   const url=new URL(request.url());if(!/\.(?:js|css)$/.test(url.pathname))return;
+   transferTasks.push((async()=>{const response=await request.response();const headers=await response.allHeaders();const sizes=await request.sizes();transfers.push({asset:url.pathname.split('/').at(-1),encoding:headers['content-encoding']||'identity',wireBodyBytes:sizes.responseBodySize,decodedBytes:(await response.body()).length});})().catch(error=>errors.push(error.message)));
+  });
+  if(process.env.TRANSFER_REPORT){
+   await page.addInitScript(()=>{new MutationObserver((_,observer)=>{const button=document.querySelector('.mobile-input .input-attach');if(button&&!button.disabled){window.__terminalReadyAt=performance.now();observer.disconnect();}}).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']});});
+   if(process.env.THROTTLE_KBPS){const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});await cdp.send('Network.emulateNetworkConditions',{offline:false,downloadThroughput:Number(process.env.THROTTLE_KBPS)*1000/8,uploadThroughput:100000,latency:Number(process.env.THROTTLE_RTT_MS||0)});}
+  }
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;
    let body={};let status=200;
@@ -115,6 +125,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(checkFiles) await checkFiles();
   await page.waitForTimeout(120);if(!(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection'))await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});
   const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,visiblePanels:[...document.querySelectorAll('.tile')].filter(el=>!!el.getClientRects().length).map(el=>({width:Math.round(el.getBoundingClientRect().width),headerWidth:el.querySelector('.tablist')?.clientWidth||0})),dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].map(el=>({label:el.getAttribute('aria-label'),width:Math.round(el.getBoundingClientRect().width)}))}));
+  if(process.env.TRANSFER_REPORT){await Promise.all(transferTasks);fs.writeFileSync(process.env.TRANSFER_REPORT,JSON.stringify({screen:scene.name,conditions:{downloadKbps:Number(process.env.THROTTLE_KBPS)||null,latencyMs:Number(process.env.THROTTLE_RTT_MS)||0,coldContext:true},timings:await page.evaluate(()=>({firstContentfulPaint:performance.getEntriesByName('first-contentful-paint')[0]?.startTime||null,terminalReady:window.__terminalReadyAt||null})),transfers},null,2));console.log('asset transfers',JSON.stringify(transfers));}
   results.push({screen:scene.name,width:scene.width,height:scene.height,...metrics,errors});
   if(phase==='after'){assert.deepEqual(errors,[],scene.name+' runtime errors');assert.equal(metrics.overflow,false,scene.name+' horizontal page overflow');}
   if(phase==='after' && process.env.FORM_CHECK){
