@@ -77,7 +77,7 @@ export function workspaceMenuItems({
     { label: 'ペインを全画面 / 元に戻す', run: () => pane && onAction('zoomPane', { target: pane }), disabled: !pane },
     { label: 'ペインを閉じる…', run: onKillPane, disabled: !pane },
     SEP,
-    { label: 'デバイスの画面を見る', run: onOpenScreen },
+    { label: 'リモートデスクトップを開く', run: onOpenScreen },
     { label: `キーバーを${showKeyBar ? '隠す' : '表示'}`, run: () => onToggle('showKeyBar') },
     { label: `tmux のステータス行を${showStatusBar ? '隠す' : '表示'}`, run: () => onToggle('showStatusBar') },
     { label: mode === 'mirror' ? '直接接続に切り替える' : 'ミラー接続に切り替える', run: () => onToggle('mode') },

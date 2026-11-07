@@ -22,6 +22,14 @@ function tab(n,device='local'){return{id:'tab-'+device+'-'+n,sessionId:device===
 function leaf(n,device='local',extra=[]){const t=tab(n,device);return{type:'leaf',id:'panel-'+device+'-'+n,tabs:[t,...extra],activeId:t.id};}
 function four(){return{type:'split',id:'split1',dir:'row',ratio:.25,a:leaf(1,'local',[tab(5)]),b:{type:'split',id:'split2',dir:'row',ratio:1/3,a:leaf(2),b:{type:'split',id:'split3',dir:'row',ratio:.5,a:leaf(1,'spark'),b:leaf(3)}}};}
 const scenes=[
+ ...[
+  {name:'remote-entry-desktop',width:1280,height:800},
+  {name:'remote-entry-mobile',width:390,height:844,touch:true},
+  {name:'remote-viewer-desktop',width:1280,height:800,action:'desktop'},
+  {name:'remote-viewer-mobile',width:390,height:844,touch:true,action:'desktop'},
+  {name:'remote-clipboard-mobile',width:390,height:844,touch:true,action:'desktop',remotePanel:'clipboard'},
+  {name:'remote-settings-desktop',width:1280,height:800,action:'desktop',remotePanel:'settings'},
+ ].map(scene=>({...scene,tree:leaf(1)})),
  {name:"desktop-controls",width:1280,height:800,sidebar:true,tree:leaf(1)},
  {name:"project-desktop",width:1280,height:800,sidebar:true,tree:leaf(1),action:"project"},
  {name:'desktop-four',width:1920,height:1080,tree:four()},
@@ -120,9 +128,17 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
-  if(scene.action==='desktop'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'デバイスの画面を見る',exact:true}).click();}
+  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'リモートデスクトップを開く',exact:true}).click();}
   if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーのファイルを見る',exact:true}).click();}
   if(checkFiles) await checkFiles();
+  if(scene.name.startsWith('remote-') && scene.action==='desktop'){
+   if(phase==='after')await page.getByRole('button',{name:'リモートデスクトップ',exact:true}).click();
+   await page.getByRole('dialog',{name:'リモートデスクトップ',exact:true}).waitFor();
+   if(scene.remotePanel){
+    if(phase==='before')await page.locator('.desktop-more summary').click();
+    await page.getByRole('button',{name:scene.remotePanel==='clipboard'?(phase==='before'?'文字・クリップボード':'文字入力・コピー'):'画質・遅延設定',exact:true}).click();
+   }
+  }
   await page.waitForTimeout(120);if(!(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection'))await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});
   const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,visiblePanels:[...document.querySelectorAll('.tile')].filter(el=>!!el.getClientRects().length).map(el=>({width:Math.round(el.getBoundingClientRect().width),headerWidth:el.querySelector('.tablist')?.clientWidth||0})),dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].map(el=>({label:el.getAttribute('aria-label'),width:Math.round(el.getBoundingClientRect().width)}))}));
   if(process.env.TRANSFER_REPORT){await Promise.all(transferTasks);fs.writeFileSync(process.env.TRANSFER_REPORT,JSON.stringify({screen:scene.name,conditions:{downloadKbps:Number(process.env.THROTTLE_KBPS)||null,latencyMs:Number(process.env.THROTTLE_RTT_MS)||0,coldContext:true},timings:await page.evaluate(()=>({firstContentfulPaint:performance.getEntriesByName('first-contentful-paint')[0]?.startTime||null,terminalReady:window.__terminalReadyAt||null})),transfers},null,2));console.log('asset transfers',JSON.stringify(transfers));}
@@ -237,10 +253,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
     const count=terminalConnections;
     for(let i=0;i<3;i++){
      await togglePanel();
-     await page.waitForTimeout(120);
+  await page.waitForTimeout(120);
      assert.equal(activeTerminals,1,'focused panel is the only attached terminal');
      await togglePanel();
-     await page.waitForTimeout(120);
+  await page.waitForTimeout(120);
      assert.equal(activeTerminals,4,'restoring split does not accumulate connections');
     }
     assert.equal(terminalConnections,count+9,'only newly visible panels reconnect');

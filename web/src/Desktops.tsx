@@ -1,3 +1,4 @@
+import { ScreenViewer } from './components/ScreenViewer';
 import { InstallApp } from './components/InstallApp';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import App from './App';
@@ -11,6 +12,7 @@ import { addDesktop, desktopKey, INITIAL_DESKTOPS, removeDesktop, restoreDesktop
 
 export default function Desktops() {
   const connection = useTmuxState();
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const [state, setState] = useState<DesktopState>(() => {
     try { return restoreDesktops(JSON.parse(localStorage.getItem('tw.desktops') || 'null')); }
     catch { return INITIAL_DESKTOPS; }
@@ -166,6 +168,7 @@ export default function Desktops() {
         </div>)}
       </div>
       <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
+      <button className="remote-desktop-launch" onClick={() => setRemoteOpen(true)}><Icon name="screen" /><span>リモートデスクトップ</span></button>
       <InstallApp />
       <button className="desktop-rename" aria-label="現在のデスクトップの名前を変更" title="デスクトップの名前を変更" onClick={() => rename()}><Icon name="edit" /></button>
     </header>
@@ -175,6 +178,7 @@ export default function Desktops() {
         {visited.has(desktop.id) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
       </section>)}
     </div>
+    {remoteOpen && <ScreenViewer devices={connection.devices} deviceId="local" onClose={() => setRemoteOpen(false)} />}
     {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
   </div>;
 }

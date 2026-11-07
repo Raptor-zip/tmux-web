@@ -154,30 +154,46 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
   return <div className="modal-backdrop desktop-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
     <div className="screen-viewer desktop-viewer" role="dialog" aria-modal="true" aria-label="リモートデスクトップ" tabIndex={-1} ref={panel}>
       <div className="screen-head">
-        <strong><Icon name="screen" /> <span>{selectedName} のデスクトップ</span></strong>
-        <button className="icon-btn" aria-label="デスクトップを閉じる" onClick={onClose}><Icon name="close" /></button>
+        <strong><Icon name="screen" /> <span>リモートデスクトップ</span></strong>
+        <button className="btn desktop-close-viewer" aria-label="デスクトップを閉じる" onClick={onClose}><Icon name="close" />閉じる</button>
       </div>
-      <div className="screen-controls">
-        {devices.length > 1 && <label className="desktop-device-label">接続先
-          <select aria-label="デスクトップのデバイス" value={selectedDeviceId} onChange={event => {
-            setText(''); setNotice(''); setRoundTrip(null); setSelectedDeviceId(event.target.value);
-          }}>
-            {devices.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}
-          </select>
-        </label>}
-        <button className="btn" aria-pressed={!fit} onClick={() => setFit(v => !v)}>{fit ? '原寸表示' : '画面に合わせる'}</button>
-        <button className="btn" onClick={() => void fullscreen()}>{full ? '全画面を終了' : '全画面'}</button>
-        <button className="btn" aria-pressed={viewOnly} onClick={() => setViewOnly(v => !v)}>{viewOnly ? '閲覧のみ' : '操作有効'}</button>
-        <details className="desktop-more"><summary className="btn">その他の操作</summary><div className="desktop-more-content">        <button className="btn" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>画質・遅延設定</button>
-
-        <button className="btn" aria-expanded={clipboardOpen} onClick={() => setClipboardOpen(v => !v)}>文字・クリップボード</button>
-        <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendKey(0xff1b, 'Escape'); client.current?.focus(); }}>Esc</button>
-        <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendCtrlAltDel(); client.current?.focus(); }}>Ctrl+Alt+Del</button>
-        <button className="btn" onClick={() => setAttempt(v => v + 1)}>再接続</button>
-
-        </div></details>
+      <div className="desktop-toolbar">
+        <div className="desktop-connection-row">
+          <label className="desktop-device-label">接続先
+            {devices.length > 1 ? <select aria-label="デスクトップのデバイス" value={selectedDeviceId} onChange={event => {
+              setText(''); setNotice(''); setRoundTrip(null); setSelectedDeviceId(event.target.value);
+            }}>
+              {devices.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}
+            </select> : <strong>{selectedName}</strong>}
+          </label>
+          <span className={`desktop-connection-status ${connected ? 'is-connected' : ''}`} role="status"><span className={`dot ${connected ? 'ok' : error ? 'bad' : ''}`} />{connected ? '接続済み' : error ? '未接続' : '接続中…'}</span>
+          <button className="btn" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />再接続</button>
+        </div>
+        <div className="desktop-action-row">
+          <div className="desktop-mode" role="group" aria-label="リモートの操作モード">
+            <button className="btn" aria-pressed={!viewOnly} onClick={() => setViewOnly(false)}>操作する</button>
+            <button className="btn" aria-pressed={viewOnly} onClick={() => setViewOnly(true)}>見るだけ</button>
+          </div>
+          <div className="desktop-display-controls">
+            <label className="desktop-display-label">表示<select aria-label="デスクトップの表示サイズ" value={fit ? 'fit' : 'actual'} onChange={e => setFit(e.target.value === 'fit')}>
+              <option value="fit">画面に合わせる</option><option value="actual">原寸（100%）</option>
+            </select></label>
+            <button className="btn" onClick={() => void fullscreen()}><Icon name="expand" />{full ? '全画面を終了' : '全画面'}</button>
+          </div>
+          <div className="desktop-tools">
+            <button className="btn" aria-expanded={clipboardOpen} aria-controls="desktop-clipboard-panel" onClick={() => { setClipboardOpen(v => !v); setSettingsOpen(false); }}><Icon name="keyboard" />文字入力・コピー</button>
+            <button className="btn" aria-expanded={settingsOpen} aria-controls="desktop-settings-panel" onClick={() => { setSettingsOpen(v => !v); setClipboardOpen(false); }}>画質・遅延設定</button>
+          </div>
+        </div>
+        <div className="desktop-input-row">
+          <span>{viewOnly ? '見るだけ：マウス・キー操作は送信しません' : '画面をクリックするとマウス・キーボードで操作できます'}</span>
+          <div role="group" aria-label="リモートへキーを送信">
+            <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendKey(0xff1b, 'Escape'); client.current?.focus(); }}>Esc を送る</button>
+            <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendCtrlAltDel(); client.current?.focus(); }}>Ctrl+Alt+Del を送る</button>
+          </div>
+        </div>
       </div>
-      {settingsOpen && <div className="desktop-settings">
+      {settingsOpen && <div className="desktop-settings" id="desktop-settings-panel">
         <div className="screen-controls" role="group" aria-label="配信プリセット">
           {Object.entries(desktopPresets).map(([id, preset]) => <button key={id} className="btn" onClick={() => setDraft(preset)}>{preset.label}</button>)}
         </div>
@@ -200,23 +216,30 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
           <button className="btn" onClick={() => { setDraft(settings); setSettingsOpen(false); }}>キャンセル</button>
         </div>
       </div>}
-      {clipboardOpen && <div className="desktop-clipboard">
-        <label htmlFor="desktop-text">送る文字（日本語入力可）・リモートでコピーした文字</label>
+      {clipboardOpen && <div className="desktop-clipboard" id="desktop-clipboard-panel">
+        <label htmlFor="desktop-text">文字入力・クリップボード（日本語入力可）</label>
         <textarea id="desktop-text" value={text} onChange={e => setText(e.target.value)} placeholder="ここに入力して、リモートへ貼り付け" />
         <div className="screen-controls">
-          <button className="btn" disabled={!connected || viewOnly} onClick={() => void paste()}>リモートへ貼り付け</button>
-          <button className="btn" disabled={!connected} onClick={() => void copy()}>リモートからコピー</button>
+          <button className="btn primary" disabled={!connected || viewOnly} onClick={() => void paste()}>接続先へ貼り付け</button>
+          <button className="btn" disabled={!connected} onClick={() => void copy()}>接続先からコピー</button>
         </div>
       </div>}
       <div className="desktop-stage">
         <div className="desktop-viewport" ref={viewport} aria-label="デスクトップ操作領域" />
-        {!connected && <p role="status" className="screen-message desktop-message">{error || message}</p>}
+        {!connected && <div className="desktop-message"><div className="desktop-message-content">
+          <Icon name="screen" width="32" height="32" />
+          <strong>{error ? 'デスクトップに接続できません' : message}</strong>
+          <p role={error ? 'alert' : 'status'}>{error || `${selectedName} の画面を準備しています。`}</p>
+          {error && <button className="btn primary" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />もう一度接続する</button>}
+        </div></div>}
       </div>
-      <div className="screen-foot" role="status">
-        {connected ? '接続済み' : error ? '未接続' : message} · {settings.lossless ? '可逆圧縮' : `JPEG 品質${settings.quality}`} · 配信{Math.round(Number(settings.scale) * 100)}%（元画面 {sourceSize || '確認中'}） · 更新{settings.interval}ms · {viewOnly ? '閲覧のみ' : 'マウス・キーボード操作'} · 音声なし
-        <span className="desktop-hint" title="通信往復はHTTPの応答時間です。画面の取り込み・圧縮・描画時間は含みません。">通信往復：{roundTrip === null ? '計測中／応答なし' : `${roundTrip} ms`}（画面遅延とは異なります）</span>
-        <span className="desktop-hint">スマホ：タップでクリック、2本指タップで右クリック、2本指ドラッグでスクロール</span>
-        {notice && <span>{notice}</span>}
+      <div className="screen-foot desktop-footer">
+        {notice && <p className="desktop-notice" role="status">{notice}</p>}
+        <details><summary>操作ガイド・接続情報</summary>
+          <p>スマホ：タップでクリック、2本指タップで右クリック、2本指ドラッグでスクロール。日本語は「文字入力・コピー」から送れます。</p>
+          <p>{settings.lossless ? '可逆圧縮' : `JPEG 品質${settings.quality}`} · 配信{Math.round(Number(settings.scale) * 100)}%（元画面 {sourceSize || '確認中'}） · 更新{settings.interval}ms · 音声なし</p>
+          <p>通信往復：{roundTrip === null ? '未計測／応答なし' : `${roundTrip} ms`}。画面の取り込み・圧縮・描画時間は含みません。</p>
+        </details>
       </div>
     </div>
   </div>;
