@@ -168,7 +168,7 @@ export default function Desktops() {
         </div>)}
       </div>
       <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
-      <button className="remote-desktop-launch" onClick={() => setRemoteOpen(true)}><Icon name="screen" /><span>リモートデスクトップ</span></button>
+      <button className="remote-desktop-launch" aria-label="リモートデスクトップ" title="リモートデスクトップ" onClick={() => setRemoteOpen(true)}><Icon name="screen" /></button>
       <InstallApp />
       <button className="desktop-rename" aria-label="現在のデスクトップの名前を変更" title="デスクトップの名前を変更" onClick={() => rename()}><Icon name="edit" /></button>
     </header>
