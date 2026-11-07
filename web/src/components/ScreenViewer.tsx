@@ -9,6 +9,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
   const [selectedDeviceId, setSelectedDeviceId] = useState(deviceId);
   const selectedDevice = devices.find(device => device.id === selectedDeviceId);
   const selectedName = selectedDevice?.name || deviceName || 'デバイス';
+  const selectionVersion = useRef(0);
   const selectedIdRef = useRef(selectedDeviceId);
   selectedIdRef.current = selectedDeviceId;
   const [attempt, setAttempt] = useState(0);
@@ -20,6 +21,9 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [text, setText] = useState('');
   const [notice, setNotice] = useState('');
+  const [copying, setCopying] = useState(false);
+  const copyLock = useRef(false);
+  const clipboardText = useRef<HTMLTextAreaElement>(null);
   const [full, setFull] = useState(false);
   const [settings, setSettings] = useState(loadDesktopSettings);
   const [draft, setDraft] = useState(settings);
@@ -142,13 +146,47 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
     client.current?.focus();
   };
   const copy = async () => {
+    if (copyLock.current) return;
+    copyLock.current = true; setCopying(true); setNotice('');
+    const version = selectionVersion.current;
+    const isCurrent = () => selectionVersion.current === version && selectedIdRef.current === selectedDeviceId && panel.current !== null;
     try {
-      const { text: received } = await readDesktopClipboard(selectedDeviceId);
-      if (selectedIdRef.current !== selectedDeviceId) return;
-      setText(received);
-      try { await navigator.clipboard.writeText(received); setNotice('この端末にコピーしました'); }
-      catch { setNotice('入力欄に取得しました。テキストを選択してコピーしてください'); }
-    } catch (err) { setNotice((err as Error).message); }
+      const received = readDesktopClipboard(selectedDeviceId).then(({ text: value }) => {
+        if (!isCurrent()) throw new Error('接続先が変更されました');
+        return value;
+      });
+      let written = false;
+      // Start the browser write during the click, before the network response.
+      // This preserves user activation in browsers that require it (e.g. Safari).
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+        try {
+          const data = received.then(value => {
+            if (!value) throw new Error('クリップボードが空です');
+            return new Blob([value], { type: 'text/plain' });
+          });
+          // A denied write may never consume the promised data.
+          void data.catch(() => {});
+          await navigator.clipboard.write([new ClipboardItem({ 'text/plain': data })]);
+          written = true;
+        } catch { /* Retry with writeText or offer the received text for manual copy. */ }
+      }
+      const value = await received;
+      if (!isCurrent()) return;
+      if (!value) { setNotice('接続先のクリップボードに文字がありません'); return; }
+      setText(value);
+      if (!written) {
+        try { await navigator.clipboard.writeText(value); written = true; }
+        catch { /* Some browsers deny clipboard access or require HTTPS. */ }
+      }
+      if (!isCurrent()) return;
+      if (written) setNotice('接続先の文字を、この端末のクリップボードにコピーしました');
+      else {
+        setClipboardOpen(true); setSettingsOpen(false);
+        setNotice('自動コピーが許可されていません。入力欄の文字を選択してコピーしてください');
+        requestAnimationFrame(() => { if (isCurrent()) { clipboardText.current?.focus(); clipboardText.current?.select(); } });
+      }
+    } catch (err) { if (isCurrent()) setNotice((err as Error).message); }
+    finally { copyLock.current = false; setCopying(false); }
   };
 
   return <div className="modal-backdrop desktop-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -161,6 +199,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
         <div className="desktop-connection-row">
           <label className="desktop-device-label">接続先
             {devices.length > 1 ? <select aria-label="デスクトップのデバイス" value={selectedDeviceId} onChange={event => {
+              selectionVersion.current++; selectedIdRef.current = event.target.value;
               setText(''); setNotice(''); setRoundTrip(null); setSelectedDeviceId(event.target.value);
             }}>
               {devices.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}
@@ -181,6 +220,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
             <button className="btn" onClick={() => void fullscreen()}><Icon name="expand" />{full ? '全画面を終了' : '全画面'}</button>
           </div>
           <div className="desktop-tools">
+            <button className="btn desktop-copy-button" disabled={copying} onClick={() => void copy()} title="接続先のクリップボードの文字を、この端末にコピー"><Icon name="download" />{copying ? 'コピー中…' : 'この端末へコピー'}</button>
             <button className="btn" aria-expanded={clipboardOpen} aria-controls="desktop-clipboard-panel" onClick={() => { setClipboardOpen(v => !v); setSettingsOpen(false); }}><Icon name="keyboard" />文字入力・コピー</button>
             <button className="btn" aria-expanded={settingsOpen} aria-controls="desktop-settings-panel" onClick={() => { setSettingsOpen(v => !v); setClipboardOpen(false); }}>画質・遅延設定</button>
           </div>
@@ -218,10 +258,10 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
       </div>}
       {clipboardOpen && <div className="desktop-clipboard" id="desktop-clipboard-panel">
         <label htmlFor="desktop-text">文字入力・クリップボード（日本語入力可）</label>
-        <textarea id="desktop-text" value={text} onChange={e => setText(e.target.value)} placeholder="ここに入力して、リモートへ貼り付け" />
+        <textarea ref={clipboardText} id="desktop-text" value={text} onChange={e => setText(e.target.value)} placeholder="ここに入力して、リモートへ貼り付け" />
         <div className="screen-controls">
           <button className="btn primary" disabled={!connected || viewOnly} onClick={() => void paste()}>接続先へ貼り付け</button>
-          <button className="btn" disabled={!connected} onClick={() => void copy()}>接続先からコピー</button>
+          <button className="btn" disabled={copying} onClick={() => void copy()}>{copying ? 'コピー中…' : '接続先からコピー'}</button>
         </div>
       </div>}
       <div className="desktop-stage">

@@ -144,6 +144,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(process.env.TRANSFER_REPORT){await Promise.all(transferTasks);fs.writeFileSync(process.env.TRANSFER_REPORT,JSON.stringify({screen:scene.name,conditions:{downloadKbps:Number(process.env.THROTTLE_KBPS)||null,latencyMs:Number(process.env.THROTTLE_RTT_MS)||0,coldContext:true},timings:await page.evaluate(()=>({firstContentfulPaint:performance.getEntriesByName('first-contentful-paint')[0]?.startTime||null,terminalReady:window.__terminalReadyAt||null})),transfers},null,2));console.log('asset transfers',JSON.stringify(transfers));}
   results.push({screen:scene.name,width:scene.width,height:scene.height,...metrics,errors});
   if(phase==='after'){assert.deepEqual(errors,[],scene.name+' runtime errors');assert.equal(metrics.overflow,false,scene.name+' horizontal page overflow');}
+  if(phase==='after' && process.env.REMOTE_CLIPBOARD_CHECK && scene.name==='remote-viewer-desktop') {
+   await require('./remote-clipboard.cjs')(page,{out,screenshot:!process.env.NO_SCREENSHOTS});
+   assert.deepEqual(errors,[], 'remote clipboard runtime errors');
+  }
   if(phase==='after' && process.env.FORM_CHECK){
    assert.doesNotMatch(await page.title(),/tmux[ -]?web/i,'product name removed from browser title');
    assert.equal(await page.locator('.brand').count(),0,'no redundant sidebar brand');

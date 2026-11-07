@@ -1,0 +1,78 @@
+[
+  {
+    "screen": "remote-viewer-desktop",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1280,
+        "headerWidth": 1180
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 1254
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "remote-viewer-mobile",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 248
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 390
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "remote-clipboard-mobile",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 248
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 390
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "remote-settings-desktop",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1280,
+        "headerWidth": 1180
+      }
+    ],
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 1254
+      }
+    ],
+    "errors": []
+  }
+]
