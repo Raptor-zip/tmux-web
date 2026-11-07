@@ -107,13 +107,8 @@ if [ "$(loginctl show-user "$USER" --property=Linger --value 2>/dev/null || echo
   loginctl enable-linger "$USER" || die "linger の有効化に失敗しました（sudo loginctl enable-linger $USER を実行してから再実行してください）"
 fi
 
-# デスクトップ画面の配信に使う。未ログイン・ヘッドレス環境でも通常機能は起動する。
-if [ -n "${DISPLAY:-}" ]; then
-  systemctl --user import-environment DISPLAY
-fi
-if [ -n "${XAUTHORITY:-}" ]; then
-  systemctl --user import-environment XAUTHORITY
-fi
+# 物理画面のX11セッションだけを引き継ぐ。XRDPやSSHからの設定で上書きしない。
+bash "$REPO_DIR/scripts/import-desktop-environment.sh" --import-only
 
 # linger で GUI より先に起動したサービスにも、ログイン後に画面情報を渡す。
 AUTOSTART_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"

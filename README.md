@@ -272,11 +272,14 @@ systemctl --user restart tmux-web
 ```
 
 `install-service.sh` も設定時にこの環境変数を引き継ぐ。
-さらに X11 ログイン時の自動実行を登録し、現在の `DISPLAY` / `XAUTHORITY` を
+さらに物理画面の X11 ログイン時の自動実行を登録し、現在の `DISPLAY` / `XAUTHORITY` を
 引き継いで起動済みの tmux-web を再起動する。これにより、PC 起動時に GUI より先に
 サービスが立ち上がった場合や、再ログインで画面番号が変わった場合も接続できる。
 再起動中はブラウザの接続が一時的に切れるが、tmux セッションは維持される。
-別の X ディスプレイを選ぶには `TMUX_WEB_DISPLAY` を設定する。
+XRDPなどの別デスクトップへのログインでは配信先を上書きしない。
+`loginctl` で物理座席（seat）があるX11セッションだけを引き継ぐ。サービスの再設定も同じ判定を使う。
+誤って別画面を配信している場合は、実ディスプレイ上の端末で `bash scripts/import-desktop-environment.sh` を実行する。
+別の X ディスプレイを明示的に選ぶには `TMUX_WEB_DISPLAY` を設定する。
 ヘッドレス環境でも tmux の機能は引き続き使える。
 
 接続はTailscale認証と `/ws/desktop` を使い、Tailscale Serve の既存 URL で利用できる。
