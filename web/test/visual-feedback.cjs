@@ -148,6 +148,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await require('./remote-clipboard.cjs')(page,{out,screenshot:!process.env.NO_SCREENSHOTS});
    assert.deepEqual(errors,[], 'remote clipboard runtime errors');
   }
+  if(phase==='after' && process.env.DESKTOP_CONTEXT_CHECK && scene.name.startsWith('remote-entry-')) {
+   await require('./desktop-context.cjs')(page,{scene,out,screenshots:!process.env.NO_SCREENSHOTS});
+   assert.deepEqual(errors,[], 'desktop context runtime errors');
+  }
   if(phase==='after' && process.env.FORM_CHECK){
    assert.doesNotMatch(await page.title(),/tmux[ -]?web/i,'product name removed from browser title');
    assert.equal(await page.locator('.brand').count(),0,'no redundant sidebar brand');

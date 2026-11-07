@@ -1,0 +1,30 @@
+[
+  {
+    "screen": "remote-entry-desktop",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1280,
+        "headerWidth": 1180
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  },
+  {
+    "screen": "remote-entry-mobile",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 390,
+        "headerWidth": 248
+      }
+    ],
+    "dialogs": [],
+    "errors": []
+  }
+]

@@ -1,3 +1,4 @@
+import { ContextMenu } from './components/ContextMenu';
 import { ScreenViewer } from './components/ScreenViewer';
 import { InstallApp } from './components/InstallApp';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +21,17 @@ export default function Desktops() {
   const [visited, setVisited] = useState(() => new Set([state.activeId]));
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  const [tabMenu, setTabMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const press = useRef<{ pointerId: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const heldTab = useRef<string | null>(null);
+  const cancelPress = useCallback(() => {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = null;
+  }, []);
+  useEffect(() => {
+    window.addEventListener('blur', cancelPress);
+    return () => { cancelPress(); window.removeEventListener('blur', cancelPress); };
+  }, [cancelPress]);
   const desktopLayouts = useRef<DesktopLayoutRegistry>(new Map());
   const [dropDesktopId, setDropDesktopId] = useState<string | null>(null);
   const dragCleanup = useRef<(() => void) | null>(null);
@@ -90,7 +102,6 @@ export default function Desktops() {
     window.addEventListener('blur', abort);
   }, []);
 
-  const current = state.items.find(item => item.id === state.activeId)!;
   useEffect(() => { try { localStorage.setItem('tw.desktops', JSON.stringify(state)); } catch { /* storage unavailable */ } }, [state]);
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -113,7 +124,7 @@ export default function Desktops() {
     setVisited(prev => new Set([...prev, id]));
     setState(prev => addDesktop(prev, id));
   };
-  const rename = (desktop = current) => setDialog({ kind: 'prompt', title: 'デスクトップの名前を変更', defaultValue: desktop.name, confirmLabel: '変更', onSubmit: name => {
+  const rename = (desktop: DesktopState['items'][number]) => setDialog({ kind: 'prompt', title: 'デスクトップの名前を変更', defaultValue: desktop.name, confirmLabel: '変更', onSubmit: name => {
     if (name.trim()) setState(prev => ({ ...prev, items: prev.items.map(item => item.id === desktop.id ? { ...item, name: name.trim().slice(0, 60) } : item) }));
   } });
   const remove = (id: string) => {
@@ -135,7 +146,7 @@ export default function Desktops() {
   }, [state.activeId]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || dialog || document.querySelector('dialog[open], [aria-modal="true"], .modal-backdrop')) return;
+      if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || dialog || document.querySelector('dialog[open], [aria-modal="true"], .modal-backdrop, [role="menu"]')) return;
       if (event.code === 'KeyN') { event.preventDefault(); event.stopImmediatePropagation(); create(); return; }
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
       event.preventDefault(); event.stopImmediatePropagation();
@@ -148,13 +159,42 @@ export default function Desktops() {
   }, [state, dialog]);
   return <div className="desktop-shell">
     <header className="desktop-bar">
-      <div className="desktop-tabs" role="tablist" aria-label="仮想デスクトップ" ref={list}>
+      <div className="desktop-tabs" role="tablist" aria-label="仮想デスクトップ" ref={list} onScroll={cancelPress}>
         {state.items.map((desktop, index) => <div className="desktop-slot" key={desktop.id}>
           <button id={`desktop-tab-${desktop.id}`} data-desktop-id={desktop.id} className={`desktop-tab ${desktop.id === state.activeId ? 'on' : ''} ${dropDesktopId === desktop.id ? 'drop-target' : ''}`} role="tab" aria-selected={desktop.id === state.activeId}
             aria-controls={`desktop-panel-${desktop.id}`} tabIndex={desktop.id === state.activeId ? 0 : -1}
-            title={`${desktop.name}（タブをドロップして移動・ダブルクリックで名前変更）`} onClick={() => select(desktop.id)}
+            title={`${desktop.name}（右クリック・長押しで名前変更）`} aria-haspopup="menu" aria-expanded={tabMenu?.id === desktop.id}
+            onClick={e => {
+              if (heldTab.current === desktop.id) { e.preventDefault(); heldTab.current = null; return; }
+              select(desktop.id);
+            }}
+            onContextMenu={e => {
+              e.preventDefault(); cancelPress();
+              const box = e.currentTarget.getBoundingClientRect();
+              setTabMenu({ id: desktop.id, x: e.clientX || box.left, y: e.clientY || box.bottom });
+            }}
+            onPointerDown={e => {
+              cancelPress(); heldTab.current = null;
+              if (e.pointerType === 'mouse' || !e.isPrimary || e.button !== 0) return;
+              const { clientX: x, clientY: y, pointerId } = e;
+              press.current = { pointerId, x, y, timer: setTimeout(() => {
+                heldTab.current = desktop.id;
+                setTabMenu({ id: desktop.id, x, y });
+              }, 550) };
+            }}
+            onPointerMove={e => {
+              const start = press.current;
+              if (start && (e.pointerId !== start.pointerId || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8)) cancelPress();
+            }}
+            onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
             onDoubleClick={() => { select(desktop.id); rename(desktop); }}
             onKeyDown={e => {
+              if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                e.preventDefault();
+                const box = e.currentTarget.getBoundingClientRect();
+                setTabMenu({ id: desktop.id, x: box.left, y: box.bottom });
+                return;
+              }
               let next: number;
               if (e.key === 'ArrowRight') next = (index + 1) % state.items.length;
               else if (e.key === 'ArrowLeft') next = (index - 1 + state.items.length) % state.items.length;
@@ -170,7 +210,6 @@ export default function Desktops() {
       <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
       <button className="remote-desktop-launch" aria-label="リモートデスクトップ" title="リモートデスクトップ" onClick={() => setRemoteOpen(true)}><Icon name="screen" /></button>
       <InstallApp />
-      <button className="desktop-rename" aria-label="現在のデスクトップの名前を変更" title="デスクトップの名前を変更" onClick={() => rename()}><Icon name="edit" /></button>
     </header>
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
@@ -178,6 +217,12 @@ export default function Desktops() {
         {visited.has(desktop.id) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
       </section>)}
     </div>
+    {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} onClose={() => setTabMenu(null)} items={[
+      { label: '名前を変更…', run: () => {
+        const desktop = state.items.find(item => item.id === tabMenu.id);
+        if (desktop) rename(desktop);
+      } },
+    ]} />}
     {remoteOpen && <ScreenViewer devices={connection.devices} deviceId="local" onClose={() => setRemoteOpen(false)} />}
     {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
   </div>;
