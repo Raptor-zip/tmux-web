@@ -675,58 +675,6 @@ input {
   gap: 4px;
   font-size: 11px;
 }
-.overview .ov {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 0;
-  color: var(--fg-dim);
-  cursor: pointer;
-  padding: 1px 5px;
-  white-space: nowrap;
-}
-.overview .ov:hover {
-  background: var(--bg-3);
-}
-.overview .ov.on {
-  border-color: var(--border-strong);
-  color: var(--fg);
-}
-.overview .ov i {
-  width: 7px;
-  height: 7px;
-  border-radius: 0;
-  background: var(--fg-faint);
-}
-.overview .ov.working {
-  color: #7fc6ff;
-}
-.overview .ov.working i {
-  background: var(--accent);
-  box-shadow: none;
-  animation: none;
-}
-.overview .ov.waiting {
-  color: var(--green);
-}
-.overview .ov.waiting i {
-  background: var(--green);
-}
-.overview .ov.server i {
-  background: #c586c0;
-}
-.overview .ov.run i {
-  background: var(--yellow);
-}
-.overview .ov.idle {
-  color: var(--fg-faint);
-}
-.overview .ov.idle i {
-  background: none;
-  border: 1px solid var(--fg-faint);
-}
 .ov-clean {
   margin-left: auto;
   background: none;

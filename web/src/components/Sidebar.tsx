@@ -7,7 +7,6 @@ import { HoverPreview, type PreviewTarget } from './HoverPreview';
 import type { DragPayload } from './SplitView';
 import {
   STATUS_ORDER,
-  STATUS_TEXT,
   isAgentKind,
   relTime,
   summarize,
@@ -391,17 +390,8 @@ export function Sidebar({
   const liveGroups = groups.filter((g) => !g.dormant);
   const restGroups = groups.filter((g) => g.dormant);
 
-  /** 一覧の頭に出す全体の要約。グループが畳まれていても、何が何枚動いているか分かる */
-  const overall = useMemo(() => {
-    const seen = new Map<string, TmuxWindow>();
-    for (const w of windows) seen.set(w.id, w);
-    const all = [...seen.values()];
-    const counts = summarize(
-      all.map((w) => views.get(w.id)?.status).filter((s): s is WindowStatus => Boolean(s)),
-    );
-    return { all, counts };
-  }, [windows, views]);
-  const closableAll = overall.all.filter(closable);
+  const allWindows = useMemo(() => [...new Map(windows.map(w => [w.id, w])).values()], [windows]);
+  const closableAll = allWindows.filter(closable);
 
   const toggle = (id: string) => {
     setCollapsed((prev) => {
@@ -761,31 +751,15 @@ export function Sidebar({
 
         {groupBy === 'session' && <button className="btn block" onClick={onNewSession}>＋ tmux セッションを作る</button>}
 
-
-
-        {/* 全体の要約。押すとその状態で絞り込む。畳んだグループの中身も数に入る */}
-        {overall.all.length > 0 && (
+        {closableAll.length > 0 && (
           <div className="overview">
-            {STATUS_ORDER.filter((k) => overall.counts[k]).map((k) => (
-              <button
-                key={k}
-                className={`ov ${k} ${query === STATUS_TEXT[k] ? 'on' : ''}`}
-                title={`「${STATUS_TEXT[k]}」だけを出す`}
-                onClick={() => setFilter(query === STATUS_TEXT[k] ? '' : STATUS_TEXT[k])}
-              >
-                <i />
-                {STATUS_TEXT[k]} {overall.counts[k]}
-              </button>
-            ))}
-            {closableAll.length > 0 && (
-              <button
-                className="ov-clean"
-                title={`シェルしか動いていないウィンドウ ${closableAll.length} 枚を閉じる`}
-                onClick={() => cleanUp(overall.all, '')}
-              >
-                片付ける
-              </button>
-            )}
+            <button
+              className="ov-clean"
+              title={`シェルしか動いていないウィンドウ ${closableAll.length} 枚を閉じる`}
+              onClick={() => cleanUp(allWindows, '')}
+            >
+              片付ける
+            </button>
           </div>
         )}
       </div>
