@@ -2,7 +2,7 @@ import type { MenuEntry } from './ContextMenu';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
 import { deviceOf, type Device } from '../devices';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeTab,
   dividers,
@@ -35,7 +35,6 @@ export type DropTarget =
   | { kind: 'tab'; leafId: string; before: string | null };
 
 interface Props {
-  actions: ReactNode;
   /** フォーカス中のタイルの「⋯」に足す作業メニュー */
   workspaceMenu(): MenuEntry[];
   active: boolean;
@@ -102,7 +101,6 @@ function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
 export function SplitView({
   active,
   devices,
-  actions,
   workspaceMenu,
   tree,
   focusMode,
@@ -279,7 +277,6 @@ export function SplitView({
             onPointerDown={() => onFocus(leaf.id)}
           >
             <TabStrip
-              actions={focused ? actions : null}
               workspaceMenu={focused ? workspaceMenu : undefined}
               leaf={leaf}
               onOverview={openOverview}

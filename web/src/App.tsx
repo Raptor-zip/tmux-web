@@ -14,7 +14,7 @@ import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
-import { Toolbar, workspaceMenuItems } from './components/Toolbar';
+import { workspaceMenuItems } from './components/Toolbar';
 import { KeyBar } from './components/KeyBar';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, type DragPayload, type DropTarget } from './components/SplitView';
@@ -1161,29 +1161,14 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             cmd.trim() && doAction('runCommand', { target: activePane.id, command: cmd }),
         }),
   };
-  const workspaceActions = <Toolbar onToggleSidebar={toolbarProps.onToggleSidebar} />;
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={{ '--sidebar-w': `${Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}px` } as React.CSSProperties}>
-      <nav className="activitybar">
-        <button
-          className={`act-btn ${sidebarOpen ? 'on' : ''}`}
-          title="セッション一覧 (Alt+B)"
-          aria-label="セッション一覧の開閉"
-          aria-pressed={sidebarOpen}
-          onClick={() => setSidebarOpen((v) => !v)}
-        >
-          <Icon name="menu" />
-        </button>
-        <button
-          className={`act-btn ${switcherOpen ? 'on' : ''}`}
-          title="ウィンドウを切り替える (Alt+P)"
-          aria-label="ウィンドウを切り替える"
-          onClick={() => setSwitcherOpen(true)}
-        >
-          <Icon name="switch" />
-        </button>
-      </nav>
+      {!sidebarOpen && <nav className="sidebar-launcher" aria-label="セッション一覧">
+        <button className="icon-btn" title="セッション一覧を開く (Alt+B)"
+          aria-label="セッション一覧を開く" aria-expanded={false}
+          onClick={() => setSidebarOpen(true)}><Icon name="menu" /></button>
+      </nav>}
 
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="セッション一覧を閉じる"
         onClick={() => setSidebarOpen(false)} />}
@@ -1240,12 +1225,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
         {approval.pending && <ApprovalNotice pending={approval.pending} onOpen={() => setApprovalOpen(true)} />}
 
-        {!layout && workspaceActions}
         <div className="workspace">
           <div className="terminal-wrap">
             {layout ? (
               <SplitView
-                actions={workspaceActions}
                 workspaceMenu={() => workspaceMenuItems(toolbarProps)}
                 active={active}
                 tree={layout}

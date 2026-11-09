@@ -349,3 +349,20 @@
 }
 
 .desktop-tab { -webkit-touch-callout:none; user-select:none; }
+
+/* 一覧を畳んだときだけ左端に開く操作を残す。パネルのフォーカスには追従しない。 */
+.app.sidebar-hidden { --activity-w:32px; }
+.sidebar-launcher { grid-area:activity; background:var(--bg-1); border-right:1px solid var(--border); }
+.sidebar-launcher .icon-btn { width:32px; min-width:32px; height:38px; padding:0; }
+@media (max-width:760px) {
+  .app,.app.sidebar-hidden {
+    grid-template-columns:var(--activity-w) minmax(0,1fr);
+    grid-template-areas:'activity main' 'status status';
+  }
+  .app.sidebar-hidden { --activity-w:44px; }
+  .sidebar-launcher .icon-btn { width:44px; min-width:44px; height:48px; }
+}
+@media (any-pointer:coarse) and (min-width:761px) {
+  .app.sidebar-hidden { --activity-w:44px; }
+  .sidebar-launcher .icon-btn { width:44px; min-width:44px; height:48px; }
+}

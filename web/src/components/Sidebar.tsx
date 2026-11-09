@@ -745,7 +745,7 @@ export function Sidebar({
             {devices.map(d => <option key={d.id} value={d.id}>{d.name}{d.connected ? '' : '（未接続）'}</option>)}
           </select>
           <button className="btn ghost" title="デバイス接続" aria-label="デバイス接続を管理" onClick={onManageDevices}>＋</button>
-          <button className="icon-btn sidebar-close" aria-label="一覧を閉じる" onClick={onClose}><Icon name="close" /></button>
+          <button className="icon-btn sidebar-close" aria-label="セッション一覧を閉じる" title="セッション一覧を閉じる (Alt+B)" onClick={onClose}><Icon name="close" /></button>
         </div>
 
         <div className="group-switch" role="group" aria-label="一覧の並べ方">
@@ -855,7 +855,12 @@ export function Sidebar({
         }}
         onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); }}
         onPointerMove={e => {
-          if (e.currentTarget.hasPointerCapture(e.pointerId)) onResize(e.clientX - e.currentTarget.parentElement!.getBoundingClientRect().left);
+          if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+          const nextWidth = e.clientX - e.currentTarget.parentElement!.getBoundingClientRect().left;
+          if (nextWidth < 100) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+            onClose();
+          } else onResize(nextWidth);
         }}
         onPointerUp={e => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} />
       <HoverPreview target={preview} />

@@ -1,4 +1,3 @@
-import { Icon } from './Icon';
 import type { Pane, Session, TmuxWindow } from '../types';
 import { SEP, type MenuEntry } from './ContextMenu';
 
@@ -25,15 +24,6 @@ interface Props {
   onOpenScreen(): void;
   onOpenSwitcher(): void;
   onSendCommand(): void;
-}
-
-/** タブ列に置く一覧ボタン。作業メニューの中身は workspaceMenuItems で組み、タブ列の「⋯」に足す。 */
-export function Toolbar({ onToggleSidebar }: Pick<Props, 'onToggleSidebar'>) {
-  return (
-    <div className="workspace-actions">
-      <button className="icon-btn" onClick={onToggleSidebar} aria-label="セッション一覧の開閉" title="セッション一覧 (Alt+B)"><Icon name="menu" /></button>
-    </div>
-  );
 }
 
 export function workspaceMenuItems({
