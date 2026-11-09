@@ -28,6 +28,13 @@ test('new projects create a repository and template, refuse overwrites and keep 
   await assert.rejects(service.start({ mode: 'existing', dir: home, agent: 'untrusted; command' }), /起動する/);
 });
 
+test('device terminal starts a plain shell in that device home without an existing session', async t => {
+  const { home, service, calls } = await fixture(t);
+  const result = await service.start({ mode: 'existing', dir: '~', agent: 'shell' });
+  assert.equal(result.cwd, home);
+  assert.deepEqual(calls, [['new-session', '-d', '-P', '-F', '#{session_id}\t#{window_id}\t#{pane_id}', '-c', home, '-x', '140', '-y', '40']]);
+});
+
 test('history resolves cwd from transcripts, deduplicates it and skips deleted, hidden and external directories', async t => {
   const { home, service } = await fixture(t);
   await fs.mkdir(path.join(home, 'notes'));

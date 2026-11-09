@@ -40,6 +40,9 @@ export const STATUS_TEXT: Record<StatusKind, string> = {
 /** 状態の強さ。並べ替えとグループ見出しの集計に使う */
 export const STATUS_ORDER: StatusKind[] = ['working', 'waiting', 'server', 'run', 'idle'];
 
+/** シェルだけでも、直近に使った端末は一覧に残す。 */
+export const TERMINAL_GRACE_MS = 5 * 60_000;
+
 export function relTime(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}秒`;
@@ -56,11 +59,15 @@ export function windowStatus(win: TmuxWindow, panes: Pane[], now: number): Windo
   const agentPane = agentPanes.find(p => p.active) ?? agentPanes[0];
   const ports = [...new Set(panes.flatMap((p) => p.proc?.ports ?? []))].sort((a, b) => a - b);
   const running = panes.find((p) => p.proc && p.proc.kind !== 'idle');
+  const idleFor = win.lastActivity ? Math.max(0, now - win.lastActivity) : 0;
+  const vacant = panes.length > 0 && panes.every((p) => !p.dead && p.proc?.kind === 'idle');
+  const recentTerminal = vacant && win.lastActivity > 0 && idleFor < TERMINAL_GRACE_MS;
 
   let kind: StatusKind;
   if (agentPane) kind = agentPane.busy ? 'working' : 'waiting';
   else if (ports.length) kind = 'server';
   else if (running) kind = 'run';
+  else if (recentTerminal) kind = 'run';
   else kind = 'idle';
 
   const agent = agentPane?.proc?.agent ?? null;
@@ -75,13 +82,10 @@ export function windowStatus(win: TmuxWindow, panes: Pane[], now: number): Windo
     chips.push(running.proc.command);
   }
 
-  const idleFor = win.lastActivity ? now - win.lastActivity : 0;
   const label =
-    kind === 'idle' && idleFor > 90_000
+    recentTerminal ? 'ターミナル' : kind === 'idle' && idleFor > 90_000
       ? `${STATUS_TEXT.idle}・${relTime(idleFor)}`
       : STATUS_TEXT[kind];
-
-  const vacant = panes.length > 0 && panes.every((p) => !p.dead && p.proc?.kind === 'idle');
 
   return { kind, label, chips, agent, ports, idleFor, vacant };
 }

@@ -27,6 +27,7 @@ test('tmux session, window and pane formats preserve IDs and working directories
     assert.equal(state.windows.length, 1);
     assert.match(state.windows[0].id, /^@\d+$/);
     assert.equal(state.windows[0].sessionId, state.sessions[0].id);
+    assert.ok(state.windows[0].lastActivity > Date.now() - 60_000, 'new shell windows have an activity timestamp for their visibility grace period');
     assert.equal(state.panes.length, 1);
     assert.match(state.panes[0].id, /^%\d+$/);
     assert.equal(state.panes[0].windowId, state.windows[0].id);

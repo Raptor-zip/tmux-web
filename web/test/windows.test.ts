@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildWindowViews, paneCommand, windowName, windowTitle } from '../src/windows';
-import { windowStatus } from '../src/status';
+import { TERMINAL_GRACE_MS, windowStatus } from '../src/status';
 import type { Pane, TmuxWindow } from '../src/types';
 
 const win = { id: '@1', sessionId: '$1', name: 'claude', index: 1, lastActivity: 0 } as TmuxWindow;
@@ -41,6 +41,24 @@ test('shell after agent exit does not inherit the agent label', () => {
   const shell = { ...codex, command: 'bash', proc: { ...codex.proc!, kind: 'idle', agent: null, command: '' } } as Pane;
   assert.equal(windowName(win, shell), 'bash');
   assert.equal(windowTitle(win, shell), 'bash');
+});
+
+test('shell terminals stay visible for five minutes, then become idle', () => {
+  const shell = { ...codex, command: 'bash', proc: { ...codex.proc!, kind: 'idle', agent: null, command: '' } } as Pane;
+  const lastActivity = 1_000_000;
+  const recent = { ...win, lastActivity };
+  for (const elapsed of [0, TERMINAL_GRACE_MS - 1]) {
+    const status = windowStatus(recent, [shell], lastActivity + elapsed);
+    assert.equal(status.kind, 'run');
+    assert.equal(status.label, 'ターミナル');
+    assert.deepEqual(status.chips, []);
+  }
+  assert.equal(windowStatus(recent, [shell], lastActivity + TERMINAL_GRACE_MS).kind, 'idle');
+  // 新たな出力があれば、再び5分間表示する。
+  assert.equal(windowStatus({ ...recent, lastActivity: lastActivity + TERMINAL_GRACE_MS }, [shell], lastActivity + TERMINAL_GRACE_MS + 1).kind, 'run');
+  assert.equal(windowStatus(win, [shell], lastActivity).kind, 'idle');
+  assert.equal(windowStatus(recent, [{ ...shell, dead: true }], lastActivity).kind, 'idle');
+  assert.equal(windowStatus(recent, [codex], lastActivity).kind, 'waiting');
 });
 
 test('Claude after Codex is also labeled correctly and unknown processes do not overwrite custom names', () => {

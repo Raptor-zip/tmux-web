@@ -1,5 +1,6 @@
 import { desktopKey, type DesktopLayoutRegistry } from './desktops';
 import { Devices } from './components/Devices';
+import { DeviceStart } from './components/DeviceStart';
 import { deviceOf } from './devices';
 import { ProjectStart } from './components/ProjectStart';
 import { ApprovalDialog, ApprovalNotice, useApproval } from './components/Approval';
@@ -350,13 +351,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     setLayout((prev) => (prev ? stampNames(prev, { sessions, windows }) : prev));
   }, [serverDown, needsRemap, sessions, windows, setLayout]);
 
-  // 一度でもタイルを開いたか。閉じきったあとに勝手に開き直さないための目印
-  const opened = useRef(workspaceId !== 'main');
-  useEffect(() => {
-    if (layout) opened.current = true;
-  }, [layout]);
-
-  // 初期化と、消えたセッションの掃除
+  // 消えたセッションを掃除する。空ならデバイス選択から新しい端末を開く。
   useEffect(() => {
     // tmux が落ちているあいだは、消えたのかまだ起きていないのか分からない。触らない
     if (serverDown) return;
@@ -366,15 +361,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     const valid = new Set([...sessions.map((s) => s.id), ...pendingSessions.current]);
     setLayout((prev) => {
       const pruned = prev ? pruneStale(prev, valid, unavailable) : null;
-      if (pruned) return pruned === prev ? prev : pruned;
-      // 自分で閉じた／消えた結果として空になったなら、そのままにしておく
-      if (opened.current) return null;
-      const first = sessions.find(s => deviceOf(s.id) === activeDevice.id);
-      if (!first) return null;
-      const active =
-        windows.find((w) => w.sessionId === first.id && w.active) ??
-        windows.find((w) => w.sessionId === first.id);
-      return makeLeaf(makeTab(first.id, active?.id ?? null));
+      return pruned === prev ? prev : pruned;
     });
   }, [serverDown, needsRemap, sessions, windows, layout, setLayout]);
 
@@ -1314,23 +1301,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                       セッションが消えたわけではありません。
                     </p>
                   </>
-                ) : sessions.length > 0 ? (
-                  <>
-                    <p>開いているタブがありません。</p>
-                    <p className="dim">
-                      左の一覧から選ぶか、<kbd>Alt</kbd>+<kbd>P</kbd> で切り替えパレットを出します。
-                    </p>
-                    <button className="btn primary" onClick={() => setSwitcherOpen(true)}>
-                      ウィンドウを選ぶ
-                    </button>
-                  </>
                 ) : (
-                  <>
-                    <p>tmux セッションがありません。</p>
-                    <button className="btn primary" onClick={() => doAction('newSession', { deviceId: activeDevice.id })}>
-                      セッションを作る
-                    </button>
-                  </>
+                  <DeviceStart devices={devices} ready={devicesReady}
+                    onManageDevices={() => setDevicesOpen(true)}
+                    onStarted={(deviceId, project) => { setSelectedDevice(deviceId); projectStarted(project); }} />
                 )}
               </div>
             )}
