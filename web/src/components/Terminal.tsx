@@ -3,7 +3,6 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
-import { CanvasAddon } from '@xterm/addon-canvas';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
 import { uploadPasteImage, wsUrl } from '../api';
@@ -217,37 +216,25 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
      * ここに届く。これが無いと「選択したのにブラウザには何も入らない」になる。
      */
     term.loadAddon(new ClipboardAddon());
-    // canvas レンダラ。WebGL はドライバ依存で描画が固まることがあるので使わない。
-    try {
-      term.loadAddon(new CanvasAddon());
-    } catch {
-      /* 使えない環境では DOM レンダラのまま動く */
-    }
+    // 標準の DOM レンダラを使う。canvas はスリープ復帰時に context / atlas を
+    // 失うことがあり、refresh() だけでは非同期の描画エラーから復旧できない。
     termRef.current = term;
     fitRef.current = fit;
     safeFitRef.current();
 
-    /**
-     * 描画の自己修復。
-     * canvas レンダラは、変わったセルだけを描き直す。ブラウザが canvas の中身を捨てる
-     * （背面のタブ・GPU の再初期化・メモリ逼迫・画面の拡大率や接続モニタの変更）と、
-     * 描き直した所だけが残って他が空白になり、文字が欠けた表示になる（リロードで直る）。
-     * そこで、捨てられそうな契機（表示に戻る・フォーカス・canvas の context 喪失/復帰・拡大率の変化）と、
-     * 表示中の一定間隔で、グリフのキャッシュを捨てて全体を描き直す。
-     */
+    // 復帰やモニタ変更後に、表示領域を測り直して端末全体を描き直す。
     let repaintTimer = 0;
-    const repaint = (clearAtlas: boolean) => {
+    const repaint = () => {
       if (document.visibilityState !== 'visible') return;
       try {
-        if (clearAtlas) term.clearTextureAtlas();
         term.refresh(0, Math.max(0, term.rows - 1));
       } catch {
         /* 破棄済みなら何もしない */
       }
     };
-    const scheduleRepaint = (clearAtlas = true) => {
+    const scheduleRepaint = () => {
       window.clearTimeout(repaintTimer);
-      repaintTimer = window.setTimeout(() => repaint(clearAtlas), 80);
+      repaintTimer = window.setTimeout(() => { safeFitRef.current(); repaint(); }, 80);
     };
     const onVisible = () => {
       if (document.visibilityState === 'visible') scheduleRepaint();
@@ -255,21 +242,6 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     window.addEventListener('pageshow', onVisible);
-    // canvas の context が失われたら、復帰時に描き直す（preventDefault しないと復帰しない）
-    const watched = new WeakSet<HTMLCanvasElement>();
-    const onCtxLost = (e: Event) => e.preventDefault();
-    const onCtxRestored = () => scheduleRepaint();
-    const watchCanvases = () => {
-      innerRef.current?.querySelectorAll('canvas').forEach((c) => {
-        if (watched.has(c)) return;
-        watched.add(c);
-        c.addEventListener('contextlost', onCtxLost);
-        c.addEventListener('contextrestored', onCtxRestored);
-      });
-    };
-    watchCanvases();
-    const canvasObserver = new MutationObserver(watchCanvases);
-    if (innerRef.current) canvasObserver.observe(innerRef.current, { childList: true, subtree: true });
     // 画面の拡大率（モニタの付け替え・ブラウザのズーム）が変わったら描き直す
     let dprQuery: MediaQueryList | null = null;
     const onDprChange = () => {
@@ -282,9 +254,6 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       dprQuery.addEventListener('change', onDprChange);
     };
     bindDpr();
-    // 契機が拾えない場合の保険。表示中だけ、数秒おきに全体を描き直す（見た目は変わらない。atlas は捨てない）
-    const repaintInterval = window.setInterval(() => repaint(false), 5000);
-
     // ResizeObserver が監視するのは外側の枠だけにする。
     // xterm が描画する内側を監視すると fit() → DOM 変化 → fit() の無限ループになる。
     const ro = new ResizeObserver(() => safeFitRef.current());
@@ -521,8 +490,6 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       ro.disconnect();
       cancelAnimationFrame(rafRef.current);
       window.clearTimeout(repaintTimer);
-      window.clearInterval(repaintInterval);
-      canvasObserver.disconnect();
       dprQuery?.removeEventListener('change', onDprChange);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);

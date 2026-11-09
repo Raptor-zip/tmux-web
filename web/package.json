@@ -12,7 +12,6 @@
   "dependencies": {
     "@fontsource-variable/noto-sans-jp": "^5.3.1",
     "@novnc/novnc": "1.7.0",
-    "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-unicode11": "^0.8.0",
