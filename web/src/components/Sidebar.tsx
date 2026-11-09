@@ -31,7 +31,6 @@ interface Props {
   devices: Device[];
   selectedDevice: string;
   onSelectDevice(id: string): void;
-  onManageDevices(): void;
   sessions: Session[];
   windows: TmuxWindow[];
   /** ウィンドウ id → 見せ方。タブや切り替えパレットと同じものを使う */
@@ -71,7 +70,7 @@ export type TreeDropTarget =
   | { kind: 'window'; windowId: string; sessionId: string; place: 'before' | 'after' };
 
 export function Sidebar({
-  devices, selectedDevice, onSelectDevice, onManageDevices,
+  devices, selectedDevice, onSelectDevice,
   sessions,
   windows,
   views,
@@ -740,29 +739,24 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-actions">
-        <div className="device-controls">
-          <select aria-label="新しいプロジェクト・セッションのデバイス" value={selectedDevice} onChange={e => onSelectDevice(e.target.value)}>
-            {devices.map(d => <option key={d.id} value={d.id}>{d.name}{d.connected ? '' : '（未接続）'}</option>)}
-          </select>
-          <button className="btn ghost" title="デバイス接続" aria-label="デバイス接続を管理" onClick={onManageDevices}>＋</button>
+        <div className="sidebar-heading">
+          <div className="group-switch" role="group" aria-label="一覧の並べ方">
+            <button
+              className={groupBy === 'project' ? 'on' : ''}
+              onClick={() => onChangeGroupBy('project')}
+              title="作業ディレクトリのリポジトリごとにまとめる"
+            >
+              プロジェクト別
+            </button>
+            <button
+              className={groupBy === 'session' ? 'on' : ''}
+              onClick={() => onChangeGroupBy('session')}
+              title="tmux のセッション構造のまま並べる"
+            >
+              セッション別
+            </button>
+          </div>
           <button className="icon-btn sidebar-close" aria-label="セッション一覧を閉じる" title="セッション一覧を閉じる (Alt+B)" onClick={onClose}><Icon name="close" /></button>
-        </div>
-
-        <div className="group-switch" role="group" aria-label="一覧の並べ方">
-          <button
-            className={groupBy === 'project' ? 'on' : ''}
-            onClick={() => onChangeGroupBy('project')}
-            title="作業ディレクトリのリポジトリごとにまとめる"
-          >
-            プロジェクト別
-          </button>
-          <button
-            className={groupBy === 'session' ? 'on' : ''}
-            onClick={() => onChangeGroupBy('session')}
-            title="tmux のセッション構造のまま並べる"
-          >
-            セッション別
-          </button>
         </div>
 
         {groupBy === 'session' && <button className="btn block" onClick={onNewSession}>＋ tmux セッションを作る</button>}

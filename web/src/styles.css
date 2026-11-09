@@ -2140,8 +2140,8 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .project-field-row > :only-child { grid-column: 1 / -1; }
 
 /* 接続先は一覧・タブの両方に常に表示する。 */
-.device-controls { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-.device-controls select { flex: 1; min-width: 0; width: 100%; }
+.sidebar-heading { display: flex; align-items: center; gap: 6px; }
+.sidebar-heading .group-switch { flex: 1; min-width: 0; }
 .device-heading { display: flex; width: 100%; align-items: center; gap: 8px; padding: 12px 10px 6px; background: transparent; border: 0; color: var(--fg); text-align: left; cursor: pointer; }
 .device-heading strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .device-heading small { max-width: 110px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--fg-dim); font-size: 10px; }

@@ -1178,7 +1178,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         devices={devices}
         selectedDevice={activeDevice.id}
         onSelectDevice={setSelectedDevice}
-        onManageDevices={() => setDevicesOpen(true)}
         sessions={sessions}
         windows={windows}
         views={views}
