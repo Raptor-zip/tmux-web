@@ -7,6 +7,7 @@ export interface DesktopSettings {
 }
 
 export const desktopPresets = {
+  lan: { label: 'LAN 高画質', lossless: false, quality: 8, compression: 0, scale: '1', interval: '16' },
   responsive: { label: '低遅延', lossless: false, quality: 3, compression: 1, scale: '0.5', interval: '33' },
   balanced: { label: 'バランス', lossless: false, quality: 6, compression: 1, scale: '0.75', interval: '33' },
   sharp: { label: '文字くっきり', lossless: true, quality: 9, compression: 1, scale: '1', interval: '33' },

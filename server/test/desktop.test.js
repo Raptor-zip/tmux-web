@@ -106,6 +106,10 @@ test('desktop applies per-connection scaling and avoids overload sleep without e
   assert.equal(f.args[f.args.indexOf('-wait') + 1], '66');
   assert.ok(f.args.includes('-nowait_bog'));
   assert.ok(f.args.includes('-input_eagerly'));
+  assert.ok(f.args.includes('-nonap'));
+  assert.ok(!f.args.includes('-threads'), 'threaded mode stalls private Unix socket handshakes');
+  assert.equal(f.args[f.args.indexOf('-sb') + 1], '0');
+  assert.equal(f.args[f.args.indexOf('-speeds') + 1], '0,100000,1');
   assert.equal(f.args[f.args.indexOf('-rfbport') + 1], '0');
   ws.close(); await once(ws, 'close');
   await until(() => f.kills === 1);

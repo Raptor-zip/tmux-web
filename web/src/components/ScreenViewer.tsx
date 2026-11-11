@@ -250,7 +250,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
           <label>JPEG品質：{draft.quality}<input type="range" min="0" max="9" value={draft.quality} disabled={draft.lossless} onChange={e => setDraft(v => ({ ...v, quality: Number(e.target.value) }))} /></label>
           <label>圧縮レベル：{draft.compression}<input type="range" min="0" max="9" value={draft.compression} onChange={e => setDraft(v => ({ ...v, compression: Number(e.target.value) }))} /></label>
         </div>
-        <p>遅いときは「低遅延」、文字を読むときは「文字くっきり」。圧縮を上げると通信量は減り、処理負荷は増えます。配信サイズはこの接続だけに適用します。更新間隔は目安で、FPSの保証ではありません。</p>
+        <p>同じLANでは「LAN 高画質」で原寸・高画質に。回線が遅いときは「低遅延」、文字を読むときは「文字くっきり」。圧縮を上げると通信量は減り、処理負荷は増えます。配信サイズはこの接続だけに適用します。更新間隔は目安で、FPSの保証ではありません。</p>
         <div className="screen-controls">
           <button className="btn" onClick={() => applySettings(draft)}>適用して再接続</button>
           <button className="btn" onClick={() => { setDraft(settings); setSettingsOpen(false); }}>キャンセル</button>

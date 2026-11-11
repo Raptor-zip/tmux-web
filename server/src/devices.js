@@ -6,6 +6,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
+import { createWebSocketForwarder } from './ws-flow.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const allowedApi = /^\/api\/(?:state|action|capture|keys|paste-(?:file|image)|files(?:\/(?:open|upload|archive))?|projects\/(?:recent|start)|claude\/remote-control|desktop\/(?:ping|status|clipboard)|screen\/(?:status|stream))$/;
@@ -116,7 +117,7 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
     });
   }
 
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024 });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024, perMessageDeflate: false });
   function upgrade(req, socket, head, url) {
     const match = /^\/ws\/devices\/([a-zA-Z0-9_-]+)\/(events|terminal|desktop)$/.exec(url.pathname);
     if (!match) return false;
@@ -126,18 +127,16 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
     const remote = target(device, `/ws/${match[2]}${url.search}`);
     remote.protocol = remote.protocol === 'https:' ? 'wss:' : 'ws:';
     wss.handleUpgrade(req, socket, head, client => {
-      const upstream = new WebSocket(remote, { handshakeTimeout: 8000, maxPayload: 8 * 1024 * 1024 });
+      const upstream = new WebSocket(remote, { handshakeTimeout: 8000, maxPayload: 8 * 1024 * 1024, perMessageDeflate: false });
       const set = sockets.get(device.id) || new Set();
       sockets.set(device.id, set); set.add(client); set.add(upstream);
       const pending = [];
       let pendingBytes = 0;
-      const send = (to, data, binary) => {
-        if (to.readyState !== WebSocket.OPEN) return;
-        if (to.bufferedAmount > 8 * 1024 * 1024) { client.terminate(); upstream.terminate(); return; }
-        to.send(data, { binary });
-      };
+      const close = () => { set.delete(client); set.delete(upstream); client.terminate(); upstream.terminate(); };
+      const sendUpstream = createWebSocketForwarder(client, upstream, close);
+      const sendClient = createWebSocketForwarder(upstream, client, close);
       client.on('message', (data, binary) => {
-        if (upstream.readyState === WebSocket.OPEN) send(upstream, data, binary);
+        if (upstream.readyState === WebSocket.OPEN) sendUpstream(data, binary);
         else if (upstream.readyState === WebSocket.CONNECTING) {
           pendingBytes += data.length;
           if (pendingBytes > 1024 * 1024) { client.close(1009); upstream.terminate(); }
@@ -146,11 +145,10 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
       });
       upstream.on('open', () => {
         if (client.readyState !== WebSocket.OPEN) { upstream.close(); return; }
-        for (const [data, binary] of pending) send(upstream, data, binary);
+        for (const [data, binary] of pending) sendUpstream(data, binary);
         pending.length = 0;
       });
-      upstream.on('message', (data, binary) => send(client, data, binary));
-      const close = () => { set.delete(client); set.delete(upstream); client.terminate(); upstream.terminate(); };
+      upstream.on('message', sendClient);
       client.on('close', close); client.on('error', close);
       upstream.on('close', close); upstream.on('error', close);
     });

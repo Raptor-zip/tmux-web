@@ -4,7 +4,10 @@ export function losslessEncodings(depth: number, compression: number): number[] 
     ...(depth === 24 ? [16, 5, 2, 6] : []), // ZRLE, Hextile, RRE, Zlib
     0, // Raw fallback
     -256 + compression,
-    -223, -224, -258, -261, -308, -309, -312, -313, -307,
+    // Request-driven updates apply backpressure all the way to the encoder.
+    // ContinuousUpdates (-313) can queue old frames in the browser while
+    // JPEG decoding/rendering falls behind, even on a fast LAN.
+    -223, -224, -258, -261, -308, -309, -312, -307,
     0xc0a1e5ce, -316, // Extended clipboard and mouse buttons
     ...(depth === 24 ? [0x574d5664, -239] : []), // Cursor shapes
   ];

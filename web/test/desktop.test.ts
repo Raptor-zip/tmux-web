@@ -41,3 +41,12 @@ test('JPEG mode prefers Tight and negotiates the chosen quality; lossless remain
   assert.deepEqual(desktopEncodings(24, 1, null), losslessEncodings(24, 1));
   assert.deepEqual(desktopEncodings(8, 1, 6), losslessEncodings(8, 1));
 });
+
+test('all desktop modes use client-paced updates to avoid an old-frame backlog', () => {
+  for (const quality of [null, 3, 6, 8, 9]) {
+    assert.ok(!desktopEncodings(24, 0, quality).includes(-313));
+  }
+  assert.equal(desktopPresets.lan.scale, '1');
+  assert.equal(desktopPresets.lan.interval, '16');
+  assert.equal(desktopPresets.lan.compression, 0);
+});

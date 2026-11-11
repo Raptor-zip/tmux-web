@@ -80,6 +80,15 @@ export function createDesktop({ probe = probeDesktop, spawnVnc = spawn } = {}) {
         // Avoid the automatic overload sleep (up to 1.5 s), and prioritize
         // input without adding a second batching delay after each screen poll.
         '-nowf', '-noscr', '-nowait_bog', '-input_eagerly',
+        // Keep idle/blank-screen throttling from delaying the first update.
+        // Do not use -threads: x11vnc 0.9.16 stalls its RFB handshake when
+        // combined with the private -unixsock transport.
+        '-nonap', '-sb', '0',
+        // The VNC peer is our local Unix socket, not the browser. LibVNC's
+        // synchronous bandwidth/latency probes can stall this loop for seconds
+        // behind the websocket bridge. Use local-link estimates instead;
+        // client-paced framebuffer requests provide end-to-end flow control.
+        '-speeds', '0,100000,1',
         '-wait', options.interval, '-defer', '5', '-setdefer', '0',
         '-scale', options.scale,
       ], { env: config.env, stdio: ['ignore', 'ignore', 'pipe'] });
