@@ -75,7 +75,7 @@ export const removeDevice = (id: string) => request('/api/devices/' + encodeURIC
 export function useTmuxState() {
   const [devices, setDevices] = useState<Device[]>([{ id: 'local', name: 'このPC', local: true }]);
   const [devicesReady, setDevicesReady] = useState(false);
-  const [records, setRecords] = useState<Record<string, StateRecord>>({});
+  const [records, setRecords] = useState<Record<string, StateRecord & { receivedAt: number }>>({});
   const [unauthorized, setUnauthorized] = useState(false);
   const [authUrl, setAuthUrl] = useState<string | undefined>();
   const [revision, setRevision] = useState(0);
@@ -115,7 +115,7 @@ export function useTmuxState() {
         open: () => new WebSocket(wsUrl('/ws/events', {}, device.id)),
         read: signal => request<TmuxState>(devicePath(device.id, '/api/state'), { signal }),
         update: record => {
-          setRecords(prev => ({ ...prev, [device.id]: { ...record,
+          setRecords(prev => ({ ...prev, [device.id]: { ...record, receivedAt: Date.now(),
             state: record.state ? scopeState(device, record.state) : prev[device.id]?.state } }));
           if (device.local && record.connected) setUnauthorized(false);
         },
@@ -138,7 +138,7 @@ export function useTmuxState() {
     };
   }, [signature]);
   const { available, state } = useMemo(() => {
-    const available = devices.map(d => ({ ...d, connected: records[d.id]?.connected || false, error: records[d.id]?.error, server: records[d.id]?.state?.server, serverPid: records[d.id]?.state?.serverPid }));
+    const available = devices.map(d => ({ ...d, connected: records[d.id]?.connected || false, error: records[d.id]?.error, server: records[d.id]?.state?.server, serverPid: records[d.id]?.state?.serverPid, receivedAt: records[d.id]?.receivedAt }));
     const snapshots = devices.flatMap(d => records[d.id]?.state ? [records[d.id].state!] : []);
     const state: TmuxState | null = snapshots.length ? {
       sessions: snapshots.flatMap(s => s.sessions), windows: snapshots.flatMap(s => s.windows), panes: snapshots.flatMap(s => s.panes),

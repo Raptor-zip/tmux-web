@@ -6,6 +6,7 @@ import App from './App';
 import { flushSync } from 'react-dom';
 import type { DragPayload } from './components/SplitView';
 import { Icon } from './components/Icon';
+import { useWorkspaceStatus, useWorkspaceValue, workspaceStore } from './workspace-store';
 import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
@@ -13,12 +14,33 @@ import { addDesktop, desktopKey, INITIAL_DESKTOPS, removeDesktop, restoreDesktop
 
 export default function Desktops() {
   const connection = useTmuxState();
+  const sync = useWorkspaceStatus();
+  useEffect(() => {
+    workspaceStore.start();
+    const wake = () => { if (document.visibilityState !== 'hidden') workspaceStore.reconnect(); };
+    window.addEventListener('online', wake);
+    document.addEventListener('visibilitychange', wake);
+    return () => {
+      window.removeEventListener('online', wake);
+      document.removeEventListener('visibilitychange', wake);
+      workspaceStore.stop();
+    };
+  }, []);
+  if (!sync.ready) return <div className="workspace-loading" role="status">
+    <p>{connection.unauthorized ? 'Tailscale認証を確認してください。' : 'デスクトップの配置を同期しています…'}</p>
+    <p>{sync.error}</p>
+    {connection.unauthorized && connection.authUrl && <a href={connection.authUrl}>接続先を開く</a>}
+    <button onClick={() => workspaceStore.reconnect()}>再接続</button>
+  </div>;
+  return <SyncedDesktops connection={connection} />;
+}
+
+function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxState> }) {
+  const sync = useWorkspaceStatus();
   const [remoteOpen, setRemoteOpen] = useState(false);
-  const [state, setState] = useState<DesktopState>(() => {
-    try { return restoreDesktops(JSON.parse(localStorage.getItem('tw.desktops') || 'null')); }
-    catch { return INITIAL_DESKTOPS; }
-  });
+  const [state, setState] = useWorkspaceValue<DesktopState>('tw.desktops', INITIAL_DESKTOPS, restoreDesktops);
   const [visited, setVisited] = useState(() => new Set([state.activeId]));
+  useEffect(() => { setVisited(prev => prev.has(state.activeId) ? prev : new Set([...prev, state.activeId])); }, [state.activeId]);
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const [tabMenu, setTabMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -102,7 +124,6 @@ export default function Desktops() {
     window.addEventListener('blur', abort);
   }, []);
 
-  useEffect(() => { try { localStorage.setItem('tw.desktops', JSON.stringify(state)); } catch { /* storage unavailable */ } }, [state]);
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
@@ -120,7 +141,7 @@ export default function Desktops() {
   const create = () => {
     const id = newId('desktop');
     // 新しい画面は自動で既存の端末を開かず、空の状態から使い始める。
-    try { localStorage.setItem(desktopKey(id, 'tw.layout'), 'null'); } catch { /* storage unavailable */ }
+    workspaceStore.set(desktopKey(id, 'tw.layout'), 'null');
     setVisited(prev => new Set([...prev, id]));
     setState(prev => addDesktop(prev, id));
   };
@@ -131,10 +152,8 @@ export default function Desktops() {
     const item = state.items.find(item => item.id === id);
     if (!item || state.items.length === 1) return;
     setDialog({ kind: 'confirm', title: `「${item.name}」を削除しますか？`, detail: 'このデスクトップのタブ・分割配置を削除します。tmuxと実行中の処理は継続し、他のデスクトップから再び開けます。', confirmLabel: '配置を削除', danger: false, onSubmit: () => {
-      const next = removeDesktop(state, id);
-      setVisited(prev => new Set([...prev, next.activeId]));
-      setState(next);
-      for (const key of ['tw.layout', 'tw.serverPid', 'tw.device', 'tw.focusedLeaf']) try { localStorage.removeItem(desktopKey(id, key)); } catch { /* storage unavailable */ }
+      setState(prev => removeDesktop(prev, id));
+      for (const key of ['tw.layout', 'tw.serverPid', 'tw.device', 'tw.focusedLeaf']) workspaceStore.set(desktopKey(id, key), null);
     } });
   };
   useEffect(() => {
@@ -210,11 +229,12 @@ export default function Desktops() {
       <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
       <button className="remote-desktop-launch" aria-label="リモートデスクトップ" title="リモートデスクトップ" onClick={() => setRemoteOpen(true)}><Icon name="screen" /></button>
       <InstallApp />
+      {(!sync.connected || sync.error) && <span className="workspace-sync-status" role="status">{sync.error || '配置の同期を再接続中…'}</span>}
     </header>
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
-        {visited.has(desktop.id) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
+        {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
       </section>)}
     </div>
     {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} onClose={() => setTabMenu(null)} items={[

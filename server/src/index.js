@@ -25,6 +25,7 @@ import { cleanupOrphanMirrors } from './attach.js';
 import { connectTerminal, TERMINAL_MAX_PAYLOAD } from './terminal.js';
 import { visibleState, stateSignature } from './state.js';
 import { installWeb } from './web.js';
+import { createWorkspaceSync } from './workspace-sync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.resolve(__dirname, '../../web/dist');
@@ -109,6 +110,7 @@ installFiles(app, async (id) => (await snapshot()).panes.find((pane) => pane.id 
 installDevice(app);
 const screenCapture = installScreen(app);
 const desktop = createDesktop();
+const workspaceSync = createWorkspaceSync();
 app.get('/api/desktop/ping', (_req, res) => res.set('Cache-Control', 'no-store').json({ ok: true }));
 app.get('/api/desktop/status', async (_req, res) => res.json(await desktop.status()));
 app.get('/api/desktop/clipboard', async (_req, res) => {
@@ -197,7 +199,9 @@ server.on('upgrade', (req, socket, head) => {
     return;
   }
   if (devices.upgrade(req, socket, head, url)) return;
-  if (url.pathname === '/ws/desktop') {
+  if (url.pathname === '/ws/workspace') {
+    workspaceSync.upgrade(req, socket, head);
+  } else if (url.pathname === '/ws/desktop') {
     desktop.upgrade(req, socket, head);
   } else if (url.pathname === '/ws/events') {
     eventsWss.handleUpgrade(req, socket, head, (ws) => eventsWss.emit('connection', ws, req));
@@ -234,6 +238,7 @@ const shutdown = async () => {
   devices.dispose();
   screenCapture.dispose();
   desktop.dispose();
+  workspaceSync.dispose();
   await cleanupOrphanMirrors().catch(() => {});
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 1500).unref();

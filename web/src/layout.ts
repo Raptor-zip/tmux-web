@@ -59,10 +59,11 @@ export type DropSide = 'left' | 'right' | 'top' | 'bottom' | 'center';
 
 export const FULL: Rect = { left: 0, top: 0, width: 100, height: 100 };
 
+const clientId = crypto.randomUUID().slice(0, 8);
 let seq = 0;
 export function newId(prefix: string): string {
   seq += 1;
-  return `${prefix}-${Date.now().toString(36)}-${seq}`;
+  return `${prefix}-${Date.now().toString(36)}-${clientId}-${seq}`;
 }
 
 export function makeTab(sessionId: string, windowId: string | null): TabRef {

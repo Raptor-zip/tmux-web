@@ -1,3 +1,4 @@
+import { useWorkspaceStatus, useWorkspaceValue } from './workspace-store';
 import { desktopKey, type DesktopLayoutRegistry } from './desktops';
 import { Devices } from './components/Devices';
 import { DeviceStart } from './components/DeviceStart';
@@ -96,7 +97,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const activeRef = useRef(active);
   activeRef.current = active;
   const key = (name: string) => desktopKey(workspaceId, name);
-  const [selectedDevice, setSelectedDevice] = usePersisted(key('tw.device'), 'local');
+  const [selectedDevice, setSelectedDevice] = useWorkspaceValue(key('tw.device'), 'local');
   const [panelFocus, setPanelFocus] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
   const activeDevice = devices.find(d => d.id === selectedDevice) ?? devices[0];
@@ -118,8 +119,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   /** タイル id → ターミナル操作ハンドル。ツールバーやキーバーはフォーカス中のタイルに送る */
   const termRefs = useRef(new Map<string, TerminalHandle>());
 
-  const [layout, setLayout] = usePersisted<LayoutNode | null>(key('tw.layout'), null, migrate);
-  const [focusedId, setFocusedId] = usePersisted<string | null>(key('tw.focusedLeaf'), null);
+  const [layout, setLayout] = useWorkspaceValue<LayoutNode | null>(key('tw.layout'), null, migrate);
+  const [focusedId, setFocusedId] = useWorkspaceValue<string | null>(key('tw.focusedLeaf'), null);
   const [mode, setMode] = usePersisted<'mirror' | 'direct'>('tw.mode', 'mirror');
   const [showStatusBar, setShowStatusBar] = usePersisted('tw.statusBar', false);
   const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar.v2', false);
@@ -258,7 +259,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    * 消えた・閉じたの後始末は、tmux に繋がっているあいだだけ行う。
    */
   // An incomplete device list cannot prove that saved remote tabs disappeared.
-  const serverDown = !devicesReady || !state || sessions.length === 0;
+  const { remoteAt } = useWorkspaceStatus();
+  useEffect(() => { if (remoteAt) refresh(); }, [remoteAt]);
+  // A layout can arrive before the tmux event stream. Wait for fresh snapshots
+  // before pruning its tabs, including snapshots from connected remote devices.
+  const syncingState = devices.some(d => d.connected && (d.receivedAt ?? 0) < remoteAt);
+  const serverDown = syncingState || !devicesReady || !state || sessions.length === 0;
 
   /**
    * tmux を再起動したあとの繋ぎ直し。
@@ -268,7 +274,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    * 開いていたタブが消えてしまう。サーバが入れ替わったのを見て、
    * そのときだけ名前で繋ぎ直す。同じサーバのまま消えたウィンドウは今まで通り閉じる。
    */
-  const [savedPid, setSavedPid] = usePersisted<string | number | null>(key('tw.serverPid'), null);
+  const [savedPid, setSavedPid] = useWorkspaceValue<string | number | null>(key('tw.serverPid'), null);
   const serverPid = devices.map(d => `${d.id}:${d.serverPid ?? '?'}`).join('|');
 
   /**
