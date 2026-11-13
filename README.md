@@ -25,13 +25,24 @@ Linux では Node.js 20 以上、npm、tmux、git が必要。自動起動には
 `systemd --user` と `loginctl` が使えるユーザーセッションが必要。
 Ubuntu 24.04 で tmux / git がなければ `sudo apt install tmux git` で導入する。
 
-この PC に常用環境をまとめて導入するには:
+新規インストールも、Sparkなど導入済みPCの更新も、リポジトリのフォルダーで次を実行する:
 
 ```bash
-./scripts/setup.sh      # 依存関係・ビルド・Web/tmux 自動起動・保存/復元を導入
-                       # ブラウザで ./scripts/tailscale-serve.sh url のHTTPS URLを開く
+./install.sh
 ```
 
+ウィザードの案内に沿って選ぶ。導入済みなら「1) 最新版に更新する」を選び、Enterで進めるだけで、
+最新版の取得・依存関係の同期・ビルド・サービス再起動・起動確認まで行う。
+更新時は既存のサービス設定、登録デバイス、tmuxの設定を維持する。
+新規導入や「2) 機能の追加」では、リモートデスクトップ、端末のtmux自動起動、保存・復元、Tailscaleでの接続を選べる。
+Ubuntu/Debianでtmuxや画面操作のパッケージが不足していれば、確認後に管理者権限で導入する。
+Node.js 20以上・npm・git・Tailscale自体は事前に導入しておく。
+
+まだ `install.sh` がない古い環境では、最初の一度だけ `git pull --ff-only` を実行してから `./install.sh` を起動する。
+未コミットの変更がある場合は自動更新を止める。現在のコードだけを適用する場合は `./install.sh --no-update` を使う。
+Gitは追跡先を使い、強制上書きや自動マージは行わない。完了したら表示されるHTTPS URLを開くか、ブラウザを再読み込みする。
+
+従来どおり全機能を一括設定する場合は `./scripts/setup.sh` も利用できる。
 起動用の tmux セッション `0` を作り、保存があれば構成を復元する。
 既に動作中の tmux セッションはそのまま使う。設定はユーザー単位で導入する。
 再起動前には `./scripts/resurrect-autosave.sh` で最新の構成を保存できる。
@@ -665,8 +676,9 @@ PORT=8080 TMUX_WEB_ALLOWED_USERS=you@example.com ./scripts/install-service.sh
 | 自動起動をやめる | `systemctl --user disable tmux-web` |
 | 消す | `./scripts/uninstall-service.sh` |
 
-コードを更新したら `./scripts/install-service.sh` をもう一度実行すれば、
-依存関係を同期して再ビルドし、サービスを再起動する。
+通常の更新は `./install.sh` で「1) 最新版に更新する」を選ぶ。
+Gitからの取得・依存関係の同期・再ビルド・サービス再起動をまとめて行い、既存のユニットや上書き設定は書き換えない。
+サービス自体を再登録したい場合は `./scripts/install-service.sh` をもう一度実行する。
 既存のポート・待ち受けアドレス・許可ユーザーは、環境変数を明示しなければ引き継ぐ。
 Node.js を更新して古い実行ファイルを削除した場合も、再実行してパスを更新する。
 保存・復元側も更新するなら `./scripts/setup.sh` を再実行する。
