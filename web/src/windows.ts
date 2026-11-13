@@ -4,6 +4,7 @@
  * サイドバーの行・タブ・切り替えパレットが別々に組み立てていると、
  * 同じウィンドウが場所によって違う名前で出て見比べられなくなる。
  */
+import { deviceOf } from './devices';
 import { shortPath, subPath } from './paths';
 import { windowStatus, type WindowStatus } from './status';
 import type { Pane, Session, TmuxWindow } from './types';
@@ -94,4 +95,33 @@ export function whereWithSession(view: WindowView, session: Session | null): str
   return [view.where, session && session.name !== view.project ? session.name : '']
     .filter(Boolean)
     .join(' · ');
+}
+
+export interface ProjectWindowGroup {
+  key: string;
+  window: TmuxWindow;
+  others: TmuxWindow[];
+}
+
+/** Repeated task titles are folded only in the project list; every terminal remains selectable. */
+export function groupProjectWindows(windows: TmuxWindow[], views: Map<string, WindowView>, activeId: string | null, openIds: Set<string>): ProjectWindowGroup[] {
+  const groups = new Map<string, TmuxWindow[]>();
+  // Linked tmux windows can appear through several independent sessions too.
+  const unique = new Map(windows.map(win => [win.id, win]));
+  for (const win of unique.values()) {
+    const view = views.get(win.id);
+    const agent = view?.status.agent;
+    const title = view?.primary.trim();
+    const task = win.panes === 1 && view?.lead?.proc?.kind === 'agent' && agent && title
+      && !TOOL_NAME.test(title) && view.fullPath;
+    // Include the full title and exact cwd: truncated labels and similar tasks are not duplicates.
+    const key = task ? `task:${JSON.stringify([deviceOf(win.id), view.fullPath, agent, title])}` : `window:${win.id}`;
+    const group = groups.get(key);
+    if (group) group.push(win); else groups.set(key, [win]);
+  }
+  const rank = (win: TmuxWindow) => win.id === activeId ? 0 : openIds.has(win.id) ? 1 : 2;
+  return [...groups].map(([key, members]) => {
+    const window = members.reduce((best, win) => rank(win) < rank(best) ? win : best);
+    return { key, window, others: members.filter(win => win !== window) };
+  });
 }

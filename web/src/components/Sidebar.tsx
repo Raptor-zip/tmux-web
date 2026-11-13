@@ -14,7 +14,7 @@ import {
   type WindowStatus,
 } from '../status';
 import { shortPath, tildePath } from '../paths';
-import type { WindowView } from '../windows';
+import { groupProjectWindows, type WindowView, type ProjectWindowGroup } from '../windows';
 import type { Session, TmuxWindow } from '../types';
 
 /**
@@ -108,6 +108,7 @@ export function Sidebar({
   const [idleOpen, setIdleOpen] = useState<Set<string>>(new Set());
   /** 一覧の末尾の「動いていないプロジェクト」を広げているか */
   const [restOpen, setRestOpen] = useState(false);
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
   /** ウィンドウ 1 行に出す情報。見せ方そのものは windows.ts が持つ */
   const describe = (win: TmuxWindow) => {
@@ -328,7 +329,8 @@ export function Sidebar({
   }
 
   const groups = useMemo<Group[]>(() => {
-    const visible = windows.filter(matches);
+    const source = groupBy === 'project' ? [...new Map(windows.map(win => [win.id, win])).values()] : windows;
+    const visible = source.filter(matches);
 
     if (groupBy === 'session') {
       return sessions
@@ -446,7 +448,7 @@ export function Sidebar({
     ));
   };
 
-  const windowRow = (g: Group, win: TmuxWindow) => {
+  const windowRow = (g: Group, win: TmuxWindow, task?: ProjectWindowGroup) => {
     const winActive = win.id === activeWindowId;
     const opened = openSet.has(win.id);
     const d = describe(win);
@@ -455,6 +457,7 @@ export function Sidebar({
     return (
       <div
         key={`${g.key}:${win.id}`}
+        data-window-id={win.id}
         className={`row window-row st-${kind} ${winActive ? 'active' : ''} ${
           opened && !winActive ? 'opened' : ''
         } ${draggingWindowId === win.id ? 'dragging' : ''} ${dropClass({
@@ -494,6 +497,17 @@ export function Sidebar({
             : 'クリックでタブに開く。ドラッグ：タブ列に落とすと差し込み、端末の端なら画面分割、別のセッション行なら移動'
         }
       >
+          {task && task.others.length > 0 && <button className="badge duplicate-task-toggle"
+            aria-label={`同じタイトルの端末 ${task.others.length + 1} 件を${expandedTasks.has(task.key) ? '畳む' : '表示'}`}
+            aria-expanded={expandedTasks.has(task.key)}
+            title={`同じタイトルの端末が${task.others.length + 1}件あります。クリックして個別に選択できます。`}
+            onPointerDown={event => event.stopPropagation()}
+            onClick={() => setExpandedTasks(prev => {
+              const next = new Set(prev);
+              next.has(task.key) ? next.delete(task.key) : next.add(task.key);
+              return next;
+            })}>{expandedTasks.has(task.key) ? '▾' : '▸'} 同名 {task.others.length + 1}</button>}
+
         <span className={`state-dot ${kind}`} title={st?.label} />
 
         {renaming?.kind === 'window' && renaming.id === win.id ? (
@@ -692,7 +706,11 @@ export function Sidebar({
             const canClean = g.wins.filter(closable).length;
             return (
               <>
-                {shown.map((win) => windowRow(g, win))}
+                {session || query ? shown.map(win => windowRow(g, win)) :
+                  groupProjectWindows(shown, views, activeWindowId, openSet).flatMap(task => [
+                    windowRow(g, task.window, task),
+                    ...(expandedTasks.has(task.key) ? task.others.map(win => windowRow(g, win)) : []),
+                  ])}
                 {!query &&
                   !g.dormant &&
                   (hidden > 0 || idleOpen.has(g.key)) &&

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWindowViews, paneCommand, windowName, windowTitle } from '../src/windows';
+import { buildWindowViews, groupProjectWindows, paneCommand, windowName, windowTitle } from '../src/windows';
 import { TERMINAL_GRACE_MS, windowStatus } from '../src/status';
 import type { Pane, TmuxWindow } from '../src/types';
 
@@ -66,4 +66,49 @@ test('Claude after Codex is also labeled correctly and unknown processes do not 
   assert.equal(windowTitle({ ...win, name: 'codex' }, claude), 'Claude');
   assert.equal(windowName({ ...win, name: 'node' }, claude), 'Claude');
   assert.equal(windowName({ ...win, name: 'custom' }, { ...codex, proc: null }), 'custom');
+});
+
+test('project rows fold identical agent task titles and prefer the active or already open terminal', () => {
+  const first = { ...win, panes: 1 };
+  const second = { ...first, id: '@2', index: 2 };
+  const panes = [codex, { ...codex, id: '%2', windowId: '@2' }].map(pane => ({ ...pane, title: '3Dシューティングとレースを試作して | int-ball2-game' }));
+  const views = buildWindowViews([first, second], panes, '/home/demo', 0);
+  const folded = groupProjectWindows([first, second], views, '@2', new Set(['@1', '@2']));
+  assert.equal(folded.length, 1);
+  assert.equal(folded[0].window.id, '@2');
+  assert.deepEqual(folded[0].others.map(win => win.id), ['@1']);
+  assert.equal(groupProjectWindows([first, second], views, null, new Set(['@2']))[0].window.id, '@2');
+  assert.equal(groupProjectWindows([first, second], views, null, new Set())[0].window.id, '@1');
+  assert.equal(views.size, 2, 'folding never removes either terminal from the underlying views');
+});
+
+test('similar prefixes, different agents, directories, devices and multi-pane windows remain separate', () => {
+  const first = { ...win, panes: 1 };
+  const task = { ...codex, title: '同じ作業のタイトル' };
+  for (const [second, other] of [
+    [{ ...first, id: '@2' }, { ...task, id: '%2', windowId: '@2', title: '同じ作業のタイトル（別の依頼）' }],
+    [{ ...first, id: '@2' }, { ...task, id: '%2', windowId: '@2', proc: { ...task.proc!, agent: 'Claude' } }],
+    [{ ...first, id: '@2' }, { ...task, id: '%2', windowId: '@2', path: '/other' }],
+    [{ ...first, id: 'spark~@2' }, { ...task, id: 'spark~%2', windowId: 'spark~@2' }],
+    [{ ...first, id: '@2', panes: 2 }, { ...task, id: '%2', windowId: '@2' }],
+  ] as [TmuxWindow, Pane][]) {
+    const views = buildWindowViews([first, second], [task, other], '/home/demo', 0);
+    assert.equal(groupProjectWindows([first, second], views, null, new Set()).length, 2);
+  }
+});
+
+test('generic CLI names and shell titles do not hide unrelated terminals', () => {
+  const windows = [{ ...win, panes: 1 }, { ...win, id: '@2', panes: 1 }];
+  for (const pane of [codex, { ...codex, title: '同じシェルのタイトル', proc: { ...codex.proc!, kind: 'idle', agent: null } } as Pane]) {
+    const views = buildWindowViews(windows, [pane, { ...pane, id: '%2', windowId: '@2' }], '/home/demo', 0);
+    assert.equal(groupProjectWindows(windows, views, null, new Set()).length, 2);
+  }
+});
+
+test('linked windows appear once in project rows even through independent sessions', () => {
+  const linked = { ...win, sessionId: '$2', sessionName: 'other' };
+  const views = buildWindowViews([win, linked], [codex], '/home/demo', 0);
+  const rows = groupProjectWindows([win, linked], views, null, new Set());
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].others.length, 0);
 });
