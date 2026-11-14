@@ -19,6 +19,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
   const [fit, setFit] = useState(true);
   const [viewOnly, setViewOnly] = useState(false);
   const [clipboardOpen, setClipboardOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [text, setText] = useState('');
   const [notice, setNotice] = useState('');
   const [copying, setCopying] = useState(false);
@@ -36,6 +37,13 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
   const fitRef = useRef(fit); fitRef.current = fit;
   const viewRef = useRef(viewOnly); viewRef.current = viewOnly;
   const closeRef = useRef(onClose); closeRef.current = onClose;
+  const dismissRef = useRef(() => {});
+  dismissRef.current = () => {
+    if (controlsOpen || clipboardOpen || settingsOpen) {
+      setControlsOpen(false); setClipboardOpen(false); setSettingsOpen(false);
+      panel.current?.querySelector<HTMLButtonElement>('.desktop-controls-toggle')?.focus();
+    } else closeRef.current();
+  };
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -43,7 +51,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
     const key = (e: KeyboardEvent) => {
       // Escape/Tab inside the desktop belong to the remote application.
       if (viewport.current?.contains(e.target as Node)) return;
-      if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); }
+      if (e.key === 'Escape') { e.stopPropagation(); dismissRef.current(); }
       if (e.key === 'Tab') {
         const elements = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), summary, textarea, select, input:not(:disabled), canvas') ?? [])].filter(el=>el.getClientRects().length);
         const first = elements[0], last = elements[elements.length - 1];
@@ -60,6 +68,18 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
       previous?.focus();
     };
   }, []);
+
+  const lastPopover = useRef('');
+  useEffect(() => {
+    const current = clipboardOpen ? 'clipboard' : settingsOpen ? 'settings' : controlsOpen ? 'controls' : '';
+    if (current) {
+      panel.current?.querySelector<HTMLElement>(current === 'clipboard' ? '#desktop-text' : `#desktop-${current}-panel button`)?.focus();
+    } else if (lastPopover.current) {
+      const trigger = lastPopover.current === 'clipboard' ? '[aria-controls="desktop-clipboard-panel"]' : '.desktop-controls-toggle';
+      panel.current?.querySelector<HTMLButtonElement>(trigger)?.focus();
+    }
+    lastPopover.current = current;
+  }, [clipboardOpen, settingsOpen, controlsOpen]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -181,7 +201,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
       if (!isCurrent()) return;
       if (written) setNotice('接続先の文字を、この端末のクリップボードにコピーしました');
       else {
-        setClipboardOpen(true); setSettingsOpen(false);
+        setClipboardOpen(true); setSettingsOpen(false); setControlsOpen(false);
         setNotice('自動コピーが許可されていません。入力欄の文字を選択してコピーしてください');
         requestAnimationFrame(() => { if (isCurrent()) { clipboardText.current?.focus(); clipboardText.current?.select(); } });
       }
@@ -191,13 +211,9 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
 
   return <div className="modal-backdrop desktop-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
     <div className="screen-viewer desktop-viewer" role="dialog" aria-modal="true" aria-label="リモートデスクトップ" tabIndex={-1} ref={panel}>
-      <div className="screen-head">
-        <strong><Icon name="screen" /> <span>リモートデスクトップ</span></strong>
-        <button className="btn desktop-close-viewer" aria-label="デスクトップを閉じる" onClick={onClose}><Icon name="close" />閉じる</button>
-      </div>
-      <div className="desktop-toolbar">
-        <div className="desktop-connection-row">
-          <label className="desktop-device-label">接続先
+      <div className="screen-head desktop-compact-head">
+        <Icon name="screen" />
+          <label className="desktop-device-label"><span className="desktop-device-caption">接続先</span>
             {devices.length > 1 ? <select aria-label="デスクトップのデバイス" value={selectedDeviceId} onChange={event => {
               selectionVersion.current++; selectedIdRef.current = event.target.value;
               setText(''); setNotice(''); setRoundTrip(null); setSelectedDeviceId(event.target.value);
@@ -205,9 +221,14 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
               {devices.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}
             </select> : <strong>{selectedName}</strong>}
           </label>
-          <span className={`desktop-connection-status ${connected ? 'is-connected' : ''}`} role="status"><span className={`dot ${connected ? 'ok' : error ? 'bad' : ''}`} />{connected ? '接続済み' : error ? '未接続' : '接続中…'}</span>
-          <button className="btn" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />再接続</button>
-        </div>
+          <span className={`desktop-connection-status ${connected ? 'is-connected' : ''}`} role="status"><span className={`dot ${connected ? 'ok' : error ? 'bad' : ''}`} /><span className="desktop-status-text">{connected ? '接続済み' : error ? '未接続' : '接続中…'}</span></span>
+        <button className="btn" aria-label="文字入力・コピー" title="文字入力・コピー" aria-expanded={clipboardOpen} aria-controls="desktop-clipboard-panel" onClick={() => { setClipboardOpen(v => !v); setSettingsOpen(false); setControlsOpen(false); }}><Icon name="keyboard" /><span className="desktop-button-label">文字入力</span></button>
+        <button className="btn desktop-controls-toggle" aria-label="操作・設定" title={viewOnly ? '見るだけ（操作・設定）' : '操作・設定'} aria-expanded={controlsOpen} aria-controls="desktop-controls-panel" onClick={() => { setControlsOpen(v => !v); setClipboardOpen(false); setSettingsOpen(false); }}><Icon name="more" /><span>{viewOnly ? '見るだけ' : '操作・設定'}</span></button>
+        <button className="btn desktop-icon-button" aria-label={full ? '全画面を終了' : '全画面'} title={full ? '全画面を終了' : '全画面'} onClick={() => void fullscreen()}><Icon name="expand" /></button>
+        <button className="btn desktop-icon-button" aria-label="デスクトップを閉じる" title="デスクトップを閉じる" onClick={onClose}><Icon name="close" /></button>
+      </div>
+      {controlsOpen && <div className="desktop-toolbar desktop-popover" id="desktop-controls-panel" aria-label="リモートデスクトップの操作・設定">
+        <div className="desktop-popover-head"><strong>操作・設定</strong><button className="btn desktop-icon-button" aria-label="操作・設定を閉じる" onClick={() => setControlsOpen(false)}><Icon name="close" /></button></div>
         <div className="desktop-action-row">
           <div className="desktop-mode" role="group" aria-label="リモートの操作モード">
             <button className="btn" aria-pressed={!viewOnly} onClick={() => setViewOnly(false)}>操作する</button>
@@ -217,12 +238,10 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
             <label className="desktop-display-label">表示<select aria-label="デスクトップの表示サイズ" value={fit ? 'fit' : 'actual'} onChange={e => setFit(e.target.value === 'fit')}>
               <option value="fit">画面に合わせる</option><option value="actual">原寸（100%）</option>
             </select></label>
-            <button className="btn" onClick={() => void fullscreen()}><Icon name="expand" />{full ? '全画面を終了' : '全画面'}</button>
           </div>
           <div className="desktop-tools">
             <button className="btn desktop-copy-button" disabled={copying} onClick={() => void copy()} title="接続先のクリップボードの文字を、この端末にコピー"><Icon name="download" />{copying ? 'コピー中…' : 'この端末へコピー'}</button>
-            <button className="btn" aria-expanded={clipboardOpen} aria-controls="desktop-clipboard-panel" onClick={() => { setClipboardOpen(v => !v); setSettingsOpen(false); }}><Icon name="keyboard" />文字入力・コピー</button>
-            <button className="btn" aria-expanded={settingsOpen} aria-controls="desktop-settings-panel" onClick={() => { setSettingsOpen(v => !v); setClipboardOpen(false); }}>画質・遅延設定</button>
+            <button className="btn" aria-expanded={settingsOpen} aria-controls="desktop-settings-panel" onClick={() => { setSettingsOpen(v => !v); setClipboardOpen(false); setControlsOpen(false); }}>画質・遅延設定</button>
           </div>
         </div>
         <div className="desktop-input-row">
@@ -232,8 +251,15 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
             <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendCtrlAltDel(); client.current?.focus(); }}>Ctrl+Alt+Del を送る</button>
           </div>
         </div>
-      </div>
-      {settingsOpen && <div className="desktop-settings" id="desktop-settings-panel">
+        <button className="btn" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />再接続</button>
+        <details><summary>操作ガイド・接続情報</summary>
+          <p>スマホ：タップでクリック、2本指タップで右クリック、2本指ドラッグでスクロール。日本語は「文字入力・コピー」から送れます。</p>
+          <p>{settings.lossless ? '可逆圧縮' : `JPEG 品質${settings.quality}`} · 配信{Math.round(Number(settings.scale) * 100)}%（元画面 {sourceSize || '確認中'}） · 更新{settings.interval}ms · 音声なし</p>
+          <p>通信往復：{roundTrip === null ? '未計測／応答なし' : `${roundTrip} ms`}。画面の取り込み・圧縮・描画時間は含みません。</p>
+        </details>
+      </div>}
+      {settingsOpen && <div className="desktop-settings desktop-popover" id="desktop-settings-panel">
+        <div className="desktop-popover-head"><strong>画質・遅延設定</strong><button className="btn desktop-icon-button" aria-label="画質・遅延設定を閉じる" onClick={() => setSettingsOpen(false)}><Icon name="close" /></button></div>
         <div className="screen-controls" role="group" aria-label="配信プリセット">
           {Object.entries(desktopPresets).map(([id, preset]) => <button key={id} className="btn" onClick={() => setDraft(preset)}>{preset.label}</button>)}
         </div>
@@ -256,7 +282,8 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
           <button className="btn" onClick={() => { setDraft(settings); setSettingsOpen(false); }}>キャンセル</button>
         </div>
       </div>}
-      {clipboardOpen && <div className="desktop-clipboard" id="desktop-clipboard-panel">
+      {clipboardOpen && <div className="desktop-clipboard desktop-popover" id="desktop-clipboard-panel">
+        <div className="desktop-popover-head"><strong>文字入力・コピー</strong><button className="btn desktop-icon-button" aria-label="文字入力・コピーを閉じる" onClick={() => setClipboardOpen(false)}><Icon name="close" /></button></div>
         <label htmlFor="desktop-text">文字入力・クリップボード（日本語入力可）</label>
         <textarea ref={clipboardText} id="desktop-text" value={text} onChange={e => setText(e.target.value)} placeholder="ここに入力して、リモートへ貼り付け" />
         <div className="screen-controls">
@@ -273,14 +300,7 @@ export function ScreenViewer({ deviceName, deviceId = 'local', devices = [], onC
           {error && <button className="btn primary" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />もう一度接続する</button>}
         </div></div>}
       </div>
-      <div className="screen-foot desktop-footer">
-        {notice && <p className="desktop-notice" role="status">{notice}</p>}
-        <details><summary>操作ガイド・接続情報</summary>
-          <p>スマホ：タップでクリック、2本指タップで右クリック、2本指ドラッグでスクロール。日本語は「文字入力・コピー」から送れます。</p>
-          <p>{settings.lossless ? '可逆圧縮' : `JPEG 品質${settings.quality}`} · 配信{Math.round(Number(settings.scale) * 100)}%（元画面 {sourceSize || '確認中'}） · 更新{settings.interval}ms · 音声なし</p>
-          <p>通信往復：{roundTrip === null ? '未計測／応答なし' : `${roundTrip} ms`}。画面の取り込み・圧縮・描画時間は含みません。</p>
-        </details>
-      </div>
+      {notice && <div className="desktop-notification"><p className="desktop-notice" role="status">{notice}</p></div>}
     </div>
   </div>;
 }

@@ -14,7 +14,8 @@ import {
   type TabRef,
 } from '../layout';
 import { TabStrip } from './TabStrip';
-import { TerminalView, type TerminalHandle, type TerminalStatus } from './Terminal';
+import type { TerminalHandle, TerminalStatus } from './Terminal';
+import { TerminalTabs } from './TerminalTabs';
 import type { Session, TmuxWindow } from '../types';
 import type { WindowView } from '../windows';
 
@@ -138,7 +139,6 @@ export function SplitView({
 
   const [forceSplit, setForceSplit] = useState(false);
   const [resizing, setResizing] = useState(false);
-  const [retries, setRetries] = useState<Record<string,number>>({});
   const [size, setSize] = useState({width: 0, height: 0});
   const [overview, setOverview] = useState(false);
   const [query, setQuery] = useState('');
@@ -263,7 +263,6 @@ export function SplitView({
       {tiles.map(({ leaf, rect }) => {
         const tab = activeTab(leaf);
         const { view, device } = tab ? viewOf(tab) : { view: null, device: undefined };
-        const status = statuses[leaf.id];
         const focused = leaf.id === selectedId;
         const tabDrop = dropAt?.kind === 'tab' && dropAt.leafId === leaf.id;
 
@@ -308,24 +307,22 @@ export function SplitView({
             />
 
             <div className="tile-body">
-              {tab ? (
-                <TerminalView
-                  ref={(h) => registerTerm(leaf.id, h)}
-                  retryToken={retries[leaf.id] || 0}
-                  sessionId={pendingRemap || !active || (single && !focused) ? null : tab.sessionId}
-                  windowId={tab.windowId}
-                  windowIndex={view?.win.index ?? null}
-                  mode={mode}
-                  showStatusBar={showStatusBar}
-                  fontSize={fontSize}
-                  lineHeight={lineHeight}
-                  onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
-                  onStatus={(s) => onStatus(leaf.id, s)}
-                  onCopied={onCopied}
-                  onNotice={onNotice}
-                />
-              ) : null}
-              {status && !status.connected && <div className={`panel-connection${status.selecting ? ' selecting' : ''}`} role="status"><strong>{device?.name || '端末'} · {status.selecting ? '切り替え中' : '未接続'}</strong><span>{status.message || '接続を確認しています…'}</span>{!status.selecting && <button onClick={()=>setRetries(v=>({...v,[leaf.id]:(v[leaf.id]||0)+1}))}>再接続</button>}</div>}
+              <TerminalTabs
+                leaf={leaf}
+                visible={active && size.width > 0 && size.height > 0 && (!single || focused)}
+                pendingRemap={pendingRemap}
+                deviceName={device?.name}
+                windowIndex={tab => viewOf(tab).view?.win.index ?? null}
+                mode={mode}
+                showStatusBar={showStatusBar}
+                fontSize={fontSize}
+                lineHeight={lineHeight}
+                onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
+                onStatus={onStatus}
+                onCopied={onCopied}
+                onNotice={onNotice}
+                registerTerm={registerTerm}
+              />
             </div>
           </div>
         );

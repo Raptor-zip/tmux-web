@@ -1,0 +1,122 @@
+[
+  {
+    "screen": "remote-viewer-desktop",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1248,
+        "headerWidth": 1182
+      }
+    ],
+    "remoteStage": {
+      "width": 1252.390625,
+      "height": 510.625,
+      "areaRatio": 0.624513635635376
+    },
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 1254
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "remote-viewer-mobile",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 346,
+        "headerWidth": 252
+      }
+    ],
+    "remoteStage": {
+      "width": 388,
+      "height": 443,
+      "areaRatio": 0.5221898165026128
+    },
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 390
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "remote-viewer-landscape",
+    "width": 740,
+    "height": 390,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 696,
+        "headerWidth": 602
+      }
+    ],
+    "remoteStage": {
+      "width": 738,
+      "height": 149.5,
+      "areaRatio": 0.3822972972972973
+    },
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 740
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "remote-clipboard-mobile",
+    "width": 390,
+    "height": 844,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 346,
+        "headerWidth": 252
+      }
+    ],
+    "remoteStage": {
+      "width": 388,
+      "height": 286.21875,
+      "areaRatio": 0.33738265585125776
+    },
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 390
+      }
+    ],
+    "errors": []
+  },
+  {
+    "screen": "remote-settings-desktop",
+    "width": 1280,
+    "height": 800,
+    "overflow": false,
+    "visiblePanels": [
+      {
+        "width": 1248,
+        "headerWidth": 1182
+      }
+    ],
+    "remoteStage": {
+      "width": 1252.390625,
+      "height": 274.4375,
+      "areaRatio": 0.33564741420745847
+    },
+    "dialogs": [
+      {
+        "label": "リモートデスクトップ",
+        "width": 1254
+      }
+    ],
+    "errors": []
+  }
+]

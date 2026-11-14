@@ -9,6 +9,7 @@ const assert=require('node:assert/strict');
 const phase=process.argv[2]||'after';
 const root=resolve(__dirname,'../..');
 const out=process.env.TEST_OUTPUT||join(root,'artifacts/visual-feedback',phase);fs.mkdirSync(out,{recursive:true});
+const testPort=Number(process.env.TEST_PORT||17656);
 const now=1792597800000;
 const deviceNames={local:'ThinkPad',spark:'DGX Spark'};
 const projects=['atlas-web','orbital-navigation-console','atlas-web','billing-service','research-notes','design-system'];
@@ -27,6 +28,7 @@ const scenes=[
   {name:'remote-entry-mobile',width:390,height:844,touch:true},
   {name:'remote-viewer-desktop',width:1280,height:800,action:'desktop'},
   {name:'remote-viewer-mobile',width:390,height:844,touch:true,action:'desktop'},
+  {name:'remote-viewer-landscape',width:740,height:390,touch:true,action:'desktop'},
   {name:'remote-clipboard-mobile',width:390,height:844,touch:true,action:'desktop',remotePanel:'clipboard'},
   {name:'remote-settings-desktop',width:1280,height:800,action:'desktop',remotePanel:'settings'},
  ].map(scene=>({...scene,tree:leaf(1)})),
@@ -56,7 +58,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  const app=express();
  if(process.env.COMPRESSED_STATIC){const {installWeb}=await import('../../server/src/web.js');installWeb(app,process.env.STATIC_ROOT||join(root,'web/dist'));}
  else{app.use(express.static((process.env.STATIC_ROOT||join(root,'web/dist'))));app.get('*',(_q,r)=>r.sendFile(join(process.env.STATIC_ROOT||join(root,'web/dist'),'index.html')));}
- const server=http.createServer(app);await new Promise(r=>server.listen(17656,'127.0.0.1',r));
+ const server=http.createServer(app);await new Promise(r=>server.listen(testPort,'127.0.0.1',r));
  const browser=process.env.BROWSER_ENGINE==='webkit'
   ? await webkit.launch({headless:true,...(process.env.WEBKIT_BIN?{executablePath:process.env.WEBKIT_BIN}:{})})
   : await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||'/home/somak/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome',args:['--no-sandbox']});
@@ -64,8 +66,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  try{
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
-  await context.addInitScript(({tree,sidebar,now,keepStorage})=>{Date.now=()=>now;if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK});
-  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];const transferTasks=[],transfers=[];page.on('pageerror',e=>errors.push(e.message));
+  await context.addInitScript(({tree,sidebar,now,keepStorage,direct})=>{Date.now=()=>now;if(direct)localStorage.setItem('tw.mode','"direct"');if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK,direct:!!process.env.TERMINAL_DIRECT_CHECK});
+  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];let workspaceState={type:'workspace',initialized:false,revision:0,values:{}};const transferTasks=[],transfers=[];page.on('pageerror',e=>errors.push(e.message));
   if(process.env.TRANSFER_REPORT)page.on('requestfinished',request=>{
    const url=new URL(request.url());if(!/\.(?:js|css)$/.test(url.pathname))return;
    transferTasks.push((async()=>{const response=await request.response();const headers=await response.allHeaders();const sizes=await request.sizes();transfers.push({asset:url.pathname.split('/').at(-1),encoding:headers['content-encoding']||'identity',wireBodyBytes:sizes.responseBodySize,decodedBytes:(await response.body()).length});})().catch(error=>errors.push(error.message)));
@@ -89,24 +91,34 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   });
   await page.routeWebSocket(/\/ws\//,ws=>{
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
-   if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}const send=()=>ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));send();ws.onMessage(send);}
+   if(url.pathname.endsWith('/workspace')){
+    const send=extra=>ws.send(JSON.stringify({...workspaceState,...extra}));send();
+    ws.onMessage(raw=>{const message=JSON.parse(String(raw));if(message.type==='refresh'){send();return;}if(message.type!=='workspace-patch')return;
+     const conflict=Object.entries(message.changes).some(([key,change])=>(workspaceState.values[key]??null)!==change.before);
+     if(conflict){send({ack:message.id,conflict:true});return;}
+     for(const [key,change] of Object.entries(message.changes)){if(change.after===null)delete workspaceState.values[key];else workspaceState.values[key]=change.after;}
+     workspaceState.initialized=true;workspaceState.revision++;send({ack:message.id});
+    });
+   }
+   else if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}const send=()=>ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));send();ws.onMessage(send);}
    else if(url.pathname.endsWith('/terminal')){
-    const acknowledge=!!process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection';
-    const transport={socket:ws,remote,window:url.searchParams.get('window'),selections:[]};
+    const acknowledge=(!!process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection')||!!process.env.TERMINAL_DIRECT_CHECK;
+    const transport={socket:ws,remote,window:url.searchParams.get('window'),selections:[],inputs:[]};
     terminalConnections++;activeTerminals++;terminalTransports.push(transport);ws.onClose((code,reason)=>{transport.closeEvents=(transport.closeEvents||0)+1;if(transport.closed)return;transport.closed=true;activeTerminals--;void ws.close({code,reason}).catch(()=>{});});
     if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}
     const ready=()=>{ws.send(JSON.stringify({type:'ready',mode:'mirror',...(acknowledge?{selectionAck:true,windowId:url.searchParams.get('window')}:{})}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));};
     if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels' && terminalConnections===1) releaseTerminalReady=ready;
     else ready();
-    ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input')terminalInputs.push(data.data);else if(data.type==='selectWindow'){terminalSelections.push({...data,remote});transport.selections.push(data);}}catch{}});
+    ws.onMessage(message=>{try{const data=JSON.parse(String(message));if(data.type==='input'){terminalInputs.push(data.data);transport.inputs.push(data.data);}else if(data.type==='selectWindow'){terminalSelections.push({...data,remote});transport.selections.push(data);if(process.env.TERMINAL_DIRECT_CHECK)ws.send(JSON.stringify({type:'selectedWindow',requestId:data.requestId,windowId:data.windowId}));}}catch{}});
    }
   });
   const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
   const checkSwitcher=process.env.SWITCHER_CHECK && scene.action==='switcher' ? await require('./switcher.cjs')(page,{state,scene}) : null;
-  await page.goto('http://127.0.0.1:17656/');await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
+  await page.goto(`http://127.0.0.1:${testPort}/`);await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(checkStateConnection) await checkStateConnection();
   if(process.env.TERMINAL_WAKE_CHECK) await require('./terminal-wake.cjs')(page,{terminalTransports,terminalInputs});
   if(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection') await require('./terminal-selection.cjs')(page,{terminalTransports,terminalInputs,phase,out});
+  if(process.env.TERMINAL_DIRECT_CHECK && scene.name==='terminal-target') await require('./terminal-direct.cjs')(page,{terminalTransports});
   if(process.env.TERMINAL_TARGET_CHECK && scene.name==='terminal-target') await require('./terminal-target.cjs')(page,{terminalTransports,terminalSelections});
   if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
    assert.equal(await page.locator('.mobile-input .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
@@ -137,14 +149,19 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await page.getByRole('dialog',{name:'リモートデスクトップ',exact:true}).waitFor();
    if(scene.remotePanel){
     if(phase==='before')await page.locator('.desktop-more summary').click();
+    if(scene.remotePanel==='settings' && await page.getByRole('button',{name:'操作・設定',exact:true}).count())await page.getByRole('button',{name:'操作・設定',exact:true}).click();
     await page.getByRole('button',{name:scene.remotePanel==='clipboard'?(phase==='before'?'文字・クリップボード':'文字入力・コピー'):'画質・遅延設定',exact:true}).click();
    }
   }
   await page.waitForTimeout(120);if(!(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection'))await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});
-  const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,visiblePanels:[...document.querySelectorAll('.tile')].filter(el=>!!el.getClientRects().length).map(el=>({width:Math.round(el.getBoundingClientRect().width),headerWidth:el.querySelector('.tablist')?.clientWidth||0})),dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].map(el=>({label:el.getAttribute('aria-label'),width:Math.round(el.getBoundingClientRect().width)}))}));
+  const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,visiblePanels:[...document.querySelectorAll('.tile')].filter(el=>!!el.getClientRects().length).map(el=>({width:Math.round(el.getBoundingClientRect().width),headerWidth:el.querySelector('.tablist')?.clientWidth||0})),remoteStage:(()=>{const el=document.querySelector('.desktop-stage');if(!el)return null;const r=el.getBoundingClientRect();return {width:r.width,height:r.height,areaRatio:r.width*r.height/(innerWidth*innerHeight)};})(),dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].map(el=>({label:el.getAttribute('aria-label'),width:Math.round(el.getBoundingClientRect().width)}))}));
   if(process.env.TRANSFER_REPORT){await Promise.all(transferTasks);fs.writeFileSync(process.env.TRANSFER_REPORT,JSON.stringify({screen:scene.name,conditions:{downloadKbps:Number(process.env.THROTTLE_KBPS)||null,latencyMs:Number(process.env.THROTTLE_RTT_MS)||0,coldContext:true},timings:await page.evaluate(()=>({firstContentfulPaint:performance.getEntriesByName('first-contentful-paint')[0]?.startTime||null,terminalReady:window.__terminalReadyAt||null})),transfers},null,2));console.log('asset transfers',JSON.stringify(transfers));}
   results.push({screen:scene.name,width:scene.width,height:scene.height,...metrics,errors});
   if(phase==='after'){assert.deepEqual(errors,[],scene.name+' runtime errors');assert.equal(metrics.overflow,false,scene.name+' horizontal page overflow');}
+  if(phase==='after' && process.env.REMOTE_COMPACT_CHECK && scene.action==='desktop') {
+   await require('./remote-layout.cjs')(page,scene);
+   assert.deepEqual(errors,[], 'remote layout runtime errors');
+  }
   if(phase==='after' && process.env.REMOTE_CLIPBOARD_CHECK && scene.name==='remote-viewer-desktop') {
    await require('./remote-clipboard.cjs')(page,{out,screenshot:!process.env.NO_SCREENSHOTS});
    assert.deepEqual(errors,[], 'remote clipboard runtime errors');
@@ -183,7 +200,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.deepEqual(errors,[],'no runtime errors after form and font interactions');
   }
 
-  if(process.env.DESKTOP_TRANSFER_CHECK) await require('./desktop-transfer.cjs')(page, errors);
+  if(process.env.DESKTOP_TRANSFER_CHECK) await require('./desktop-transfer.cjs')(page, errors, () => {workspaceState={type:'workspace',initialized:false,revision:0,values:{}};});
   console.log(scene.name,JSON.stringify(metrics));
   if(phase==='after' && scene.name==='mobile-panels'){
    assert.equal(activeTerminals,1,'only the visible mobile panel attaches');
@@ -249,26 +266,26 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
     assert.equal(activeTerminals,4);
     await page.getByRole('button',{name:'デスクトップを追加',exact:true}).click();
     await page.waitForTimeout(250);
-    assert.equal(activeTerminals,0,'hidden desktop releases every terminal connection');
+    assert.equal(activeTerminals,4,'hidden desktop retains every terminal connection');
     await page.getByRole('tab',{name:'1 デスクトップ1',exact:true}).click();
     await page.waitForTimeout(250);
-    assert.equal(activeTerminals,4,'returning to desktop reconnects its visible terminals');
+    assert.equal(activeTerminals,4,'returning to desktop reuses its terminals');
     await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));});
     await page.waitForTimeout(250);
-    assert.equal(activeTerminals,0,'hidden browser tab releases terminal connections');
+    assert.equal(activeTerminals,4,'hidden browser tab retains terminal connections');
     await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});document.dispatchEvent(new Event('visibilitychange'));});
     await page.waitForTimeout(250);
-    assert.equal(activeTerminals,4,'visible browser tab restores terminal connections');
+    assert.equal(activeTerminals,4,'visible browser tab reuses terminal connections');
     const count=terminalConnections;
     for(let i=0;i<3;i++){
      await togglePanel();
   await page.waitForTimeout(120);
-     assert.equal(activeTerminals,1,'focused panel is the only attached terminal');
+     assert.equal(activeTerminals,4,'focused mode retains background panel connections');
      await togglePanel();
   await page.waitForTimeout(120);
      assert.equal(activeTerminals,4,'restoring split does not accumulate connections');
     }
-    assert.equal(terminalConnections,count+9,'only newly visible panels reconnect');
+    assert.equal(terminalConnections,count,'panel focus changes reuse all terminal connections');
     console.log('terminal connection lifecycle passed');
    }
 

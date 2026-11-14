@@ -1,7 +1,7 @@
 // Run with the synthetic API/WebSocket fixture in visual-feedback.cjs:
 // SCREENS=desktop-controls DESKTOP_TRANSFER_CHECK=1 node web/test/visual-feedback.cjs after
 const assert = require('node:assert/strict');
-module.exports = async (page, errors) => {
+module.exports = async (page, errors, resetWorkspace) => {
   await page.evaluate(() => {
     localStorage.setItem('tw.desktops', JSON.stringify({ activeId: 'main', items: [
       { id: 'main', name: 'デスクトップ1' }, { id: 'second', name: 'デスクトップ2' },
@@ -10,6 +10,7 @@ module.exports = async (page, errors) => {
     localStorage.setItem('tw.layout.second', JSON.stringify({type:'leaf', id:'second-panel', tabs:[tab], activeId:tab.id}));
     localStorage.setItem('tw.serverPid.second', '"local:501|spark:502"');
   });
+  resetWorkspace?.();
   await page.reload();
   const visibleTab = () => page.locator('.desktop-panel:visible .tab').first();
   const desktop = id => page.locator(`[data-desktop-id="${id}"]`);

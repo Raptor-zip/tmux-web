@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
+import { useEffect, useLayoutEffect, useImperativeHandle, useRef, forwardRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -44,6 +44,8 @@ export interface TerminalStatus {
 
 interface Props {
   retryToken?: number;
+  /** 表示だけを切り替え、接続と描画済みの内容は保持する */
+  visible?: boolean;
   sessionId: string | null;
   windowId: string | null;
   /** 表示したいウィンドウの番号。ミラーセッション側だけを切り替える */
@@ -64,6 +66,7 @@ interface Props {
 export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalView(
   {
     retryToken,
+    visible = true,
     sessionId,
     windowId,
     windowIndex,
@@ -85,12 +88,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   const lineHeight = Number.isFinite(rawLineHeight)
     ? Math.min(2, Math.max(1, rawLineHeight))
     : 1;
-  const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
-  useEffect(() => {
-    const update = () => setPageVisible(document.visibilityState !== 'hidden');
-    document.addEventListener('visibilitychange', update);
-    return () => document.removeEventListener('visibilitychange', update);
-  }, []);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const hostRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -133,6 +132,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   const windowIndexRef = useRef<number | null>(windowIndex);
   windowIndexRef.current = windowIndex;
   // 端末は一度だけ組み立てるので、最新のハンドラは ref 経由で見る
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
   const onContextMenuRef = useRef(onContextMenu);
   onContextMenuRef.current = onContextMenu;
   const onCopiedRef = useRef(onCopied);
@@ -527,9 +528,9 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   useEffect(() => {
     const term = termRef.current;
     const fit = fitRef.current;
-    if (!term || !fit || !sessionId || !pageVisible) return;
+    if (!term || !fit || !sessionId) return;
 
-    onStatus?.({ connected: false, message: '接続中…' });
+    onStatusRef.current?.({ connected: false, message: '接続中…' });
 
     let disposed = false;
     let ws: WebSocket | null = null;
@@ -557,7 +558,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       if (disposed) return;
       const delay = Math.min(500 * 2 ** attempt, 5000);
       attempt += 1;
-      onStatus?.({ connected: false, message: '切断されました。再接続しています…' });
+      onStatusRef.current?.({ connected: false, message: '切断されました。再接続しています…' });
       retry = setTimeout(start, delay);
     };
 
@@ -579,7 +580,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       ws = new WebSocket(
         wsUrl('/ws/terminal', {
           session: sessionId,
-          ...(windowIdRef.current ? { window: windowIdRef.current } : {}),
+          ...(windowIdRef.current && (mode !== 'direct' || visibleRef.current) ? { window: windowIdRef.current } : {}),
           cols,
           rows,
           mode,
@@ -593,11 +594,11 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       const selection = new TerminalSelection();
       selectionRef.current = selection;
       const armTimeout = () => {
-        if (readyTimeout !== undefined) return;
+        if (readyTimeout !== undefined || (mode === 'direct' && !visibleRef.current)) return;
         readyTimeout = setTimeout(() => {
           if (!current()) return;
           readyTimeout = undefined;
-          if (!readyRef.current) socket.close();
+          if (!readyRef.current && (mode !== 'direct' || visibleRef.current)) socket.close();
         }, 10000);
       };
       const publishSelection = () => {
@@ -605,15 +606,15 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
         if (readyRef.current) {
           clearTimeout(readyTimeout); readyTimeout = undefined;
           attempt = 0;
-          onStatus?.({ connected: true });
+          onStatusRef.current?.({ connected: true });
         } else {
           armTimeout();
           const selecting = selection.phase !== 'connecting';
-          onStatus?.({ connected: false, selecting, message: selecting ? '端末を切り替えています…' : '接続中…' });
+          onStatusRef.current?.({ connected: false, selecting, message: selecting ? '端末を切り替えています…' : '接続中…' });
         }
       };
       requestSelectionRef.current = (index, windowId) => {
-        if (!current() || socket.readyState !== WebSocket.OPEN) return;
+        if (!current() || socket.readyState !== WebSocket.OPEN || (mode === 'direct' && !visibleRef.current)) return;
         const message = selection.request(index, unscoped(windowId));
         publishSelection();
         try { socket.send(JSON.stringify(message)); } catch { socket.close(); }
@@ -642,11 +643,11 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
             if (selection.confirm(msg.requestId, msg.windowId)) publishSelection();
           } else if (msg.type === 'error') {
             readyRef.current = false;
-            onStatus?.({ connected: false, message: msg.message });
+            onStatusRef.current?.({ connected: false, message: msg.message });
             term.writeln(`\r\n\x1b[31m接続エラー: ${msg.message}\x1b[0m`);
           } else if (msg.type === 'exit') {
             readyRef.current = false;
-            onStatus?.({ connected: false, message: 'デタッチしました' });
+            onStatusRef.current?.({ connected: false, message: 'デタッチしました' });
           }
         } catch {
           /* ignore */
@@ -694,7 +695,19 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       requestSelectionRef.current = () => {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, mode, showStatusBar, retryToken, pageVisible]);
+  }, [sessionId, mode, showStatusBar, retryToken]);
+
+  // 非表示の間も xterm と WebSocket を残す。復帰時は最後の画面をそのまま
+  // 表示し、表示領域だけを再計測する（再接続や tmux の再描画を待たない）。
+  useLayoutEffect(() => {
+    if (!visible) return;
+    safeFitRef.current();
+    const term = termRef.current;
+    if (term) term.refresh(0, Math.max(0, term.rows - 1));
+    // direct は同じセッションの全クライアントがウィンドウ選択を共有する。
+    // ほかのタブの選択後に戻ったときも、前面のタブを再選択する。
+    if (mode === 'direct' && windowIndex != null && windowId) requestSelectionRef.current(windowIndex, windowId);
+  }, [visible, mode]);
 
   // 同じセッション内のウィンドウ切り替えは、再接続せずミラー側の表示だけ変える
   useEffect(() => {
@@ -703,7 +716,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   }, [windowIndex, windowId]);
 
   return (
-    <div className="terminal-host" ref={hostRef}>
+    <div className="terminal-host" ref={hostRef} hidden={!visible}>
       <div className="terminal-inner" ref={innerRef} />
     </div>
   );

@@ -27,9 +27,14 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
     }});
   });
   const copy = () => page.getByRole('button', {name:'この端末へコピー',exact:true});
+  const openControls = async () => {
+    const toggle = page.getByRole('button', {name:'操作・設定',exact:true});
+    if (await toggle.count() && await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  };
+  const copyClick = async () => { await openControls(); await copy().click(); };
   const notice = page.locator('.desktop-notice');
   const writes = () => page.evaluate(() => window.__clipboardWrites);
-  await copy().click();
+  await copyClick();
   await notice.filter({hasText:'この端末のクリップボードにコピーしました'}).waitFor();
   assert.deepEqual(await writes(), [value], 'Unicode, newline and tab survive copy');
   assert.equal(await page.locator('#desktop-text').count(), 0, 'direct copy needs no input panel');
@@ -38,14 +43,14 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
   await page.getByRole('button', {name:'見るだけ',exact:true}).click();
   await page.getByLabel('デスクトップのデバイス', {exact:true}).selectOption('spark');
   value = 'Sparkの文字';
-  await copy().click();
+  await copyClick();
   await notice.filter({hasText:'この端末のクリップボードにコピーしました'}).waitFor();
   assert.equal(requests.at(-1), '/api/devices/spark/proxy/api/desktop/clipboard', 'reads selected device');
   assert.equal((await writes()).at(-1), value, 'view-only mode also permits copying');
 
   await page.evaluate(() => { window.__clipboardDenied = true; });
   value = '手動コピー用の日本語';
-  await copy().click();
+  await copyClick();
   await notice.filter({hasText:'自動コピーが許可されていません'}).waitFor();
   const input = page.locator('#desktop-text');
   assert.equal(await input.inputValue(), value);
@@ -59,19 +64,19 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
 
   await page.evaluate(() => { window.__clipboardDenied = false; });
   value = '';
-  await copy().click();
+  await copyClick();
   await notice.filter({hasText:'クリップボードに文字がありません'}).waitFor();
   assert.equal((await writes()).length, count, 'empty clipboard does not clear local contents');
 
   failure = true;
-  await copy().click();
+  await copyClick();
   await notice.filter({hasText:'クリップボードを読めません'}).waitFor();
   assert.equal((await writes()).length, count, 'API failure does not overwrite local contents');
   failure = false;
 
   await page.evaluate(() => { window.ClipboardItem = undefined; });
   value = 'writeText対応ブラウザ';
-  await copy().click();
+  await copyClick();
   await notice.filter({hasText:'この端末のクリップボードにコピーしました'}).waitFor();
   assert.equal((await writes()).at(-1), value);
   await page.evaluate(() => { window.ClipboardItem = window.__clipboardItem; });
@@ -80,7 +85,7 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
   let release;
   pending = new Promise(resolve => { release = resolve; });
   const previousRequests = requests.length;
-  await copy().click();
+  await copyClick();
   await page.getByRole('button', {name:'コピー中…',exact:true}).first().waitFor();
   // Wait until the request is held at the API boundary, then change device.
   for (let i = 0; requests.length === previousRequests && i < 50; i++) await page.waitForTimeout(10);
