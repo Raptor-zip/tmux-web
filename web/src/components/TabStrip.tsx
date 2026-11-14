@@ -12,6 +12,8 @@ interface Props {
   devices: Device[];
   leaf: LeafNode;
   focused: boolean;
+  /** 1画面表示では、同じデスクトップの全パネルからタブを並べる。 */
+  desktopTabs?: { tab: TabRef; leafId: string }[];
   /** タブ id → 表示に使う情報。tmux 側に無いタブは undefined になる */
   viewOf(tab: TabRef): { view: WindowView | null; session: Session | null; device?: Device };
   /** タイルが 2 枚以上ある＝タイルごと閉じられる */
@@ -44,6 +46,7 @@ export function TabStrip({
   devices,
   leaf,
   focused,
+  desktopTabs,
   viewOf,
   closableTile,
   draggingTabId,
@@ -59,6 +62,7 @@ export function TabStrip({
 }: Props) {
   const [menu, setMenu] = useState<{x:number;y:number;items:MenuEntry[]} | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const tabs = desktopTabs ?? leaf.tabs.map(tab => ({ tab, leafId: leaf.id }));
 
   // 前面のタブが隠れていたら見える位置まで送る（キーボードで切り替えたときに要る）
   useEffect(() => {
@@ -78,7 +82,7 @@ export function TabStrip({
     const observer = new ResizeObserver(reveal);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [leaf.activeId, leaf.tabs.length]);
+  }, [leaf.activeId, tabs.length]);
 
   /** 押してから 6px 動いたらドラッグ開始。押しただけで動き出すと切り替えられない */
   const dragCleanup = useRef<(() => void) | null>(null);
@@ -112,7 +116,7 @@ export function TabStrip({
   };
 
   const step = (from: number, delta: number) => {
-    const next = leaf.tabs[from + delta];
+    const next = tabs[from + delta]?.tab;
     if (next) {
       onActivate(next.id);
       requestAnimationFrame(() => listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]')[from + delta]?.focus());
@@ -126,7 +130,7 @@ export function TabStrip({
       <div
         className="tablist"
         role="tablist"
-        aria-label="このパネルの端末"
+        aria-label={desktopTabs ? "このデスクトップの端末" : "このパネルの端末"}
         ref={listRef}
         // 横に長いタブ列は、縦ホイールでも送れたほうが早い
         onWheel={(e) => {
@@ -137,21 +141,21 @@ export function TabStrip({
           if (e.target === e.currentTarget) onNewTab();
         }}
       >
-        {leaf.tabs.map((tab, i) => {
+        {tabs.map(({ tab, leafId }, i) => {
           const { view, session, device } = viewOf(tab);
           const active = tab.id === leaf.activeId;
           const kind = view?.status.kind ?? 'idle';
           const label = view?.project || tab.sessionName || '—';
           const where = view ? whereWithSession(view, session) : '接続が切れました';
           return (
-            <div key={tab.id} className="tab-slot">
+            <div key={tab.id} className="tab-slot" data-strip-leaf={leafId}>
               {caret === tab.id && mark}
               <div
                 className={`tab st-${kind} ${active ? 'active' : ''} ${
                   draggingTabId === tab.id ? 'dragging' : ''
                 }`}
                 data-tab-id={tab.id}
-                data-leaf-id={leaf.id}
+                data-leaf-id={leafId}
                 role="tab"
                 tabIndex={active ? 0 : -1}
                 aria-selected={active}
@@ -190,7 +194,7 @@ export function TabStrip({
                   else if (e.key === 'ArrowLeft') step(i, -1);
                   else if (e.key === 'ArrowRight') step(i, 1);
                   else if (e.key === 'Home') step(i, -i);
-                  else if (e.key === 'End') step(i, leaf.tabs.length - 1 - i);
+                  else if (e.key === 'End') step(i, tabs.length - 1 - i);
                   else if (e.key === 'Delete' || e.key === 'Backspace') onClose(tab.id);
                   else return;
                   e.preventDefault();

@@ -185,9 +185,10 @@ export function SplitView({
       const tabEl = stack.find((el) => el.dataset.tabId);
       const stripEl = stack.find((el) => el.dataset.stripLeaf);
       if (tabEl && stripEl) {
-        const ids = [...stripEl.querySelectorAll<HTMLElement>('[data-tab-id]')].map(
-          (el) => el.dataset.tabId as string,
-        );
+        const list = stripEl.closest('.tablist') ?? stripEl;
+        const ids = [...list.querySelectorAll<HTMLElement>('[data-tab-id]')]
+          .filter(el => el.dataset.leafId === stripEl.dataset.stripLeaf)
+          .map(el => el.dataset.tabId as string);
         const at = ids.indexOf(tabEl.dataset.tabId as string);
         const r = tabEl.getBoundingClientRect();
         const after = clientX > r.left + r.width / 2;
@@ -278,6 +279,7 @@ export function SplitView({
             <TabStrip
               workspaceMenu={focused ? workspaceMenu : undefined}
               leaf={leaf}
+              desktopTabs={single ? tiles.flatMap(({ leaf }) => leaf.tabs.map(tab => ({ tab, leafId: leaf.id }))) : undefined}
               onOverview={openOverview}
               onToggleFocus={() => {
                 onFocus(leaf.id);
@@ -296,7 +298,8 @@ export function SplitView({
               draggingTabId={drag?.fromTabId ?? null}
               caret={tabDrop ? dropAt.before : undefined}
               onActivate={(id) => {
-                onFocus(leaf.id);
+                const owner = tiles.find(({ leaf }) => leaf.tabs.some(tab => tab.id === id));
+                onFocus(owner?.leaf.id ?? leaf.id);
                 onActivateTab(id);
               }}
               onClose={onCloseTab}
