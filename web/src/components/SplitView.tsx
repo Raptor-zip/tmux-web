@@ -399,7 +399,7 @@ export function SplitView({
         const matches = leaf.tabs.filter(tab => { const {view,device}=viewOf(tab); return [view?.project, view?.primary, tab.sessionName,device?.name].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase()); });
         if (!matches.length) return null;
         return <section key={leaf.id}><h3>パネル {index+1}{leaf.id===selectedId ? ' · 入力先' : ''}<span>{leaf.tabs.length} タブ</span></h3>
-          {matches.map(tab=>{const {view,device}=viewOf(tab);return <button key={tab.id} className="overview-tab" aria-current={tab.id===leaf.activeId && leaf.id===selectedId ? 'true' : undefined} onClick={()=>{onFocus(leaf.id);onActivateTab(tab.id);setOverview(false);if (!window.matchMedia('(any-pointer: coarse)').matches) requestAnimationFrame(()=>hostRef.current?.querySelector<HTMLTextAreaElement>('.tile.focused textarea')?.focus());}}>
+          {matches.map(tab=>{const {view,device}=viewOf(tab);return <button key={tab.id} className="overview-tab" aria-current={tab.id===leaf.activeId && leaf.id===selectedId ? 'true' : undefined} onClick={()=>{onFocus(leaf.id);onActivateTab(tab.id);setOverview(false);if (!window.matchMedia('(pointer: coarse)').matches) requestAnimationFrame(()=>hostRef.current?.querySelector<HTMLTextAreaElement>('.tile.focused textarea')?.focus());}}>
             <span className="overview-device">{device?.name || '接続先を確認中'}{device && !device.connected ? ' · 未接続' : ''}</span>
             <strong>{view?.project || tab.sessionName}</strong><span className="overview-task">{view?.primary || tab.windowName || '端末'}</span><span className="overview-selected">{tab.id===leaf.activeId && leaf.id===selectedId ? '選択中' : '開く →'}</span>
           </button>;})}</section>;

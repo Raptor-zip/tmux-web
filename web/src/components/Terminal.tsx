@@ -257,7 +257,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     },
     send(data: string) {
       sendInputRef.current(data);
-      if (!window.matchMedia('(any-pointer: coarse)').matches) termRef.current?.focus();
+      if (!window.matchMedia('(pointer: coarse)').matches) termRef.current?.focus();
     },
     paste(data, target) {
       if (target && (sessionIdRef.current !== target.sessionId || windowIdRef.current !== target.windowId)) return false;
@@ -266,7 +266,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       return true;
     },
     focus() {
-      if (!window.matchMedia('(any-pointer: coarse)').matches) termRef.current?.focus();
+      if (!window.matchMedia('(pointer: coarse)').matches) termRef.current?.focus();
     },
     fit() {
       safeFitRef.current();
@@ -303,7 +303,9 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     term.open(innerRef.current!);
     // Touch devices use the visible draft for every language. Prevent xterm's
     // hidden textarea from summoning the software keyboard, including focus().
-    const touchKeyboard = window.matchMedia('(any-pointer: coarse)');
+    // 判定は「主な入力がタッチか」(pointer) で行う。any-pointer だとタッチパネルを
+    // 繋いだだけのデスクトップでも読み取り専用になり、IME（半角/全角・変換）が効かなくなる。
+    const touchKeyboard = window.matchMedia('(pointer: coarse)');
     const updateKeyboard = () => {
       if (!term.textarea) return;
       term.textarea.readOnly = touchKeyboard.matches;
