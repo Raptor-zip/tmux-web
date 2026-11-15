@@ -45,8 +45,11 @@ module.exports = async (page, { scene, terminalInputs, requests }) => {
   assert.equal(await sidebarHidden(), before);
 
   // Turn them off from the workspace menu (temporary home until the settings dialog)
-  const openMenu = () => page.locator('.tile.focused').getByRole('button', { name: 'パネルの操作', exact: true }).click();
-  await openMenu();
+  const openMenu = async (submenu) => {
+    await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: submenu, exact: true }).click();
+  };
+  await openMenu('表示と設定');
   const toggle = page.getByRole('menuitem', { name: /Alt ショートカットを使う/ });
   assert.match(await toggle.textContent(), /オン/);
   await toggle.click();
@@ -63,12 +66,12 @@ module.exports = async (page, { scene, terminalInputs, requests }) => {
   await page.keyboard.press('Alt+Shift+N');
   await page.waitForTimeout(150);
   assert.equal(await page.locator('.desktop-tab').count(), workspaces, 'Alt+Shift+N does not create a workspace when shortcuts are off');
-  await openMenu();
+  await openMenu('表示と設定');
   await page.getByRole('menuitem', { name: /Alt ショートカットを使う/ }).click();
   assert.equal(await page.evaluate(() => localStorage.getItem('tw.altKeys')), 'true');
 
   // Destructive confirmations start on Cancel, so Enter does not run them
-  await openMenu();
+  await openMenu('tmux');
   await page.getByRole('menuitem', { name: /^ペインを終了…/ }).click();
   const dialog = page.locator('dialog[open].prompt-dialog');
   await dialog.waitFor();

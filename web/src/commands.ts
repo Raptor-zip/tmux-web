@@ -48,7 +48,13 @@ export interface AppContext {
   approvalPending: boolean;
   onOpenApproval(): void;
   onSendCommand(): void;
+  /** 全文（履歴込み）をシートに出して、指やマウスで範囲を選んでコピーする */
+  onSelectText(): void;
   onPaste(): void;
+  /** false なら貼り付けられない（メニューを開いたタブが前面にない） */
+  canPaste?: boolean;
+  /** 対象のタブがリモートデスクトップ。ペインと端末の操作は出さない */
+  screenTab?: boolean;
   /** 前面がリモートデスクトップでも、そのデバイスの端末を新しく開ける */
   canOpenTerminal?: boolean;
 }
@@ -73,8 +79,8 @@ export interface TabContext {
   right: number;
   /** 移せる先のデスクトップ（自分以外） */
   desktops: { id: string; name: string }[];
-  /** 移せる先のパネル（自分以外）。number は 1 始まりの通し番号 */
-  panels: { id: string; number: number; tabs: number }[];
+  /** 移せる先のパネル（自分以外）。name はそのパネルで表示中のタブ名 */
+  panels: { id: string; name: string; tabs: number }[];
   moveLeft(): void;
   moveRight(): void;
   moveToDesktop(id: string): void;
@@ -92,15 +98,15 @@ export interface TabContext {
 export interface PanelContext {
   /** パネルが 2 つ以上ある＝広げる意味がある */
   multiple: boolean;
+  /** いま 1 枚だけを大きく出している（最大化中、または狭くて自動で 1 パネル表示） */
+  maximized?: boolean;
   toggleFocus(): void;
 }
 
-/** タブ列の ⋯ にだけ出す、そのパネル向けの操作 */
+/** タブがあるパネルそのものの操作 */
 export interface StripContext {
   tabCount: number;
   closable: boolean;
-  overview(): void;
-  activeTabMenu(): void;
   closePanel(): void;
 }
 
@@ -199,10 +205,12 @@ const family = <S extends Scope, A>(f: CommandFamily<S, A>) => f as unknown as C
 const NO_PANE = '操作するペインがありません';
 const NO_WINDOW = 'tmux のウィンドウが見つかりません';
 const ONE_PANEL = 'パネルが1つのときは使えません';
+const NOT_FRONT = 'このタブを前面に出してから使えます';
 
 const canOpen = (c: AppContext) => !!c.window || !!c.canOpenTerminal;
 const canLaunch = (c: AppContext) => (!!c.session || !!c.canOpenTerminal) && c.launchingAgent === null;
 const isClaude = (c: AppContext) => c.activePane?.proc?.agent === 'Claude';
+const onTerminal = (c: AppContext) => !c.screenTab;
 
 export const COMMANDS: Command[] = [
   // ---- 作る・起動する
@@ -265,36 +273,42 @@ export const COMMANDS: Command[] = [
   define({
     id: 'pane.files', scope: 'app', group: 'pane', label: '作業フォルダーを開く',
     aliases: ['作業フォルダーのファイルを見る', 'ファイル'],
-    disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onOpenFiles(),
+    when: onTerminal, disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onOpenFiles(),
   }),
   define({
     id: 'pane.sendCommand', scope: 'app', group: 'pane', label: 'コマンドを送る…',
-    disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onSendCommand(),
+    when: onTerminal, disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onSendCommand(),
   }),
   define({
     id: 'pane.copyAll', scope: 'app', group: 'clipboard', label: '全文をコピー（履歴込み）',
     aliases: ['本文をコピー', '画面全体をコピー', 'スクロールバック込み'],
-    disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onCopyPane(),
+    when: onTerminal, disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onCopyPane(),
+  }),
+  define({
+    id: 'pane.selectText', scope: 'app', group: 'clipboard', label: 'テキストを選んでコピー…',
+    aliases: ['範囲を選んでコピー', 'テキストを選択'],
+    when: onTerminal, disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onSelectText(),
   }),
   define({
     id: 'clipboard.paste', scope: 'app', group: 'clipboard', label: '貼り付け', hint: 'Ctrl+V',
+    when: onTerminal, disabledReason: c => (c.canPaste === false ? NOT_FRONT : null),
     run: c => c.onPaste(),
   }),
   define({
     id: 'pane.zoom', scope: 'app', group: 'pane', label: 'ペインを拡大（tmux）',
     aliases: ['ペインを全画面 / 元に戻す', 'ズーム'],
-    disabledReason: c => (c.activePane ? null : NO_PANE),
+    when: onTerminal, disabledReason: c => (c.activePane ? null : NO_PANE),
     run: c => c.activePane && c.onAction('zoomPane', { target: c.activePane.id }),
   }),
   define({
     id: 'pane.kill', scope: 'app', group: 'pane', label: 'ペインを終了…', aliases: ['ペインを閉じる…'], danger: true,
-    disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onKillPane(),
+    when: onTerminal, disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onKillPane(),
   }),
 
   // ---- 選択
   define({
     id: 'selection.copy', scope: 'selection', group: 'clipboard', label: '選択をコピー', aliases: ['選択部分をコピー'],
-    hint: c => `${c.text.split('\n').length} 行`,
+    menuLabel: c => `選択をコピー（${c.text.split('\n').length} 行）`, hint: 'Ctrl+Shift+C',
     when: c => !!c.text, run: c => c.copy(),
   }),
   define({
@@ -355,20 +369,20 @@ export const COMMANDS: Command[] = [
   }),
   define({
     id: 'tab.closeOthers', scope: 'tab', group: 'tab', label: '他のタブを閉じる',
-    hint: c => `${c.others} 枚`,
+    menuLabel: c => `他のタブ（${c.others}）`,
     disabledReason: c => (c.others === 0 ? '他のタブがありません' : null), run: c => c.closeOthers(),
   }),
   define({
     id: 'tab.closeRight', scope: 'tab', group: 'tab', label: '右側のタブを閉じる',
-    hint: c => `${c.right} 枚`,
+    menuLabel: c => `右側のタブ（${c.right}）`,
     disabledReason: c => (c.right === 0 ? '右側にタブがありません' : null), run: c => c.closeRight(),
   }),
   define({
-    id: 'tab.splitRight', scope: 'tab', group: 'tab', label: '右に分割して移す', aliases: ['右に切り出す'], hint: '並べて見る',
+    id: 'tab.splitRight', scope: 'tab', group: 'tab', label: '右に分割して移す', aliases: ['右に切り出す'],
     disabledReason: c => (c.count < 2 ? 'パネルのタブが1つのときは使えません' : null), run: c => c.split('right'),
   }),
   define({
-    id: 'tab.splitBottom', scope: 'tab', group: 'tab', label: '下に分割して移す', aliases: ['下に切り出す'], hint: '並べて見る',
+    id: 'tab.splitBottom', scope: 'tab', group: 'tab', label: '下に分割して移す', aliases: ['下に切り出す'],
     disabledReason: c => (c.count < 2 ? 'パネルのタブが1つのときは使えません' : null), run: c => c.split('bottom'),
   }),
 
@@ -387,20 +401,13 @@ export const COMMANDS: Command[] = [
   define({
     id: 'panel.toggleFocus', scope: 'panel', group: 'panel', label: 'パネルを最大化 / 並びに戻す',
     aliases: ['このパネルを広げる / 元に戻す'], hint: 'Alt+Enter',
+    menuLabel: c => (c.maximized ? '並びに戻す' : 'パネルを最大化'),
     disabledReason: c => (c.multiple ? null : ONE_PANEL), run: c => c.toggleFocus(),
   }),
   define({
-    id: 'panel.overview', scope: 'strip', group: 'panel', label: 'タブ・パネルの一覧',
-    run: c => c.overview(),
-  }),
-  define({
-    id: 'panel.activeTabMenu', scope: 'strip', group: 'panel', label: '選択中のタブの操作…',
-    run: c => c.activeTabMenu(),
-  }),
-  define({
     id: 'panel.close', scope: 'strip', group: 'panel', label: 'このパネルを閉じる',
-    menuLabel: c => `このパネルを閉じる（${c.tabCount}タブ）`,
-    when: c => c.closable, run: c => c.closePanel(),
+    menuLabel: c => `このパネル（${c.tabCount} タブ）`,
+    disabledReason: c => (c.closable ? null : ONE_PANEL), run: c => c.closePanel(),
   }),
 
   // ---- 仮想デスクトップ
@@ -462,13 +469,16 @@ export const FAMILIES: CommandFamily[] = [
     run: (c, d) => c.openScreen(d.id),
   }),
   family({
-    id: 'tab.moveToDesktop', scope: 'tab', group: 'tab', label: '{デスクトップ} へ移動',
-    items: c => c.desktops, itemLabel: (_c, d) => `${d.name} へ移動`,
+    id: 'tab.moveToDesktop', scope: 'tab', group: 'tab', label: 'ワークスペース「{名前}」へ移す',
+    aliases: ['{デスクトップ} へ移動'],
+    items: c => c.desktops, itemLabel: (_c, d) => `ワークスペース「${d.name}」へ移す`,
     run: (c, d) => c.moveToDesktop(d.id),
   }),
   family({
-    id: 'tab.moveToPanel', scope: 'tab', group: 'tab', label: 'パネル {番号} へ移動',
-    items: c => c.panels, itemLabel: (_c, p) => `パネル ${p.number} へ移動（${p.tabs}タブ）`,
+    id: 'tab.moveToPanel', scope: 'tab', group: 'tab', label: '「{タブ名}」のパネルへ移す',
+    aliases: ['パネル {番号} へ移動'],
+    items: c => c.panels, itemLabel: (_c, p) => `「${p.name}」のパネルへ移す`,
+    hint: (_c, p) => `${p.tabs} タブ`,
     run: (c, p) => c.moveToPanel(p.id),
   }),
 ];
@@ -497,7 +507,7 @@ export const SEP = null;
 /**
  * 並び（MenuSlot の列）と文脈からメニューの項目を作る。
  * when が false の操作は出さない。文脈の欄が無い操作は、押せない項目として出す。
- * 先頭と末尾に残った区切り線だけを落とす（間の区切りはそのまま）。
+ * 続いた区切り線は 1 本にまとめ、先頭と末尾に残った区切り線は落とす。
  */
 export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext, nested = false): MenuEntry[] {
   const out: MenuEntry[] = [];
@@ -555,7 +565,10 @@ export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext, neste
   }
   // 見出しの直後が区切り・見出し・末尾なら、その見出しは落とす（中身の無い段を出さない）
   const isHead = (e: MenuEntry | undefined) => !!e && 'heading' in e;
-  const kept = out.filter((e, i) => !isHead(e) || (i + 1 < out.length && out[i + 1] !== SEP && !isHead(out[i + 1])));
+  // 区切りが続いたら 1 本にまとめる（間の段が全部出なかったとき）
+  const kept = out
+    .filter((e, i) => !isHead(e) || (i + 1 < out.length && out[i + 1] !== SEP && !isHead(out[i + 1])))
+    .filter((e, i, list) => e !== SEP || list[i - 1] !== SEP);
   while (kept.length && kept[0] === SEP) kept.shift();
   while (kept.length && kept[kept.length - 1] === SEP) kept.pop();
   return kept;

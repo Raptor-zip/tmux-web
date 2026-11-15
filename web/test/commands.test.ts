@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
-import { DESKTOP_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU, MENUS, NEW_MENU, TAB_MENU, TERMINAL_MENU, WORKSPACE_MENU } from '../src/menus';
+import { DESKTOP_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU, MENUS, NEW_MENU, TAB_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
 const all = [...COMMANDS, ...FAMILIES];
@@ -23,97 +23,110 @@ test('every command has a group, a scope and a run function', () => {
 
 test('every menu slot names a registered command', () => {
   const ids = new Set(all.map(c => c.id));
-  for (const [name, slots] of Object.entries(MENUS)) {
+  const check = (name: string, slots: readonly MenuSlot[]) => {
     for (const slot of slots) {
-      if (slot === null) continue;
+      if (slot === null || (typeof slot !== 'string' && 'heading' in slot)) continue;
+      if (typeof slot !== 'string' && 'submenu' in slot) { check(`${name} > ${slot.submenu}`, slot.items); continue; }
       const id = typeof slot === 'string' ? slot : slot.id;
       assert.ok(ids.has(id), `${name} menu refers to unknown command ${id}`);
     }
-  }
+  };
+  for (const [name, slots] of Object.entries(MENUS)) check(name, slots);
 });
 
 const app = (over: Partial<AppContext> = {}): AppContext => ({
   session: null, window: null, activePane: null, mode: 'mirror', showStatusBar: false, showKeyBar: false, altKeys: true,
   onAction() {}, onNewTab() {}, onLaunchAgent() {}, launchingAgent: null, onSplitNewWindow() {}, onToggle() {},
   onCopyPane() {}, onKillPane() {}, onOpenFiles() {}, onRemoteControl() {}, onExitClaude() {}, onOpenScreen() {}, onOpenScreenTab() {},
-  onOpenSwitcher() {}, onOpenShortcuts() {}, approvalPending: false, onOpenApproval() {}, onSendCommand() {}, onPaste() {}, ...over,
-});
-
-const labels = (ctx: CommandContext) => buildMenu(WORKSPACE_MENU, ctx).map(e => (e ? e.label : '---'));
-
-test('workspace menu keeps its order and labels', () => {
-  assert.deepEqual(labels({ app: app() }), [
-    '新しい端末をタブで開く', '新しい端末を右に並べる', '新しい端末を下に並べる', '探す・操作', '---',
-    'Claude を新しいタブで起動', 'Codex を新しいタブで起動', '---',
-    '作業フォルダーを開く', 'コマンドを送る…', '全文をコピー（履歴込み）', 'ペインを拡大（tmux）', 'ペインを終了…', '---',
-    'リモートデスクトップをタブで開く', 'リモートデスクトップをダイアログで開く', 'キーバーを表示', 'tmux のステータス行を表示', '直接接続に切り替える',
-    'Alt ショートカットを使う',
-  ]);
-  const first = buildMenu(WORKSPACE_MENU, { app: app() })[0] as MenuItem;
-  assert.equal(first.hint, 'Alt+T');
-  const split = buildMenu(WORKSPACE_MENU, { app: app() })[1] as MenuItem;
-  assert.equal(split.disabled, true);
-  assert.ok(split.disabledReason);
-});
-
-test('menu items run the registered action with their context', () => {
-  const calls: string[] = [];
-  const items = buildMenu(WORKSPACE_MENU, { app: app({ onNewTab: () => calls.push('new'), onToggle: k => calls.push(k) }) });
-  (items[0] as MenuItem).run();
-  (items.find(e => e?.label === '直接接続に切り替える') as MenuItem).run();
-  (items.at(-1) as MenuItem).run();
-  assert.deepEqual(calls, ['new', 'mode', 'altKeys']);
-});
-
-test('Alt shortcut toggle shows its state and Claude exit asks before sending /exit', () => {
-  const alt = (on: boolean) => buildMenu(WORKSPACE_MENU, { app: app({ altKeys: on }) }).at(-1) as MenuItem;
-  assert.equal(alt(true).hint, 'オン');
-  assert.equal(alt(false).hint, 'オフ');
-  const sent: unknown[] = [];
-  const claude = { id: '%1', busy: false, proc: { agent: 'Claude' } } as unknown as AppContext['activePane'];
-  const items = buildMenu(WORKSPACE_MENU, { app: app({ activePane: claude, onAction: (_a, p) => sent.push(p), onExitClaude: () => sent.push('confirm') }) });
-  const exit = items.find(e => e?.label === 'Claude を終了…') as MenuItem;
-  assert.equal(exit.danger, true);
-  exit.run();
-  assert.deepEqual(sent, ['confirm'], 'the menu only opens the confirmation; /exit is sent after it');
+  onOpenSwitcher() {}, onOpenShortcuts() {}, approvalPending: false, onOpenApproval() {}, onSendCommand() {}, onSelectText() {}, onPaste() {}, ...over,
 });
 
 const tab = (over: Partial<TabContext> = {}): TabContext => ({
   index: 0, count: 2, screen: false, hasWindow: true, others: 1, right: 1,
-  desktops: [{ id: 'd2', name: '作業2' }], panels: [{ id: 'p2', number: 2, tabs: 3 }],
+  desktops: [{ id: 'd2', name: '作業2' }], panels: [{ id: 'p2', name: 'api', tabs: 3 }],
   moveLeft() {}, moveRight() {}, moveToDesktop() {}, moveToPanel() {}, close() {}, closeOthers() {}, closeRight() {},
   split() {}, openAsDialog() {}, renameWindow() {}, killWindow() {}, ...over,
 });
 const names = (slots: readonly MenuSlot[], ctx: CommandContext) => buildMenu(slots, ctx).map(e => (e ? e.label : '---'));
 
-test('terminal menu shows selection items only when text is selected', () => {
-  const ctx = (text: string): CommandContext => ({
-    app: app(), selection: { text, copy() {}, clear() {} }, panel: { multiple: false, toggleFocus() {} }, tab: tab(),
-  });
-  assert.deepEqual(names(TERMINAL_MENU, ctx('')), [
-    '新しい端末をタブで開く', '新しい端末を右に並べる', '新しい端末を下に並べる', '---',
-    '全文をコピー（履歴込み）', '貼り付け', '---', 'パネルを最大化 / 並びに戻す', '---', 'タブを閉じる',
+const sub = (items: ReturnType<typeof buildMenu>, label: string) => (items.find(e => e?.label === label) as MenuItem).submenu!;
+const full = (over: { app?: Partial<AppContext>; tab?: Partial<TabContext>; text?: string; maximized?: boolean } = {}): CommandContext => ({
+  app: app({ screenTab: over.tab?.screen, ...over.app }), selection: { text: over.text ?? '', copy() {}, clear() {} }, tab: tab(over.tab),
+  panel: { multiple: true, maximized: over.maximized, toggleFocus() {} },
+  strip: { tabCount: 2, closable: true, closePanel() {} },
+});
+const pane = { id: '%1', index: 0, busy: false, proc: null } as unknown as AppContext['activePane'];
+
+test('tab menu groups placement, tmux and bulk close into submenus', () => {
+  const items = buildMenu(TAB_MENU, full({ app: { activePane: pane } }));
+  assert.deepEqual(items.map(e => (e ? e.label : '---')), [
+    '全文をコピー（履歴込み）', 'テキストを選んでコピー…', '貼り付け', '---',
+    '作業フォルダーを開く', 'コマンドを送る…', '---',
+    '配置', 'tmux', '---', '新規', '表示と設定', '---', 'タブを閉じる', 'まとめて閉じる',
   ]);
-  const withSelection = buildMenu(TERMINAL_MENU, ctx('a\nb'));
-  assert.deepEqual((withSelection[0] as MenuItem), { ...(withSelection[0] as MenuItem), label: '選択をコピー', hint: '2 行' });
-  assert.equal((withSelection.find(e => e?.label === 'パネルを最大化 / 並びに戻す') as MenuItem).disabled, true);
-  // 入力先のタブが無いときも「タブを閉じる」は押せない項目として残る
-  const noTab = buildMenu(TERMINAL_MENU, { ...ctx(''), tab: undefined });
-  assert.equal((noTab.at(-1) as MenuItem).label, 'タブを閉じる');
-  assert.equal((noTab.at(-1) as MenuItem).disabled, true);
+  const names = (label: string) => sub(items, label).map(e => (e ? e.label : '---'));
+  assert.deepEqual(names('配置'), ['パネルを最大化', '右に分割して移す', '下に分割して移す', '「api」のパネルへ移す', 'ワークスペース「作業2」へ移す', '左へ移す', '右へ移す']);
+  assert.deepEqual(names('tmux'), ['端末の名前を変更…', 'ペインを拡大（tmux）', 'ペインを終了…', '端末を終了…']);
+  assert.deepEqual(names('まとめて閉じる'), ['他のタブ（1）', '右側のタブ（1）', 'このパネル（2 タブ）']);
+  assert.ok(names('新規').includes('Claude を新しいタブで起動'), 'the old workspace menu items stay reachable');
+  assert.ok(names('表示と設定').includes('Alt ショートカットを使う'));
+  // 最大化中は「並びに戻す」になる
+  assert.equal(sub(buildMenu(TAB_MENU, full({ maximized: true })), '配置')[0]!.label, '並びに戻す');
+  // 移す先のパネルにはタブ数を添える
+  assert.equal((sub(items, '配置')[3] as MenuItem).hint, '3 タブ');
 });
 
-test('tab menu keeps its order and switches screen/terminal items', () => {
-  assert.deepEqual(names(TAB_MENU, { tab: tab() }), [
-    '左へ移す', '右へ移す', '作業2 へ移動', '---', 'タブを閉じる', '他のタブを閉じる', '右側のタブを閉じる', '---',
-    '右に分割して移す', '下に分割して移す', '---', 'パネル 2 へ移動（3タブ）', '---', '端末の名前を変更…', '端末を終了…',
-  ]);
-  assert.deepEqual(names(TAB_MENU, { tab: tab({ screen: true }) }).slice(-1), ['ダイアログで大きく開く']);
+test('tab menu shows selection and agent items only when they apply', () => {
+  const withSelection = buildMenu(TAB_MENU, full({ text: 'a\nb' }));
+  assert.deepEqual(withSelection.slice(0, 3).map(e => (e ? e.label : '---')), ['選択をコピー（2 行）', '選択を解除', '---']);
+  assert.equal((withSelection[0] as MenuItem).hint, 'Ctrl+Shift+C');
+  const claude = { ...pane, proc: { agent: 'Claude' } } as unknown as AppContext['activePane'];
+  const agent = buildMenu(TAB_MENU, full({ app: { activePane: claude } })).map(e => (e ? e.label : '---'));
+  assert.ok(agent.includes('Claude アプリに接続…') && agent.includes('Claude を終了…'));
+  const plain = buildMenu(TAB_MENU, full()).map(e => (e ? e.label : '---'));
+  assert.ok(!plain.includes('Claude を終了…'));
+  // 前面にないタブには貼り付けられない
+  const paste = buildMenu(TAB_MENU, full({ app: { canPaste: false } })).find(e => e?.label === '貼り付け') as MenuItem;
+  assert.equal(paste.disabled, true);
+  assert.ok(paste.disabledReason);
+});
+
+test('tab menu switches screen/terminal items and runs with its context', () => {
+  const screen = buildMenu(TAB_MENU, full({ tab: { screen: true } }));
+  assert.ok(screen.some(e => e?.label === 'ダイアログで大きく開く'));
+  assert.ok(!screen.some(e => e?.label === 'tmux' || e?.label === '全文をコピー（履歴込み）'), 'tmux and pane actions are hidden on a screen tab');
   const moved: string[] = [];
-  const items = buildMenu(TAB_MENU, { tab: tab({ moveToPanel: id => moved.push(id), moveToDesktop: id => moved.push(id) }) });
-  (items.find(e => e?.label === '作業2 へ移動') as MenuItem).run();
-  (items.find(e => e?.label === 'パネル 2 へ移動（3タブ）') as MenuItem).run();
+  const items = buildMenu(TAB_MENU, full({ tab: { moveToPanel: id => moved.push(id), moveToDesktop: id => moved.push(id) } }));
+  (sub(items, '配置').find(e => e?.label === 'ワークスペース「作業2」へ移す') as MenuItem).run();
+  (sub(items, '配置').find(e => e?.label === '「api」のパネルへ移す') as MenuItem).run();
   assert.deepEqual(moved, ['d2', 'p2']);
+  // 一つしかないパネルは閉じられない。パネルの最大化も押せない
+  const single = buildMenu(TAB_MENU, { ...full(), panel: { multiple: false, toggleFocus() {} }, strip: { tabCount: 1, closable: false, closePanel() {} } });
+  assert.equal((sub(single, 'まとめて閉じる').at(-1) as MenuItem).disabled, true);
+  assert.equal((sub(single, '配置')[0] as MenuItem).disabled, true);
+});
+
+test('menu items run the registered action with their context', () => {
+  const calls: string[] = [];
+  const items = buildMenu(TAB_MENU, full({ app: { onNewTab: () => calls.push('new'), onToggle: k => calls.push(k), altKeys: true } }));
+  (sub(items, '新規')[0] as MenuItem).run();
+  const view = sub(items, '表示と設定');
+  (view.find(e => e?.label === '直接接続に切り替える') as MenuItem).run();
+  const alt = view.at(-1) as MenuItem;
+  assert.equal(alt.hint, 'オン');
+  alt.run();
+  assert.deepEqual(calls, ['new', 'mode', 'altKeys']);
+  assert.equal(((sub(buildMenu(TAB_MENU, full({ app: { altKeys: false } })), '表示と設定').at(-1)) as MenuItem).hint, 'オフ');
+});
+
+test('Claude exit asks before sending /exit', () => {
+  const sent: unknown[] = [];
+  const claude = { id: '%1', busy: false, proc: { agent: 'Claude' } } as unknown as AppContext['activePane'];
+  const items = buildMenu(TAB_MENU, full({ app: { activePane: claude, onAction: (_a, p) => sent.push(p), onExitClaude: () => sent.push('confirm') } }));
+  const exit = items.find(e => e?.label === 'Claude を終了…') as MenuItem;
+  assert.equal(exit.danger, true);
+  exit.run();
+  assert.deepEqual(sent, ['confirm'], 'the menu only opens the confirmation; /exit is sent after it');
 });
 
 test('new-tab menu lists every device and disables offline ones', () => {
@@ -159,6 +172,9 @@ test('renamed commands keep their old names as search aliases', () => {
   // 同じ処理だった 2 つのコピーは 1 つにまとめた
   assert.equal(findCommand('pane.copyText'), undefined);
   assert.equal(findCommand('pane.copyScreen'), undefined);
+  // パネル ⋯ の『選択中のタブの操作…』と『タブ・パネルの一覧』はタブメニューとパレットに置き換えた
+  assert.equal(findCommand('panel.activeTabMenu'), undefined);
+  assert.equal(findCommand('panel.overview'), undefined);
 });
 
 test('palette commands search labels and aliases and run with their context', () => {

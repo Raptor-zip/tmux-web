@@ -223,7 +223,6 @@
   .sidebar { position:fixed; width:min(var(--sidebar-w),calc(100vw - 32px)); max-width:none; }
 }
 
-.tab-menu { display:none; }
 .touch-menu-close { display:none; }
 @media (any-pointer:coarse) {
   /* Browsing and scrolling the chrome must not start native text selection. */
@@ -235,8 +234,6 @@
   button,summary { touch-action:manipulation; }
   .tablist,.desktop-tabs { touch-action:pan-x; overscroll-behavior-x:contain; }
   .tree { touch-action:pan-y; overscroll-behavior-y:contain; }
-  .tab-menu { display:grid; place-items:center; flex:none; width:44px; min-width:44px; height:44px; padding:0; border:0; background:transparent; color:var(--fg-dim); }
-  .tab-menu:active { background:var(--bg-selected); color:var(--fg); }
   .tab { min-width:220px; max-width:300px; }
   .tabstrip,.desktop-tabs { min-height:48px; }
   .strip-tools .strip-btn,.workspace-actions .icon-btn { min-width:44px; min-height:44px; }
@@ -257,9 +254,6 @@
 @media (pointer:coarse), (any-pointer:coarse) {
   .tab { min-width:104px; max-width:176px; }
   .tab-close { width:44px; min-width:44px; height:44px; }
-  /* 操作メニューは前面のタブにだけ出す（全タブに 44px ずつ付けると幅を食う） */
-  .tab-menu { display:none; }
-  .tab.active .tab-menu { display:grid; width:44px; min-width:44px; }
 }
 
 /* Keep the remote screen edge-to-edge; secondary controls overlay it on demand. */

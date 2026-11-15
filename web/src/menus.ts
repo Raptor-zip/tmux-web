@@ -6,71 +6,62 @@ import type { MenuEntry } from './components/ContextMenu';
  * ここでは「どのメニューに、どの順で出すか」だけを決める。
  */
 
-/** パネル ⋯ の後半に付く、端末とワークスペースの操作 */
-export const WORKSPACE_MENU: readonly MenuSlot[] = [
-  'terminal.newTab',
-  'terminal.splitRight',
-  'terminal.splitBottom',
-  'navigate.switcher',
-  SEP,
-  'agent.claude',
-  'agent.codex',
-  'agent.remoteControl',
-  'agent.exitClaude',
-  SEP,
-  'pane.files',
-  'pane.sendCommand',
-  'pane.copyAll',
-  'pane.zoom',
-  'pane.kill',
-  SEP,
-  'screen.openTab',
-  'screen.openDialog',
-  'view.keyBar',
-  'view.statusBar',
-  'view.mode',
-  'view.altKeys',
-];
-
 /**
- * 端末を右クリックしたときのメニュー。tmux の display-menu の代わり。
- * 選択があるときはそれが主役。「全文をコピー」を先頭に置くと、選択したつもりで
- * 画面全体が入ってしまうので、選択の有無で並びを変える（選択の項目は選択があるときだけ出る）
+ * タブメニュー。タブの右クリック・長押し、タイル見出しの ⋯（タブの操作）、端末の右クリック・長押しで
+ * 同じものを開く。見出しには対象のタブ名を出す（ContextMenu の title）。
+ * 選択の項目は選択があるときだけ、エージェントの項目はエージェントのときだけ出る。
+ * 選択があるときはそれが主役なので先頭に置く（「全文をコピー」が先だと、選択したつもりで全文が入る）。
  */
-export const TERMINAL_MENU: readonly MenuSlot[] = [
+export const TAB_MENU: readonly MenuSlot[] = [
   'selection.copy',
   'selection.clear',
   SEP,
-  'terminal.newTab',
-  { id: 'terminal.splitRight', hint: '画面を分割' },
-  { id: 'terminal.splitBottom', hint: '画面を分割' },
-  SEP,
   'pane.copyAll',
+  'pane.selectText',
   'clipboard.paste',
   SEP,
-  'panel.toggleFocus',
+  'pane.files',
+  'pane.sendCommand',
   SEP,
-  'tab.close',
-];
-
-/** タブを右クリックしたときのメニュー */
-export const TAB_MENU: readonly MenuSlot[] = [
-  'tab.moveLeft',
-  'tab.moveRight',
-  'tab.moveToDesktop',
-  SEP,
-  'tab.close',
-  'tab.closeOthers',
-  'tab.closeRight',
-  SEP,
-  'tab.splitRight',
-  'tab.splitBottom',
-  SEP,
-  'tab.moveToPanel',
-  SEP,
+  'agent.remoteControl',
+  'agent.exitClaude',
   'screen.tabAsDialog',
-  'window.rename',
-  'window.kill',
+  SEP,
+  { submenu: '配置', items: [
+    'panel.toggleFocus',
+    'tab.splitRight',
+    'tab.splitBottom',
+    'tab.moveToPanel',
+    'tab.moveToDesktop',
+    'tab.moveLeft',
+    'tab.moveRight',
+  ] },
+  { submenu: 'tmux', items: ['window.rename', 'pane.zoom', 'pane.kill', 'window.kill'] },
+  SEP,
+  // 新規メニュー（＋▾）と『表示と接続』ができるまでの置き場。旧ワークスペースメニューの残り
+  { submenu: '新規', items: [
+    'terminal.newTab',
+    'terminal.splitRight',
+    'terminal.splitBottom',
+    SEP,
+    'agent.claude',
+    'agent.codex',
+    SEP,
+    'screen.openTab',
+    'screen.openDialog',
+  ] },
+  { submenu: '表示と設定', items: [
+    'navigate.switcher',
+    'navigate.shortcuts',
+    SEP,
+    'view.keyBar',
+    'view.statusBar',
+    'view.mode',
+    'view.altKeys',
+  ] },
+  SEP,
+  'tab.close',
+  { submenu: 'まとめて閉じる', items: ['tab.closeOthers', 'tab.closeRight', 'panel.close'] },
 ];
 
 /** タブ列の ＋ */
@@ -79,14 +70,6 @@ export const NEW_MENU: readonly MenuSlot[] = [
   'create.terminalOnDevice',
   SEP,
   'create.screenOnDevice',
-];
-
-/** タブ列の ⋯（このあとに WORKSPACE_MENU が続く） */
-export const PANEL_MENU: readonly MenuSlot[] = [
-  'panel.overview',
-  'panel.toggleFocus',
-  'panel.activeTabMenu',
-  'panel.close',
 ];
 
 /** 仮想デスクトップのタブを右クリック・長押ししたときのメニュー */
@@ -99,14 +82,11 @@ export const FONT_SIZE_MENU: readonly MenuSlot[] = ['font.larger', 'font.smaller
 export const LINE_HEIGHT_MENU: readonly MenuSlot[] = ['lineHeight.wider', 'lineHeight.narrower', 'lineHeight.min', SEP, 'lineHeight.reset'];
 
 export const MENUS = {
-  workspace: WORKSPACE_MENU,
-  terminal: TERMINAL_MENU,
   tab: TAB_MENU,
   new: NEW_MENU,
-  panel: PANEL_MENU,
   desktop: DESKTOP_MENU,
   fontSize: FONT_SIZE_MENU,
   lineHeight: LINE_HEIGHT_MENU,
 } as const;
 
-export const workspaceMenuItems = (ctx: CommandContext): MenuEntry[] => buildMenu(WORKSPACE_MENU, ctx);
+export const tabMenuItems = (ctx: CommandContext): MenuEntry[] => buildMenu(TAB_MENU, ctx);

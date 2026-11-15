@@ -120,6 +120,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    else if(path==='/api/files')body={root:'/home/demo/projects/atlas-web',path:'',items:[{name:'src',path:'src',directory:true,size:0,modified:now,mime:''},{name:'responsive-workspace-review.md',path:'responsive-workspace-review.md',directory:false,size:2840,modified:now,mime:'text/plain'},{name:'package.json',path:'package.json',directory:false,size:960,modified:now,mime:'text/plain'}]};
    else if(path==='/api/keys')body={keys:[]};
    else if(path==='/api/action')body={ok:true,result:null};
+   else if(path==='/api/capture'&&process.env.TAB_MENU_CHECK)body={target:url.searchParams.get('target'),text:'$ npm test\ntab-menu-capture: 76 passed\n$ '};
    await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
   });
   await page.routeWebSocket(url=>/\/ws\//.test(url.pathname)&&!(process.env.SCREEN_TAB_CHECK&&/\/desktop$/.test(url.pathname)),ws=>{
@@ -154,6 +155,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(process.env.TERMINAL_WEBGL_CHECK) await require('./terminal-webgl.cjs')(page,{terminalTransports,terminalInputs});
   if(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection') await require('./terminal-selection.cjs')(page,{terminalTransports,terminalInputs,phase,out});
   if(process.env.TERMINAL_DIRECT_CHECK && scene.name==='terminal-target') await require('./terminal-direct.cjs')(page,{terminalTransports});
+  if(process.env.TAB_MENU_CHECK && (scene.name==='terminal-target' || scene.name==='terminal-selection')) await require('./tab-menu.cjs')(page,{scene,out,touch:!!scene.touch});
   if(process.env.TERMINAL_TARGET_CHECK && scene.name==='terminal-target') await require('./terminal-target.cjs')(page,{terminalTransports,terminalSelections});
   if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
    assert.equal(await page.locator('.mobile-input .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
@@ -168,7 +170,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await page.getByRole('button',{name:'入力欄を閉じる',exact:true}).click();
    console.log('terminal controls wait for tmux readiness and preserve the draft');
   }
-  const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^パネルを最大化 \/ 並びに戻す/}).click();};
+  const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'配置',exact:true}).click();await page.getByRole('menuitem',{name:/^(パネルを最大化|並びに戻す)/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
   if(scene.action==='switcher')await page.locator('.statusbar button[title="探す・操作 (Alt+P)"]').click();
@@ -176,8 +178,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
-  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'リモートデスクトップをダイアログで開く',exact:true}).click();}
-  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーを開く',exact:true}).click();}
+  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'新規',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'リモートデスクトップをダイアログで開く',exact:true}).click();}
+  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーを開く',exact:true}).click();}
   if(checkFiles) await checkFiles();
   if(scene.name.startsWith('remote-') && scene.action==='desktop'){
    if(phase==='after')await page.getByRole('button',{name:'リモートデスクトップ',exact:true}).click();
@@ -261,7 +263,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    while(activeTerminals!==4 && Date.now()<splitDeadline)await page.waitForTimeout(20);
    assert.equal(activeTerminals,4,'only visible split panels retain websocket connections '+JSON.stringify(terminalTransports.map(t=>({window:t.window,remote:t.remote,closes:t.closeEvents||0}))));
    await page.setViewportSize({width:900,height:1024});await page.waitForTimeout(150);
-   for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close, .tile:visible .tab-menu:visible, .tile:visible .strip-btn, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
+   for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close, .tile:visible .strip-btn, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
    for(const list of await page.locator('.tile:visible .tablist').all()) assert.ok(await list.evaluate(el=>el.querySelector('.tab.active').getBoundingClientRect().left>=el.getBoundingClientRect().left-1),'selected tab keeps its leading label visible after resize');
    assert.equal(await page.evaluate(()=>localStorage.getItem('tw.layout')),layout,'responsive presentation preserves saved split tree');
   }
@@ -269,8 +271,11 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    const inputs=terminalInputs.length;
    const terminal=page.locator('.tile:visible .terminal-host').first();
    await terminal.click({button:'right',position:{x:80,y:80}});
-   await page.getByRole('menuitem',{name:/^新しい端末を右に並べる/}).waitFor();
-   assert.equal(await page.getByRole('menuitem',{name:/tmux|ペイン|ウィンドウを閉じる|端末を終了|端末の名前/}).count(),0,'no tmux structural actions in terminal menu');
+   // 端末の右クリックはタブメニュー。tmux の構造を変える操作は『tmux ▸』の中にしまってあり、最初の段には出ない
+   await page.getByRole('menuitem',{name:'tmux',exact:true}).waitFor();
+   assert.equal(await page.getByRole('menuitem',{name:'tmux',exact:true}).getAttribute('aria-haspopup'),'menu');
+   assert.equal(await page.getByRole('menuitem',{name:/ペイン|ウィンドウを閉じる|端末を終了|端末の名前/}).count(),0,'no tmux structural actions at the top of the terminal menu');
+   assert.equal(await page.getByRole('menu').first().getAttribute('aria-label'),await page.locator('.tile:visible .tab.active .tab-name').first().textContent(),'the menu is titled with its tab');
    assert.equal(await page.evaluate(()=>{const first=document.querySelector('[role=menu] [role=menuitem]');return !!first && document.activeElement===first;}),true,'the terminal menu focuses its first item');
    await page.screenshot({path:join(out,'terminal-context-menu.png'),animations:'disabled'});
    await page.keyboard.press('Escape');

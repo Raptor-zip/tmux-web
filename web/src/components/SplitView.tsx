@@ -1,4 +1,4 @@
-import type { MenuEntry } from './ContextMenu';
+import type { PanelContext } from '../commands';
 import { Icon } from './Icon';
 import type { Device } from '../devices';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -54,15 +54,13 @@ export type DropTarget =
   | { kind: 'tab'; leafId: string; before: string | null };
 
 interface Props {
-  /** フォーカス中のタイルの「⋯」に足す作業メニュー */
-  workspaceMenu(): MenuEntry[];
   active: boolean;
   devices: Device[];
   tree: LayoutNode;
   statuses: Record<string, TerminalStatus>;
   focusMode: boolean;
   onToggleFocus(): void;
-  /** タブ数バッジとパネル ⋯ の『タブ・パネルの一覧』。パレットの『タブ』を開く */
+  /** タブ数バッジ。パレットの『タブ』を開く */
   onOverview(): void;
   focusedId: string | null;
   sessions: Session[];
@@ -83,7 +81,6 @@ interface Props {
   onFocus(leafId: string): void;
   onActivateTab(tabId: string): void;
   onCloseTab(tabId: string): void;
-  onCloseTile(leafId: string): void;
   onNewTab(leafId: string, deviceId?: string): void;
   /** そのデバイスのリモートデスクトップをタブで開く */
   onOpenScreen(leafId: string, deviceId: string): void;
@@ -95,8 +92,10 @@ interface Props {
   /** 端末で選択した内容がクリップボードに入った */
   onCopied(text: string): void;
   onNotice(text: string): void;
-  onTerminalContextMenu(leafId: string, x: number, y: number): void;
-  onTabContextMenu(tabId: string, x: number, y: number): void;
+  /** 端末の右クリック・長押し。panel はそのタイルの最大化の切り替え */
+  onTerminalContextMenu(leafId: string, x: number, y: number, panel: PanelContext): void;
+  /** タブの右クリック・長押し・⋯ */
+  onTabContextMenu(tabId: string, x: number, y: number, panel: PanelContext): void;
   registerTerm(leafId: string, handle: TabHandle | null): void;
 }
 
@@ -124,7 +123,6 @@ function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
 export function SplitView({
   active,
   devices,
-  workspaceMenu,
   tree,
   focusMode,
   statuses,
@@ -143,7 +141,6 @@ export function SplitView({
   onFocus,
   onActivateTab,
   onCloseTab,
-  onCloseTile,
   onNewTab,
   onOpenScreen,
   onDrop,
@@ -177,6 +174,25 @@ export function SplitView({
   const autoFocus = size.width > 0 && (window.innerWidth <= 760 || tiles.some(t => size.width * t.rect.width / 100 < 280 || size.height * t.rect.height / 100 < 160));
   const single = closableTile && (focusMode || (!resizing && autoFocus && (!forceSplit || window.innerWidth <= 760)));
   const selectedId = tiles.some(t => t.leaf.id === focusedId) ? focusedId : tiles[0]?.leaf.id;
+
+  /**
+   * そのタイルの「パネルを最大化 / 並びに戻す」。
+   * 狭くて自動で 1 パネル表示になっているときは、並びに戻す＝無理に分割表示へ戻す。
+   */
+  const panelFor = (leafId: string): PanelContext => ({
+    multiple: closableTile,
+    maximized: single,
+    toggleFocus: () => {
+      onFocus(leafId);
+      if (single) {
+        if (focusMode) onToggleFocus();
+        setForceSplit(true);
+      } else {
+        setForceSplit(false);
+        onToggleFocus();
+      }
+    },
+  });
 
   /** タブが映しているウィンドウ。windowId が null のタブはセッションのアクティブを見る */
   const viewOf = useCallback(
@@ -300,24 +316,12 @@ export function SplitView({
             onPointerDown={() => onFocus(leaf.id)}
           >
             <TabStrip
-              workspaceMenu={focused ? workspaceMenu : undefined}
               leaf={leaf}
               desktopTabs={single ? tiles.flatMap(({ leaf }) => leaf.tabs.map(tab => ({ tab, leafId: leaf.id }))) : undefined}
               onOverview={() => { onFocus(leaf.id); onOverview(); }}
-              onToggleFocus={() => {
-                onFocus(leaf.id);
-                if (single) {
-                  if (focusMode) onToggleFocus();
-                  setForceSplit(true);
-                } else {
-                  setForceSplit(false);
-                  onToggleFocus();
-                }
-              }}
               focused={focused}
               devices={devices}
               viewOf={viewOf}
-              closableTile={closableTile}
               draggingTabId={drag?.fromTabId ?? null}
               caret={tabDrop ? dropAt.before : undefined}
               onActivate={(id) => {
@@ -326,11 +330,13 @@ export function SplitView({
                 onActivateTab(id);
               }}
               onClose={onCloseTab}
-              onCloseTile={() => onCloseTile(leaf.id)}
               onNewTab={(deviceId) => onNewTab(leaf.id, deviceId)}
               onOpenScreen={(deviceId) => { onFocus(leaf.id); onOpenScreen(leaf.id, deviceId); }}
               onStartDrag={onStartDrag}
-              onContextMenu={onTabContextMenu}
+              onContextMenu={(tabId, x, y) => {
+                const owner = tiles.find(({ leaf }) => leaf.tabs.some(tab => tab.id === tabId))?.leaf.id ?? leaf.id;
+                onTabContextMenu(tabId, x, y, panelFor(owner));
+              }}
             />
 
             <div className="tile-body">
@@ -345,7 +351,7 @@ export function SplitView({
                 showStatusBar={showStatusBar}
                 fontSize={fontSize}
                 lineHeight={lineHeight}
-                onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y)}
+                onContextMenu={(x, y) => onTerminalContextMenu(leaf.id, x, y, panelFor(leaf.id))}
                 onStatus={onStatus}
                 onCopied={onCopied}
                 onNotice={onNotice}

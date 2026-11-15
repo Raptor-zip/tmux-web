@@ -77,7 +77,8 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   assert.equal(screenTransports.length, 1, 'returning within the grace period does not reconnect');
 
   // ダイアログで同じ画面を開くと、タブは接続を譲って「別の場所で表示中」になる
-  await page.locator('.tile.focused').getByRole('button', { name: 'パネルの操作', exact: true }).click();
+  await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '新規', exact: true }).click();
   await page.getByRole('menuitem', { name: 'リモートデスクトップをダイアログで開く', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'リモートデスクトップ', exact: true });
   await dialog.locator('.desktop-connection-status.is-connected').waitFor({ timeout: 8000 });
@@ -89,7 +90,8 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
 
   // ダイアログの「タブで開く」は、既存のタブを前に出してダイアログを閉じる
   await page.locator('.tab:not(.tab-screen)').first().click();
-  await page.locator('.tile.focused').getByRole('button', { name: 'パネルの操作', exact: true }).click();
+  await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '新規', exact: true }).click();
   await page.getByRole('menuitem', { name: 'リモートデスクトップをダイアログで開く', exact: true }).click();
   await dialog.getByRole('button', { name: 'タブで開く', exact: true }).click();
   assert.equal(await dialog.count(), 0);
@@ -99,6 +101,7 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
 
   // 右に分割して移すと、端末と画面を並べて同時に見られる
   await page.locator('.tab.tab-screen').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '配置', exact: true }).click();
   await page.getByRole('menuitem', { name: /^右に分割して移す/ }).click();
   await page.waitForTimeout(300);
   assert.equal(await page.locator('.tile').count(), 2);

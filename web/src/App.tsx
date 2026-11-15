@@ -15,14 +15,15 @@ import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
-import { workspaceMenuItems, TAB_MENU, TERMINAL_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU } from './menus';
-import { buildMenu, paletteCommands, type AppContext, type TabContext, type ViewContext } from './commands';
+import { tabMenuItems, FONT_SIZE_MENU, LINE_HEIGHT_MENU } from './menus';
+import { buildMenu, paletteCommands, type AppContext, type PanelContext, type SelectionContext, type TabContext, type ViewContext } from './commands';
 import { KeyBar } from './components/KeyBar';
 import { useSharedSetting } from './shared-setting';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, tabPayload, type DragPayload, type DropTarget } from './components/SplitView';
 import { Switcher, type PaletteScope, type PaletteTabGroup, type SwitchItem } from './components/Switcher';
 import { Shortcuts } from './components/Shortcuts';
+import { TextCopy } from './components/TextCopy';
 import { ContextMenu, type MenuEntry } from './components/ContextMenu';
 import type { TerminalStatus } from './components/Terminal';
 import { isTerminalHandle, type TabHandle } from './components/TerminalTabs';
@@ -60,7 +61,7 @@ import {
 } from './layout';
 import { buildWindowViews, paneCommand, windowName, type WindowView } from './windows';
 import { STATUS_ORDER } from './status';
-import type { TmuxWindow } from './types';
+import type { Pane, TmuxWindow } from './types';
 
 interface Toast {
   id: number;
@@ -187,8 +188,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   /** 開いているパレットのスコープ。null なら閉じている */
   const [palette, setPalette] = useState<PaletteScope | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; leafId: string } | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[]; title?: string } | null>(null);
+  /** 『テキストを選んでコピー…』のシートで見せているペイン */
+  const [textCopyPane, setTextCopyPane] = useState<Pane | null>(null);
   const [drag, setDrag] = useState<DragPayload | null>(null);
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -855,42 +857,29 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     onDesktopDrag(workspaceId, payload, end);
   }, [onDesktopDrag, workspaceId]);
 
-  /** 端末で選択中の文字列をコピーする。右クリックメニューから使う */
-  const copySelection = useCallback(async () => {
-    const text = focusedTerm()?.getSelection() ?? '';
-    if (!text) return;
+  /** 画面（スクロールバックを含む）を丸ごとコピーする。選択とは別物だと分かる名前にする */
+  const copyPane = useCallback(async (pane: Pane | null) => {
+    if (!pane) return;
     try {
-      await navigator.clipboard.writeText(text);
-      toast(`選択した ${text.split('\n').length} 行をコピーしました`, 'info');
+      const { text } = await fetchCapture(pane.id, 5000, true);
+      await navigator.clipboard.writeText(text.replace(/\s+$/, ''));
+      toast(`ペイン ${pane.index} の全文（履歴込み）をコピーしました`, 'info');
     } catch (err) {
       toast(`コピーに失敗: ${(err as Error).message}`);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast]);
 
-  /** 画面（スクロールバックを含む）を丸ごとコピーする。選択とは別物だと分かる名前にする */
-  const copyPane = useCallback(async () => {
-    if (!activePane) return;
-    try {
-      const { text } = await fetchCapture(activePane.id, 5000, true);
-      await navigator.clipboard.writeText(text.replace(/\s+$/, ''));
-      toast(`ペイン ${activePane.index} の全文（履歴込み）をコピーしました`, 'info');
-    } catch (err) {
-      toast(`コピーに失敗: ${(err as Error).message}`);
-    }
-  }, [activePane, toast]);
-
-  const killPane = useCallback(() => {
-    if (!activePane) return;
-    const last = panes.filter((p) => p.windowId === activePane.windowId).length <= 1;
+  const killPane = useCallback((pane: Pane | null) => {
+    if (!pane) return;
+    const last = panes.filter((p) => p.windowId === pane.windowId).length <= 1;
     confirmThen(
-      `ペイン ${activePane.index} を終了しますか？`,
-      `${paneCommand(activePane)} が ${activePane.path} で動いています。` +
+      `ペイン ${pane.index} を終了しますか？`,
+      `${paneCommand(pane)} が ${pane.path} で動いています。` +
         (last ? '\nこの端末の最後のペインなので、端末ごと無くなります。' : ''),
-      () => doAction('killPane', { target: activePane.id }),
+      () => doAction('killPane', { target: pane.id }),
       { confirmLabel: '終了する' },
     );
-  }, [activePane, panes, confirmThen, doAction]);
+  }, [panes, confirmThen, doAction]);
 
   const killWindow = useCallback(
     (win: TmuxWindow) =>
@@ -928,6 +917,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       const at = leaf.tabs.findIndex((t) => t.id === tabId);
       const right = leaf.tabs.slice(at + 1).map((t) => t.id);
       const leavesNow = allLeaves(tree);
+      const titleOf = (t: TabRef | undefined) => {
+        if (!t) return '';
+        if (isScreenTab(t)) return devices.find(d => d.id === t.deviceId)?.name ?? 'リモートデスクトップ';
+        const w = t.windowId ? windows.find(x => x.id === t.windowId) : windows.find(x => x.sessionId === t.sessionId && x.active);
+        return (w && views.get(w.id)?.project) || t.sessionName || '端末';
+      };
       return {
         index: at,
         count: leaf.tabs.length,
@@ -938,7 +933,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         desktops: desktopTargets.filter(d => d.id !== workspaceId),
         panels: leavesNow.filter(l => l.id !== leaf.id).map(target => ({
           id: target.id,
-          number: leavesNow.findIndex(l => l.id === target.id) + 1,
+          name: titleOf(activeTab(target) ?? undefined),
           tabs: target.tabs.length,
         })),
         moveLeft: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at - 1]?.id) : prev),
@@ -964,17 +959,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         killWindow: () => win && killWindow(win),
       };
     },
-    [windows, devices, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
-  );
-
-  /** タブを右クリックしたときに出す項目 */
-  const openTabMenu = useCallback(
-    (tabId: string, x: number, y: number) => {
-      const tab = tabContext(tabId);
-      if (!tab) return;
-      setMenu({ x, y, items: buildMenu(TAB_MENU, { tab }) });
-    },
-    [tabContext],
+    [windows, views, devices, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
   );
 
   /**
@@ -1121,6 +1106,34 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     return () => window.removeEventListener('keydown', onKey, true);
   }, [altKeys, active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
+  /** あるペインに効く操作。入力先のペインのほか、メニューを開いたタブのペインにも使う */
+  const paneActions = (pane: Pane | null) => ({
+    onCopyPane: () => copyPane(pane),
+    onKillPane: () => killPane(pane),
+    onRemoteControl: () => { if (pane) setRemotePane(pane.id); },
+    onExitClaude: () => {
+      if (!pane) return;
+      confirmThen(
+        'Claude を終了しますか？',
+        `${pane.path} で動いている Claude に /exit を送ります。会話は終わり、端末はシェルに戻ります。`,
+        () => doAction('runCommand', { target: pane.id, command: '/exit' }),
+        { confirmLabel: '終了する' },
+      );
+    },
+    onOpenFiles: () => { if (pane) setFilesPaneId(pane.id); },
+    onSelectText: () => { if (pane) setTextCopyPane(pane); },
+    onSendCommand: () => {
+      if (!pane) return;
+      setDialog({
+        kind: 'prompt',
+        title: `ペイン ${pane.index} (${paneCommand(pane)}) にコマンドを送る`,
+        placeholder: 'コマンド',
+        confirmLabel: '送信',
+        onSubmit: (cmd) => cmd.trim() && doAction('runCommand', { target: pane.id, command: cmd }),
+      });
+    },
+  });
+
   const appContext: AppContext = {
       session: currentSession,
       window: currentWindow,
@@ -1135,37 +1148,15 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       launchingAgent: launchingAgent,
       onSplitNewWindow: splitIntoNewWindow,
       onToggle: onToggle,
-      onCopyPane: copyPane,
-      onKillPane: killPane,
-      onRemoteControl: () => activePane && setRemotePane(activePane.id),
-      onExitClaude: () => {
-        const pane = activePane;
-        if (!pane) return;
-        confirmThen(
-          'Claude を終了しますか？',
-          `${pane.path} で動いている Claude に /exit を送ります。会話は終わり、端末はシェルに戻ります。`,
-          () => doAction('runCommand', { target: pane.id, command: '/exit' }),
-          { confirmLabel: '終了する' },
-        );
-      },
+      screenTab: focusedScreen,
+      ...paneActions(activePane),
       onOpenScreen: () => setScreenOpen(activeDevice.id),
       onOpenScreenTab: () => openScreen(activeDevice.id, focusedIdRef.current),
       canOpenTerminal: !!focusedDevice && sessions.some(s => deviceOf(s.id) === focusedDevice),
-      onOpenFiles: () => activePane && setFilesPaneId(activePane.id),
       onOpenSwitcher: () => setPalette('terminal'),
       onOpenShortcuts: () => setShortcutsOpen(true),
       approvalPending: !!approval.pending,
       onOpenApproval: () => setApprovalOpen(true),
-      onSendCommand: () =>
-        activePane &&
-        setDialog({
-          kind: 'prompt',
-          title: `ペイン ${activePane.index} (${paneCommand(activePane)}) にコマンドを送る`,
-          placeholder: 'コマンド',
-          confirmLabel: '送信',
-          onSubmit: (cmd) =>
-            cmd.trim() && doAction('runCommand', { target: activePane.id, command: cmd }),
-        }),
       onPaste: pasteClipboard,
   };
 
@@ -1208,17 +1199,69 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     },
   }, new Set(['navigate.switcher']));
 
-  /** 端末を右クリックしたときに出す項目。tmux の display-menu の代わり */
-  const menuItems = (): MenuEntry[] => buildMenu(TERMINAL_MENU, {
-    app: appContext,
-    selection: {
-      text: focusedTerm()?.getSelection().trim() ?? '',
-      copy: copySelection,
-      clear: () => focusedTerm()?.clearSelection(),
-    },
-    panel: { multiple: leaves.length >= 2, toggleFocus: () => setPanelFocus(v => !v) },
-    tab: focusedTab ? tabContext(focusedTab.id) : undefined,
-  });
+  /**
+   * タブメニュー。タブの右クリック・長押し・⋯、端末の右クリック・長押しで同じものを開く。
+   * ペインに効く操作（コピー・ファイル・コマンド・tmux）は、入力先ではなくメニューを開いたタブのペインに効く。
+   * 選択と貼り付けは、そのタブがパネルの前面にあるときだけ使える（裏のタブには端末が描かれていない）。
+   */
+  const openTabMenu = (tabId: string, anchor: { x: number; y: number }, panel?: PanelContext) => {
+    const tree = layoutRef.current;
+    const found = tree ? findTab(tree, tabId) : null;
+    const tab = tabContext(tabId);
+    if (!found || !tab) return;
+    const { leaf, tab: ref } = found;
+    const front = leaf.activeId === tabId;
+    const handle = front ? termRefs.current.get(leaf.id) : undefined;
+    const term = isTerminalHandle(handle) ? handle : undefined;
+    const win = isTerminalTab(ref)
+      ? (ref.windowId ? windows.find(w => w.id === ref.windowId) : windows.find(w => w.sessionId === ref.sessionId && w.active)) ?? null
+      : null;
+    const paneList = win ? panes.filter(p => p.windowId === win.id).sort((a, b) => a.index - b.index) : [];
+    const pane = paneList.find(p => p.active) ?? paneList[0] ?? null;
+    const selectionText = term?.getSelection().trim() ?? '';
+    const selection: SelectionContext = {
+      text: selectionText,
+      copy: async () => {
+        const text = term?.getSelection() ?? '';
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          toast(`選択した ${text.split('\n').length} 行をコピーしました`, 'info');
+        } catch (err) {
+          toast(`コピーに失敗: ${(err as Error).message}`);
+        }
+      },
+      clear: () => term?.clearSelection(),
+    };
+    const app: AppContext = {
+      ...appContext,
+      session: isTerminalTab(ref) ? sessions.find(s => s.id === ref.sessionId) ?? null : null,
+      window: win,
+      activePane: pane,
+      ...paneActions(pane),
+      screenTab: isScreenTab(ref),
+      canPaste: !!term,
+      onPaste: async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text) term?.paste(text);
+        } catch {
+          toast('クリップボードを読めませんでした（HTTPS で開いてください）');
+        }
+      },
+    };
+    const items = tabMenuItems({
+      app,
+      selection,
+      tab,
+      panel: panel ?? { multiple: leaves.length >= 2, maximized: panelFocus, toggleFocus: () => setPanelFocus(v => !v) },
+      strip: { tabCount: leaf.tabs.length, closable: allLeaves(tree!).length > 1, closePanel: () => closeTile(leaf.id) },
+    });
+    const title = isScreenTab(ref)
+      ? devices.find(d => d.id === ref.deviceId)?.name ?? 'リモートデスクトップ'
+      : (win && views.get(win.id)?.project) || ref.sessionName || '端末';
+    setMenu({ x: anchor.x, y: anchor.y, items, title });
+  };
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={{ '--sidebar-w': `${Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}px` } as React.CSSProperties}>
@@ -1286,7 +1329,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           <div className="terminal-wrap">
             {layout ? (
               <SplitView
-                workspaceMenu={() => workspaceMenuItems({ app: appContext })}
                 active={active}
                 tree={layout}
                 statuses={termStatuses}
@@ -1308,7 +1350,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                 onFocus={setFocusedId}
                 onActivateTab={activate}
                 onCloseTab={closeTabById}
-                onCloseTile={closeTile}
                 onNewTab={(leafId, deviceId) => newTerminal(leafId, undefined, deviceId)}
                 onDrop={onDrop}
                 onStartDrag={startDrag}
@@ -1325,11 +1366,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                     'info',
                   );
                 }}
-                onTerminalContextMenu={(leafId, x, y) => {
+                onTerminalContextMenu={(leafId, x, y, panel) => {
                   setFocusedId(leafId);
-                  setCtxMenu({ x, y, leafId });
+                  const leaf = layoutRef.current ? findLeaf(layoutRef.current, leafId) : null;
+                  if (leaf) openTabMenu(leaf.activeId, { x, y }, panel);
                 }}
-                onTabContextMenu={openTabMenu}
+                onTabContextMenu={(tabId, x, y, panel) => openTabMenu(tabId, { x, y }, panel)}
                 registerTerm={registerTerm}
               />
             ) : (
@@ -1419,11 +1461,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         </span>
       </footer>
 
-      {ctxMenu && (
-        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={menuItems()} onClose={() => setCtxMenu(null)} />
-      )}
 
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} title={menu.title} onClose={() => setMenu(null)} />}
+      {textCopyPane && <TextCopy pane={textCopyPane} onClose={() => setTextCopyPane(null)}
+        onCopied={(lines) => toast(`${lines} 行をコピーしました`, 'info')} onError={(text) => toast(text)} />}
 
       {projectMode && <ProjectStart deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
       {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure} onClose={() => setApprovalOpen(false)} onDone={() => { setApprovalOpen(false); approval.refresh(); }} />}

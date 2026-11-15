@@ -10,6 +10,7 @@ import { uploadPasteImage, wsUrl } from '../api';
 import { quotePath } from '../attachments';
 import { unscoped } from '../devices';
 import { TerminalSelection } from '../terminal-selection';
+import { useLongPress } from '../hooks/useLongPress';
 import { loadedWebglAddon, loadWebglAddon, markWebglUnavailable, shouldUseWebgl } from '../terminal-renderer';
 
 /** GPU のコンテキストをこの回数失ったら、その端末は DOM 描画に固定する */
@@ -238,6 +239,14 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   onStatusRef.current = onStatus;
   const onContextMenuRef = useRef(onContextMenu);
   onContextMenuRef.current = onContextMenu;
+  /**
+   * タッチで端末を長押ししたらタブメニュー（右クリックと同じ）。
+   * 指を動かしたら取り消すので、スワイプでのスクロール（touchmove → wheel）とは混ざらない。
+   * xterm が文字を選んでいるときは、選択の操作を邪魔しないよう長押しを取らない。
+   */
+  const longPress = useLongPress<null>((_target, point) => onContextMenuRef.current?.(point.x, point.y), {
+    canStart: () => !termRef.current?.hasSelection(),
+  });
   const onCopiedRef = useRef(onCopied);
   onCopiedRef.current = onCopied;
   const onNoticeRef = useRef(onNotice);
@@ -465,6 +474,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       if (e.shiftKey) return; // ブラウザのメニューへの逃げ道
       e.preventDefault();
       e.stopPropagation();
+      // Android は長押しでも contextmenu を出す。タッチの長押しは useLongPress が開くので二重に開かない
+      if ((e as PointerEvent).pointerType === 'touch') return;
       onContextMenuRef.current?.(e.clientX, e.clientY);
     };
 
@@ -837,7 +848,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   }, [windowIndex, windowId]);
 
   return (
-    <div className="terminal-host" ref={hostRef} hidden={!visible}>
+    <div className="terminal-host" ref={hostRef} hidden={!visible} {...longPress.bind(null)}>
       <div className="terminal-inner" ref={innerRef} />
     </div>
   );
