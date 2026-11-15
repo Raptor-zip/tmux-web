@@ -957,13 +957,14 @@ web/src/
   windows.ts           ウィンドウ 1 つの見せ方（一覧・タブ・パレットで共通）
   paths.ts             パスとプロジェクト名の見せ方（一覧と見出しで揃える）
   status.ts            プロセス判定を 5 つの状態にまとめる
+  commands.ts          操作の登録表（ラベル・ヒント・押せない理由・実行内容）
+  menus.ts             各メニューにどの操作をどの順で出すか
   components/
     SplitView.tsx      タイルの配置・ドラッグ&ドロップ・境界線のリサイズ
     TabStrip.tsx       タイルごとのタブ列
     Terminal.tsx       xterm.js。WebSocket と繋ぐ
     Sidebar.tsx        セッション／ウィンドウのツリー
     Switcher.tsx       ウィンドウ切り替えパレット (Alt+P)
-    Toolbar.tsx        パンくずと分割・コマンド送信
     KeyBar.tsx         特殊キーのツールバー
     CheatSheet.tsx     キーバインド一覧
     Dialog.tsx         確認・入力ダイアログ

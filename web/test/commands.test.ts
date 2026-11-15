@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMenu, COMMANDS, FAMILIES, type AppContext, type CommandContext } from '../src/commands';
-import { MENUS, WORKSPACE_MENU } from '../src/menus';
+import { buildMenu, COMMANDS, FAMILIES, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
+import { DESKTOP_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU, MENUS, NEW_MENU, TAB_MENU, TERMINAL_MENU, WORKSPACE_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
 const all = [...COMMANDS, ...FAMILIES];
@@ -61,4 +61,64 @@ test('menu items run the registered action with their context', () => {
   (items[0] as MenuItem).run();
   (items.at(-1) as MenuItem).run();
   assert.deepEqual(calls, ['new', 'mode']);
+});
+
+const tab = (over: Partial<TabContext> = {}): TabContext => ({
+  index: 0, count: 2, screen: false, hasWindow: true, others: 1, right: 1,
+  desktops: [{ id: 'd2', name: '作業2' }], panels: [{ id: 'p2', number: 2, tabs: 3 }],
+  moveLeft() {}, moveRight() {}, moveToDesktop() {}, moveToPanel() {}, close() {}, closeOthers() {}, closeRight() {},
+  split() {}, openAsDialog() {}, renameWindow() {}, killWindow() {}, ...over,
+});
+const names = (slots: readonly MenuSlot[], ctx: CommandContext) => buildMenu(slots, ctx).map(e => (e ? e.label : '---'));
+
+test('terminal menu shows selection items only when text is selected', () => {
+  const ctx = (text: string): CommandContext => ({
+    app: app(), selection: { text, copy() {}, clear() {} }, panel: { multiple: false, toggleFocus() {} }, tab: tab(),
+  });
+  assert.deepEqual(names(TERMINAL_MENU, ctx('')), [
+    '新しい端末をタブで開く', '新しい端末を右に並べる', '新しい端末を下に並べる', '---',
+    '画面全体をコピー', '貼り付け', '---', 'このパネルを広げる / 元に戻す', '---', 'タブを閉じる',
+  ]);
+  const withSelection = buildMenu(TERMINAL_MENU, ctx('a\nb'));
+  assert.deepEqual((withSelection[0] as MenuItem), { ...(withSelection[0] as MenuItem), label: '選択部分をコピー', hint: '2 行' });
+  assert.equal((withSelection.find(e => e?.label === 'このパネルを広げる / 元に戻す') as MenuItem).disabled, true);
+  // 入力先のタブが無いときも「タブを閉じる」は押せない項目として残る
+  const noTab = buildMenu(TERMINAL_MENU, { ...ctx(''), tab: undefined });
+  assert.equal((noTab.at(-1) as MenuItem).label, 'タブを閉じる');
+  assert.equal((noTab.at(-1) as MenuItem).disabled, true);
+});
+
+test('tab menu keeps its order and switches screen/terminal items', () => {
+  assert.deepEqual(names(TAB_MENU, { tab: tab() }), [
+    '左へ移動', '右へ移動', '作業2 へ移動', '---', 'タブを閉じる', '他のタブを閉じる', '右側のタブを閉じる', '---',
+    '右に切り出す', '下に切り出す', '---', 'パネル 2 へ移動（3タブ）', '---', 'ウィンドウ名を変更…', 'ウィンドウを閉じる…',
+  ]);
+  assert.deepEqual(names(TAB_MENU, { tab: tab({ screen: true }) }).slice(-1), ['ダイアログで大きく開く']);
+  const moved: string[] = [];
+  const items = buildMenu(TAB_MENU, { tab: tab({ moveToPanel: id => moved.push(id), moveToDesktop: id => moved.push(id) }) });
+  (items.find(e => e?.label === '作業2 へ移動') as MenuItem).run();
+  (items.find(e => e?.label === 'パネル 2 へ移動（3タブ）') as MenuItem).run();
+  assert.deepEqual(moved, ['d2', 'p2']);
+});
+
+test('new-tab menu lists every device and disables offline ones', () => {
+  const items = buildMenu(NEW_MENU, { create: { devices: [{ id: 'a', name: 'A', connected: true }, { id: 'b', name: 'B', connected: false }], newTerminal() {}, openScreen() {} } });
+  assert.deepEqual(items.map(e => (e ? `${e.label}${e.disabled ? ' (x)' : ''}` : '---')), [
+    '現在のデバイスで端末を開く', 'A で端末を開く', 'B で端末を開く (x)', '---', 'A のリモートデスクトップを開く', 'B のリモートデスクトップを開く (x)',
+  ]);
+});
+
+test('font size and line height menus keep their short labels and limits', () => {
+  let font = 6;
+  let line = 1;
+  const view = { fontSize: font, lineHeight: line, setFontSize: (u: (v: number) => number) => { font = u(font); }, setLineHeight: (v: number) => { line = v; }, stepLineHeight: (d: number) => { line += d; } };
+  assert.deepEqual(names(FONT_SIZE_MENU, { view }), ['大きく', '小さく', '最小にする', '---', '既定に戻す']);
+  assert.deepEqual(names(LINE_HEIGHT_MENU, { view }), ['広げる', '詰める', '最小にする', '---', '既定に戻す']);
+  const fonts = buildMenu(FONT_SIZE_MENU, { view }) as MenuItem[];
+  assert.equal(fonts[1].disabled, true);
+  fonts[0].run();
+  assert.equal(font, 7);
+  (buildMenu(LINE_HEIGHT_MENU, { view })[4] as MenuItem).run();
+  assert.equal(line, 1.15);
+  assert.deepEqual(names(DESKTOP_MENU, { desktop: { rename() {} } }), ['名前を変更…']);
 });
