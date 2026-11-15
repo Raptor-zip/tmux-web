@@ -6,6 +6,10 @@ export interface MenuItem {
   /** 右側に薄く出すキー表記。VS Code のメニューと同じ体裁 */
   hint?: string;
   disabled?: boolean;
+  /** 押せない理由（登録表から来る。表示はまだしない） */
+  disabledReason?: string;
+  /** 取り消せない操作 */
+  danger?: boolean;
   run(): void;
 }
 

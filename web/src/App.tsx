@@ -15,12 +15,13 @@ import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
-import { workspaceMenuItems } from './components/Toolbar';
+import { workspaceMenuItems, TAB_MENU, TERMINAL_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU } from './menus';
+import { buildMenu, type AppContext, type TabContext, type ViewContext } from './commands';
 import { KeyBar } from './components/KeyBar';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, tabPayload, type DragPayload, type DropTarget } from './components/SplitView';
 import { Switcher, type SwitchItem } from './components/Switcher';
-import { ContextMenu, SEP, type MenuEntry } from './components/ContextMenu';
+import { ContextMenu, type MenuEntry } from './components/ContextMenu';
 import type { TerminalStatus } from './components/Terminal';
 import { isTerminalHandle, type TabHandle } from './components/TerminalTabs';
 import {
@@ -895,154 +896,77 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [confirmThen, doAction],
   );
 
-  /** 端末を右クリックしたときに出す項目。tmux の display-menu の代わり */
-  const menuItems = useCallback((): MenuEntry[] => {
-    const pane = activePane?.id;
-    const selection = focusedTerm()?.getSelection().trim() ?? '';
-    return [
-      // 選択があるときはそれが主役。「本文をコピー」を先頭に置くと、選択したつもりで
-      // 画面全体が入ってしまうので、選択の有無で並びと文言を変える
-      ...(selection
-        ? [
-            {
-              label: '選択部分をコピー',
-              hint: `${selection.split('\n').length} 行`,
-              run: copySelection,
-            },
-            { label: '選択を解除', run: () => focusedTerm()?.clearSelection() },
-            SEP,
-          ]
-        : []),
-      { label: '新しい端末をタブで開く', hint: 'Alt+T', run: () => newTerminal(focusedIdRef.current) },
-      { label: '新しい端末を右に並べる', hint: '画面を分割', run: () => splitIntoNewWindow('right') },
-      { label: '新しい端末を下に並べる', hint: '画面を分割', run: () => splitIntoNewWindow('bottom') },
-      SEP,
-      {
-        label: '画面全体をコピー',
-        hint: 'スクロールバック込み',
-        run: copyPane,
-        disabled: !pane,
-      },
-      {
-        label: '貼り付け',
-        hint: 'Ctrl+V',
-        run: async () => {
-          try {
-            const text = await navigator.clipboard.readText();
-            if (text) focusedTerm()?.paste(text);
-          } catch {
-            toast('クリップボードを読めませんでした（HTTPS で開いてください）');
-          }
-        },
-      },
-      SEP,
-      {
-        label: 'このパネルを広げる / 元に戻す',
-        hint: 'Alt+Enter',
-        run: () => setPanelFocus(v => !v),
-        disabled: leaves.length < 2,
-      },
-      SEP,
-      {
-        label: 'タブを閉じる',
-        hint: 'Alt+W',
-        run: () => focusedTab && closeTabById(focusedTab.id),
-        disabled: !focusedTab,
-      },
-    ];
-  }, [
-    activePane,
-    leaves.length,
-    focusedTab,
-    newTerminal,
-    splitIntoNewWindow,
-    copyPane,
-    copySelection,
-    closeTabById,
-    toast,
-  ]);
+  /** クリップボードの文字を入力先の端末へ貼り付ける */
+  const pasteClipboard = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) focusedTerm()?.paste(text);
+    } catch {
+      toast('クリップボードを読めませんでした（HTTPS で開いてください）');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast]);
+
+  /** タブ 1 枚に効く操作の文脈。タブメニューと、端末メニューの「タブを閉じる」で使う */
+  const tabContext = useCallback(
+    (tabId: string): TabContext | undefined => {
+      const tree = layoutRef.current;
+      const found = tree ? findTab(tree, tabId) : null;
+      if (!tree || !found) return undefined;
+      const { leaf, tab } = found;
+      const win = isTerminalTab(tab) ? windows.find((w) => w.id === tab.windowId) ?? null : null;
+      const label = isScreenTab(tab) ? devices.find(d => d.id === tab.deviceId)?.name ?? 'リモートデスクトップ' : win?.name ?? '';
+      const others = leaf.tabs.filter((t) => t.id !== tabId).map((t) => t.id);
+      const at = leaf.tabs.findIndex((t) => t.id === tabId);
+      const right = leaf.tabs.slice(at + 1).map((t) => t.id);
+      const leavesNow = allLeaves(tree);
+      return {
+        index: at,
+        count: leaf.tabs.length,
+        screen: isScreenTab(tab),
+        hasWindow: !!win,
+        others: others.length,
+        right: right.length,
+        desktops: desktopTargets.filter(d => d.id !== workspaceId),
+        panels: leavesNow.filter(l => l.id !== leaf.id).map(target => ({
+          id: target.id,
+          number: leavesNow.findIndex(l => l.id === target.id) + 1,
+          tabs: target.tabs.length,
+        })),
+        moveLeft: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at - 1]?.id) : prev),
+        moveRight: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at + 2]?.id ?? null) : prev),
+        moveToDesktop: (id) => onMoveDesktopTab(workspaceId, tabId, id),
+        moveToPanel: (id) => { setLayout(prev => prev ? moveTab(prev, tabId, id, null) : prev); setFocusedId(id); },
+        close: () => closeTabById(tabId),
+        closeOthers: () => setLayout((prev) => (prev ? closeTabs(prev, others) : prev)),
+        closeRight: () => setLayout((prev) => (prev ? closeTabs(prev, right) : prev)),
+        split: (side) => onDrop({ kind: 'split', leafId: leaf.id, side }, tabPayload(tab, label)),
+        // 同じ画面を二重に繋がないよう、タブを閉じてからダイアログで開く
+        openAsDialog: () => { if (isScreenTab(tab)) { closeTabById(tabId); setScreenOpen(tab.deviceId); } },
+        renameWindow: () =>
+          win &&
+          setDialog({
+            kind: 'prompt',
+            title: `ウィンドウ「${win.name}」の名前を変える`,
+            defaultValue: win.name,
+            confirmLabel: '変更',
+            onSubmit: (name) =>
+              name.trim() && doAction('renameWindow', { target: win.id, name: name.trim() }),
+          }),
+        killWindow: () => win && killWindow(win),
+      };
+    },
+    [windows, devices, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
+  );
 
   /** タブを右クリックしたときに出す項目 */
   const openTabMenu = useCallback(
     (tabId: string, x: number, y: number) => {
-      const tree = layoutRef.current;
-      const found = tree ? findTab(tree, tabId) : null;
-      if (!tree || !found) return;
-      const { leaf, tab } = found;
-      const screen = isScreenTab(tab);
-      const win = isTerminalTab(tab) ? windows.find((w) => w.id === tab.windowId) ?? null : null;
-      const label = screen ? devices.find(d => d.id === tab.deviceId)?.name ?? 'リモートデスクトップ' : win?.name ?? '';
-      const others = leaf.tabs.filter((t) => t.id !== tabId).map((t) => t.id);
-      const at = leaf.tabs.findIndex((t) => t.id === tabId);
-      const right = leaf.tabs.slice(at + 1).map((t) => t.id);
-
-      setMenu({
-        x,
-        y,
-        items: [
-          { label: '左へ移動', disabled: at === 0, run: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at - 1]?.id) : prev) },
-          { label: '右へ移動', disabled: at === leaf.tabs.length - 1, run: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at + 2]?.id ?? null) : prev) },
-          ...desktopTargets.filter(d => d.id !== workspaceId).map(d => ({ label: `${d.name} へ移動`, run: () => onMoveDesktopTab(workspaceId, tabId, d.id) })),
-          SEP,
-          { label: 'タブを閉じる', hint: 'Alt+W', run: () => closeTabById(tabId) },
-          {
-            label: '他のタブを閉じる',
-            hint: `${others.length} 枚`,
-            run: () => setLayout((prev) => (prev ? closeTabs(prev, others) : prev)),
-            disabled: others.length === 0,
-          },
-          {
-            label: '右側のタブを閉じる',
-            hint: `${right.length} 枚`,
-            run: () => setLayout((prev) => (prev ? closeTabs(prev, right) : prev)),
-            disabled: right.length === 0,
-          },
-          SEP,
-          {
-            label: '右に切り出す',
-            hint: '並べて見る',
-            run: () => onDrop({ kind: 'split', leafId: leaf.id, side: 'right' }, tabPayload(tab, label)),
-            disabled: leaf.tabs.length < 2,
-          },
-          {
-            label: '下に切り出す',
-            hint: '並べて見る',
-            run: () => onDrop({ kind: 'split', leafId: leaf.id, side: 'bottom' }, tabPayload(tab, label)),
-            disabled: leaf.tabs.length < 2,
-          },
-          SEP,
-          ...allLeaves(tree).filter(l => l.id !== leaf.id).map((target) => ({
-            label: `パネル ${allLeaves(tree).findIndex(l => l.id === target.id) + 1} へ移動（${target.tabs.length}タブ）`,
-            run: () => { setLayout(prev => prev ? moveTab(prev, tabId, target.id, null) : prev); setFocusedId(target.id); },
-          })),
-          SEP,
-          ...(isScreenTab(tab) ? [
-            // 同じ画面を二重に繋がないよう、タブを閉じてからダイアログで開く
-            { label: 'ダイアログで大きく開く', run: () => { closeTabById(tabId); setScreenOpen(tab.deviceId); } },
-          ] : [{
-            label: 'ウィンドウ名を変更…',
-            run: () =>
-              win &&
-              setDialog({
-                kind: 'prompt',
-                title: `ウィンドウ「${win.name}」の名前を変える`,
-                defaultValue: win.name,
-                confirmLabel: '変更',
-                onSubmit: (name) =>
-                  name.trim() && doAction('renameWindow', { target: win.id, name: name.trim() }),
-              }),
-            disabled: !win,
-          },
-          {
-            label: 'ウィンドウを閉じる…',
-            hint: 'tmux ごと',
-            run: () => win && killWindow(win),
-            disabled: !win,
-          }]),
-        ],
-      });
+      const tab = tabContext(tabId);
+      if (!tab) return;
+      setMenu({ x, y, items: buildMenu(TAB_MENU, { tab }) });
     },
-    [windows, devices, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
+    [tabContext],
   );
 
   /**
@@ -1065,22 +989,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const openStatusMenu = useCallback(
     (e: React.MouseEvent, kind: 'fontSize' | 'lineHeight') => {
       const r = e.currentTarget.getBoundingClientRect();
-      const items: MenuEntry[] =
-        kind === 'fontSize'
-          ? [
-              { label: '大きく', hint: '+1px', run: () => setFontSize((f) => Math.min(28, f + 1)) },
-              { label: '小さく', hint: '-1px', disabled: fontSize <= 6, run: () => setFontSize((f) => Math.max(6, f - 1)) },
-              { label: '最小にする', hint: '6px', run: () => setFontSize(6) },
-              SEP,
-              { label: '既定に戻す', hint: '13px', run: () => setFontSize(13) },
-            ]
-          : [
-              { label: '広げる', hint: '+0.01', run: () => onLineHeightStep(0.01) },
-              { label: '詰める', hint: '-0.01', disabled: lineHeight <= 1, run: () => onLineHeightStep(-0.01) },
-              { label: '最小にする', hint: '1.00', run: () => setLineHeight(1) },
-              SEP,
-              { label: '既定に戻す', hint: '1.15', run: () => setLineHeight(1.15) },
-            ];
+      const view: ViewContext = { fontSize, lineHeight, setFontSize, setLineHeight, stepLineHeight: onLineHeightStep };
+      const items: MenuEntry[] = buildMenu(kind === 'fontSize' ? FONT_SIZE_MENU : LINE_HEIGHT_MENU, { view });
       setMenu({ x: r.left, y: r.top - 8 - items.length * 26, items });
     },
     [fontSize, lineHeight, setFontSize, setLineHeight, onLineHeightStep],
@@ -1193,7 +1103,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     return () => window.removeEventListener('keydown', onKey, true);
   }, [active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
-  const toolbarProps = {
+  const appContext: AppContext = {
       session: currentSession,
       window: currentWindow,
       activePane: activePane,
@@ -1204,7 +1114,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onNewTab: () => newTerminal(focusedIdRef.current),
       onLaunchAgent: launchAgent,
       launchingAgent: launchingAgent,
-      onToggleSidebar: () => setSidebarOpen((v) => !v),
       onSplitNewWindow: splitIntoNewWindow,
       onToggle: onToggle,
       onCopyPane: copyPane,
@@ -1225,7 +1134,20 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           onSubmit: (cmd) =>
             cmd.trim() && doAction('runCommand', { target: activePane.id, command: cmd }),
         }),
+      onPaste: pasteClipboard,
   };
+
+  /** 端末を右クリックしたときに出す項目。tmux の display-menu の代わり */
+  const menuItems = (): MenuEntry[] => buildMenu(TERMINAL_MENU, {
+    app: appContext,
+    selection: {
+      text: focusedTerm()?.getSelection().trim() ?? '',
+      copy: copySelection,
+      clear: () => focusedTerm()?.clearSelection(),
+    },
+    panel: { multiple: leaves.length >= 2, toggleFocus: () => setPanelFocus(v => !v) },
+    tab: focusedTab ? tabContext(focusedTab.id) : undefined,
+  });
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={{ '--sidebar-w': `${Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}px` } as React.CSSProperties}>
@@ -1293,7 +1215,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           <div className="terminal-wrap">
             {layout ? (
               <SplitView
-                workspaceMenu={() => workspaceMenuItems(toolbarProps)}
+                workspaceMenu={() => workspaceMenuItems({ app: appContext })}
                 active={active}
                 tree={layout}
                 statuses={termStatuses}

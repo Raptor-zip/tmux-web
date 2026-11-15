@@ -1,4 +1,6 @@
 import { ContextMenu } from './components/ContextMenu';
+import { buildMenu } from './commands';
+import { DESKTOP_MENU } from './menus';
 import { ScreenViewer } from './components/ScreenViewer';
 import { InstallApp } from './components/InstallApp';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -237,12 +239,10 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
         {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
       </section>)}
     </div>
-    {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} onClose={() => setTabMenu(null)} items={[
-      { label: '名前を変更…', run: () => {
-        const desktop = state.items.find(item => item.id === tabMenu.id);
-        if (desktop) rename(desktop);
-      } },
-    ]} />}
+    {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: { rename: () => {
+      const desktop = state.items.find(item => item.id === tabMenu.id);
+      if (desktop) rename(desktop);
+    } } })} />}
     {remoteOpen && <ScreenViewer devices={connection.devices} deviceId="local" onClose={() => setRemoteOpen(false)} onOpenAsTab={deviceId => {
       // 同じ画面を二重に繋がないよう、ダイアログを閉じてから今のデスクトップのタブに開く
       setRemoteOpen(false);

@@ -1,4 +1,6 @@
 import { ContextMenu, SEP, type MenuEntry } from './ContextMenu';
+import { buildMenu } from '../commands';
+import { NEW_MENU, PANEL_MENU } from '../menus';
 import type { Device } from '../devices';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
@@ -227,18 +229,15 @@ export function TabStrip({
       <div className="strip-tools">
         {leaf.tabs.length > 1 && <button className="strip-btn tab-count" title="このパネルのタブを一覧で見る" aria-label={`このパネルの${leaf.tabs.length}タブを一覧で見る`} onClick={onOverview}>{leaf.tabs.length}</button>}
         <button className="strip-btn" title="新しい端末・リモートデスクトップを開く" aria-label="新しい端末をタブで開く" aria-haspopup="menu"
-          onClick={e => { const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.left,y:r.bottom,items:[
-            {label:'現在のデバイスで端末を開く',hint:'Alt+T',run:()=>onNewTab()},
-            ...devices.map(d=>({label:`${d.name} で端末を開く`,disabled:!d.connected,run:()=>onNewTab(d.id)})),
-            SEP,
-            ...devices.map(d=>({label:`${d.name} のリモートデスクトップを開く`,disabled:!d.connected,run:()=>onOpenScreen(d.id)})),
-          ]}); }}><Icon name="plus" /></button>
+          onClick={e => { const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.left,y:r.bottom,items:buildMenu(NEW_MENU,{
+            create:{devices,newTerminal:onNewTab,openScreen:onOpenScreen},
+          })}); }}><Icon name="plus" /></button>
         <button className="strip-btn" title="パネルの操作" aria-label="パネルの操作" aria-haspopup="menu"
           onClick={e => {const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.right,y:r.bottom,items:[
-            {label:'タブ・パネルの一覧',run:onOverview},
-            {label:'このパネルを広げる / 元に戻す',hint:'Alt+Enter',run:onToggleFocus},
-            {label:'選択中のタブの操作…',run:()=>onContextMenu(leaf.activeId,r.right,r.bottom)},
-            ...(closableTile ? [{label:`このパネルを閉じる（${leaf.tabs.length}タブ）`,run:onCloseTile}] : []),
+            ...buildMenu(PANEL_MENU,{
+              strip:{tabCount:leaf.tabs.length,closable:closableTile,overview:onOverview,activeTabMenu:()=>onContextMenu(leaf.activeId,r.right,r.bottom),closePanel:onCloseTile},
+              panel:{multiple:closableTile,toggleFocus:onToggleFocus},
+            }),
             ...(workspaceMenu ? [SEP,...workspaceMenu()] : []),
           ]}); }}><Icon name="more" /></button>
       </div>
