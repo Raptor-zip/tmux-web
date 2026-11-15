@@ -1,7 +1,7 @@
 /* Workspace chrome adapts to the width of each panel as well as the viewport. */
 :root {
   /* Tokyo Night (night): https://github.com/folke/tokyonight.nvim */
-  --bg:#1a1b26; --bg-1:#16161e; --bg-2:#1f2335; --bg-3:#292e42;
+  --term-bg:#000; --bg:#1a1b26; --bg-1:#16161e; --bg-2:#1f2335; --bg-3:#292e42;
   --bg-selected:#283457; --border:#292e42; --border-strong:#414868;
   --fg:#c0caf5; --fg-dim:#a9b1d6; --fg-faint:#737aa2;
   --accent:#7aa2f7; --accent-dim:#283457; --status:#16161e;

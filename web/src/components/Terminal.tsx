@@ -27,11 +27,11 @@ function webglContexts(term: Terminal | null): WebGL2RenderingContext[] {
   return contexts;
 }
 
-// Tokyo Night (night), with soft bright colors to avoid fluorescent highlights.
+// Tokyo Night (night) colors on a pure black background, with soft bright colors to avoid fluorescent highlights.
 // Palette: https://github.com/folke/tokyonight.nvim
 const THEME = {
-  background: '#1a1b26', foreground: '#c0caf5',
-  cursor: '#c0caf5', cursorAccent: '#1a1b26',
+  background: '#000000', foreground: '#c0caf5',
+  cursor: '#c0caf5', cursorAccent: '#000000',
   selectionBackground: '#283457', selectionForeground: '#c0caf5',
   black: '#15161e', red: '#f7768e', green: '#9ece6a', yellow: '#e0af68',
   blue: '#7aa2f7', magenta: '#bb9af7', cyan: '#7dcfff', white: '#a9b1d6',

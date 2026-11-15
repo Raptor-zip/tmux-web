@@ -266,7 +266,8 @@ input {
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: 0;
-  background: var(--bg);
+  /* 端末の背景（真っ黒）と揃え、端末の周りの余白に色の縁が出ないようにする */
+  background: var(--term-bg, #000);
   overflow: hidden;
 }
 .tile.focused .tile-body {
