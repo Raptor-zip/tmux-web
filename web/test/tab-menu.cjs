@@ -66,8 +66,13 @@ module.exports = async function checkTabMenu(page, { scene, out, touch }) {
 
     // Shift+F10 でもタブメニュー
     await page.locator('.tile:visible .tab.active').focus();
+    const tabBox = await page.locator('.tile:visible .tab.active').boundingBox();
     await page.keyboard.press('Shift+F10');
     assert.equal(await menu.getAttribute('aria-label'), await activeName());
+    // キーの既定動作の contextmenu で、左上などへ開き直さない（タブの真下に出たまま）
+    await page.waitForTimeout(150);
+    const menuBox = await menu.boundingBox();
+    assert.ok(Math.abs(menuBox.y - (tabBox.y + tabBox.height)) <= 8, 'Shift+F10 opens the tab menu once, under the tab ' + JSON.stringify({ menuBox, tabBox }));
     await closeMenu();
   } else {
     // タブの長押し

@@ -188,11 +188,16 @@ export function TabStrip({
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  onContextMenu(tab.id, e.clientX, e.clientY);
+                  // Android は長押しでも contextmenu を出す。長押しの方は取り消して、二重に開かない
+                  longPress.cancel();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  onContextMenu(tab.id, e.clientX || r.left, e.clientY || r.bottom);
                 }}
                 onKeyDown={(e) => {
                   if (e.target !== e.currentTarget) return;
                   if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
+                    // 既定動作の contextmenu で、もう一度（位置を変えて）開かないよう止める
+                    e.preventDefault();
                     const r = e.currentTarget.getBoundingClientRect();
                     onContextMenu(tab.id, r.left, r.bottom);
                   } else if (e.key === 'Enter' || e.key === ' ') onActivate(tab.id);
