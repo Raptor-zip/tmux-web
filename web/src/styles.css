@@ -1922,6 +1922,24 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .sw-header .sw-input { flex: 1; min-width: 0; border-bottom: 0; }
 .sw-dismiss { flex: none; align-self: center; margin-right: 6px; }
 .sw-list { min-height: 0; overscroll-behavior-y: contain; }
+.sw-scopes { display: flex; flex: none; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.sw-scope { min-height: 28px; padding: 0 12px; background: transparent; border: 1px solid var(--border-strong); color: var(--fg-dim); font: inherit; font-size: 12px; cursor: pointer; }
+.sw-scope[aria-pressed="true"] { background: var(--accent-dim); border-color: var(--accent); color: var(--fg); }
+.sw-section { padding: 8px 8px 4px; font-family: var(--sans); font-size: 11px; color: var(--fg-dim); }
+.sw-command { font-family: var(--sans); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw-command.danger { color: var(--red); }
+.sw-row.disabled { cursor: default; opacity: .55; }
+.sw-hint { flex: none; font-family: var(--sans); font-size: 11px; color: var(--fg-faint); }
+.sw-foot-link { margin-left: auto; padding: 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.sw-foot-link:hover { color: var(--fg); }
+.shortcuts-modal { width: min(560px, calc(100vw - 24px)); }
+.shortcuts-modal[open] { display: flex; flex-direction: column; max-height: calc(var(--app-height, 100dvh) - 32px); overflow: hidden; }
+.shortcuts-note { margin: 0; padding: 10px 16px; color: var(--yellow); font-size: 12px; border-bottom: 1px solid var(--border); }
+.shortcuts-body { overflow: auto; min-height: 0; padding: 4px 8px 12px; }
+.shortcuts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.shortcuts-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.shortcuts-table td:last-child { text-align: right; white-space: nowrap; }
+.shortcuts-table tr.off { opacity: .5; }
 @media (max-width: 760px) {
   .editorbar { flex-direction: column; align-items: stretch; gap: 0; padding: 0 6px; }
   .crumbs { flex: none; height: 28px; }
@@ -1940,6 +1958,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
   .tab-picker { width: 74px; height: 44px; font-size: 16px; }
   .sw-input { font-size: 16px; }
   .sw-row { min-height: 52px; }
+  .sw-scope { min-height: 44px; flex: 1; font-size: 14px; }
   .sw-foot { display: none; }
   .switcher { max-height: min(80dvh, calc(var(--app-height, 100dvh) - 32px)); }
 }

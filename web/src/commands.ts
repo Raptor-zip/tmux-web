@@ -40,7 +40,13 @@ export interface AppContext {
   onOpenScreen(): void;
   /** リモートデスクトップをタブで開く（端末と並べて見る） */
   onOpenScreenTab(): void;
+  /** パレット（探す・操作）を開く */
   onOpenSwitcher(): void;
+  /** ショートカット一覧を開く */
+  onOpenShortcuts(): void;
+  /** sudo の承認待ちがあるか */
+  approvalPending: boolean;
+  onOpenApproval(): void;
   onSendCommand(): void;
   onPaste(): void;
   /** 前面がリモートデスクトップでも、そのデバイスの端末を新しく開ける */
@@ -241,8 +247,18 @@ export const COMMANDS: Command[] = [
 
   // ---- 移動・表示
   define({
-    id: 'navigate.switcher', scope: 'app', group: 'navigate', label: 'ウィンドウを切り替える…', hint: 'Alt+P',
+    id: 'navigate.switcher', scope: 'app', group: 'navigate', label: '探す・操作', hint: 'Alt+P',
+    aliases: ['ウィンドウを切り替える…', 'パレット', 'タブ・パネルの一覧'],
     run: c => c.onOpenSwitcher(),
+  }),
+  define({
+    id: 'navigate.shortcuts', scope: 'app', group: 'navigate', label: 'ショートカット一覧', hint: 'Alt+/',
+    aliases: ['キーボード', 'ヘルプ'],
+    run: c => c.onOpenShortcuts(),
+  }),
+  define({
+    id: 'navigate.approval', scope: 'app', group: 'navigate', label: '承認待ちを確認', aliases: ['sudo', '承認'],
+    when: c => c.approvalPending, run: c => c.onOpenApproval(),
   }),
 
   // ---- ペイン
@@ -521,4 +537,82 @@ export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext): Menu
   while (out.length && out[0] === SEP) out.shift();
   while (out.length && out[out.length - 1] === SEP) out.pop();
   return out;
+}
+
+/** パレットの『操作』に出す 1 行 */
+export interface PaletteCommand {
+  /** 操作の id。ファミリーの項目は `id:番号` */
+  key: string;
+  id: string;
+  label: string;
+  hint?: string;
+  group: CommandGroup;
+  /** 検索に使う語（label・menuLabel・aliases） */
+  words: string[];
+  disabledReason?: string;
+  danger?: boolean;
+  run(): void;
+}
+
+/**
+ * パレットの『操作』の一覧。文脈がある操作だけを、登録表の順に正式な名前（label）で並べる。
+ * when が false の操作は出さない。exclude の id は出さない（パレット自身を開く操作など）。
+ */
+export function paletteCommands(ctx: CommandContext, exclude: ReadonlySet<string> = new Set()): PaletteCommand[] {
+  const out: PaletteCommand[] = [];
+  for (const command of COMMANDS) {
+    if (exclude.has(command.id)) continue;
+    const section = ctx[command.scope];
+    if (!section || (command.when && !command.when(section))) continue;
+    const menuLabel = typeof command.menuLabel === 'function' ? command.menuLabel(section) : command.menuLabel;
+    const hint = typeof command.hint === 'function' ? command.hint(section) : command.hint;
+    const reason = command.disabledReason?.(section) ?? null;
+    out.push({
+      key: command.id,
+      id: command.id,
+      label: command.label,
+      hint,
+      group: command.group,
+      words: [command.label, menuLabel ?? '', ...(command.aliases ?? [])],
+      disabledReason: reason ?? undefined,
+      danger: command.danger,
+      run: () => command.run(section),
+    });
+  }
+  for (const fam of FAMILIES) {
+    if (exclude.has(fam.id)) continue;
+    const section = ctx[fam.scope];
+    if (!section) continue;
+    fam.items(section).forEach((item, i) => {
+      const label = fam.itemLabel(section, item);
+      const reason = fam.disabledReason?.(section, item) ?? null;
+      out.push({
+        key: `${fam.id}:${i}`,
+        id: fam.id,
+        label,
+        hint: fam.hint?.(section, item),
+        group: fam.group,
+        words: [label, ...(fam.aliases ?? [])],
+        disabledReason: reason ?? undefined,
+        danger: fam.danger,
+        run: () => fam.run(section, item),
+      });
+    });
+  }
+  return out;
+}
+
+/** 空白で区切った語がすべて、名前か別名のどれかに含まれるか（大文字小文字は区別しない） */
+export function matchesCommand(command: Pick<PaletteCommand, 'words' | 'hint'>, query: string): boolean {
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const text = [...command.words, command.hint ?? ''].join(' ').toLocaleLowerCase();
+  return terms.every(t => text.includes(t));
+}
+
+/** ショートカット一覧に載せる、キー表記を持つ操作（hint が文字列で、キーの形のもの） */
+export function commandShortcuts(): { label: string; keys: string }[] {
+  return COMMANDS
+    .filter(c => typeof c.hint === 'string' && /^(Alt|Ctrl|Shift)\+/.test(c.hint))
+    .map(c => ({ label: c.label, keys: c.hint as string }));
 }

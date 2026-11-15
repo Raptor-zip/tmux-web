@@ -171,7 +171,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^パネルを最大化 \/ 並びに戻す/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
-  if(scene.action==='switcher')await page.locator('.statusbar button[title="ウィンドウを切り替える (Alt+P)"]').click();
+  if(scene.action==='switcher')await page.locator('.statusbar button[title="探す・操作 (Alt+P)"]').click();
   if(checkSwitcher) await checkSwitcher();
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
@@ -245,10 +245,13 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(activeTerminals,1,'only the visible mobile panel attaches');
    const layout=await page.evaluate(()=>localStorage.getItem('tw.layout'));
    await page.getByRole('button',{name:'このパネルの2タブを一覧で見る',exact:true}).click();
-   await page.getByRole('textbox',{name:'タブを検索'}).fill('DGX Spark');
+   const palette=page.getByRole('dialog',{name:'探す・操作',exact:true});
+   assert.equal(await palette.getByRole('button',{name:'タブ',exact:true}).getAttribute('aria-pressed'),'true','the tab count opens the palette on its tab scope');
+   await palette.getByRole('combobox',{name:'探す・操作'}).fill('DGX Spark');
    await page.keyboard.press('Alt+Enter');
    await page.screenshot({path:join(out,'panel-overview.png'),animations:'disabled'});
-   await page.locator('.overview-tab').click();
+   assert.equal(await palette.locator('.sw-tab').count(),1,'tab search narrows to the DGX Spark tab');
+   await palette.locator('.sw-tab').click();
    await page.waitForTimeout(100);
    assert.equal(await page.locator('.tile:visible [role=tab][aria-selected=true]').getAttribute('data-tab-id'),'tab-spark-1');
    assert.equal(await page.locator('.tile:visible').count(),1);

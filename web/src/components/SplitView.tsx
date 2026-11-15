@@ -1,5 +1,4 @@
 import type { MenuEntry } from './ContextMenu';
-import { Modal } from './Modal';
 import { Icon } from './Icon';
 import type { Device } from '../devices';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -63,6 +62,8 @@ interface Props {
   statuses: Record<string, TerminalStatus>;
   focusMode: boolean;
   onToggleFocus(): void;
+  /** タブ数バッジとパネル ⋯ の『タブ・パネルの一覧』。パレットの『タブ』を開く */
+  onOverview(): void;
   focusedId: string | null;
   sessions: Session[];
   windows: TmuxWindow[];
@@ -128,6 +129,7 @@ export function SplitView({
   focusMode,
   statuses,
   onToggleFocus,
+  onOverview,
   focusedId,
   sessions,
   windows,
@@ -162,8 +164,6 @@ export function SplitView({
   const [forceSplit, setForceSplit] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [size, setSize] = useState({width: 0, height: 0});
-  const [overview, setOverview] = useState(false);
-  const [query, setQuery] = useState('');
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -177,15 +177,6 @@ export function SplitView({
   const autoFocus = size.width > 0 && (window.innerWidth <= 760 || tiles.some(t => size.width * t.rect.width / 100 < 280 || size.height * t.rect.height / 100 < 160));
   const single = closableTile && (focusMode || (!resizing && autoFocus && (!forceSplit || window.innerWidth <= 760)));
   const selectedId = tiles.some(t => t.leaf.id === focusedId) ? focusedId : tiles[0]?.leaf.id;
-  const openOverview = () => { setQuery(''); setOverview(true); };
-  /** 一覧の検索対象。画面タブは「リモートデスクトップ」「デスクトップ」でも引ける */
-  const searchText = (tab: TabRef) => {
-    const { view, device } = viewOf(tab);
-    const words = isScreenTab(tab)
-      ? ['リモートデスクトップ', 'デスクトップ', '画面', device?.name]
-      : [view?.project, view?.primary, tab.sessionName, device?.name];
-    return words.join(' ').toLocaleLowerCase();
-  };
 
   /** タブが映しているウィンドウ。windowId が null のタブはセッションのアクティブを見る */
   const viewOf = useCallback(
@@ -312,7 +303,7 @@ export function SplitView({
               workspaceMenu={focused ? workspaceMenu : undefined}
               leaf={leaf}
               desktopTabs={single ? tiles.flatMap(({ leaf }) => leaf.tabs.map(tab => ({ tab, leafId: leaf.id }))) : undefined}
-              onOverview={openOverview}
+              onOverview={() => { onFocus(leaf.id); onOverview(); }}
               onToggleFocus={() => {
                 onFocus(leaf.id);
                 if (single) {
@@ -426,21 +417,6 @@ export function SplitView({
         </div>
       )}
     </div>
-    {overview && <Modal title="タブ・パネル" className="panel-overview" onClose={()=>setOverview(false)}>
-      <div className="overview-search"><input aria-label="タブを検索" placeholder="プロジェクト・デバイス・作業名で検索" value={query} onChange={e=>setQuery(e.target.value)} /></div>
-      <div className="overview-list">
-      {tiles.map(({leaf},index) => {
-        const matches = leaf.tabs.filter(tab => searchText(tab).includes(query.toLocaleLowerCase()));
-        if (!matches.length) return null;
-        return <section key={leaf.id}><h3>パネル {index+1}{leaf.id===selectedId ? ' · 入力先' : ''}<span>{leaf.tabs.length} タブ</span></h3>
-          {matches.map(tab=>{const {view,device}=viewOf(tab);const screen=isScreenTab(tab);return <button key={tab.id} className="overview-tab" aria-current={tab.id===leaf.activeId && leaf.id===selectedId ? 'true' : undefined} onClick={()=>{onFocus(leaf.id);onActivateTab(tab.id);setOverview(false);}}>
-            <span className="overview-device">{device?.name || '接続先を確認中'}{device && !device.connected ? ' · 未接続' : ''}</span>
-            <strong>{screen ? 'リモートデスクトップ' : view?.project || tab.sessionName}</strong><span className="overview-task">{screen ? (device?.name || '画面') : view?.primary || tab.windowName || '端末'}</span><span className="overview-selected">{tab.id===leaf.activeId && leaf.id===selectedId ? '選択中' : '開く →'}</span>
-          </button>;})}</section>;
-      })}
-      {!tiles.some(({leaf})=>leaf.tabs.some(tab=>searchText(tab).includes(query.toLocaleLowerCase()))) && <p className="overview-empty">一致するタブがありません</p>}
-      </div>
-    </Modal>}
     </div>
   );
 }

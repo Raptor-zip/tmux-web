@@ -10,10 +10,10 @@ module.exports = async function prepareSwitcher(page, { state, scene }) {
   return async () => {
     const failures = [];
     const check = (condition, message) => { if (!condition) failures.push(message); };
-    const dialog = page.getByRole('dialog', { name: 'ウィンドウを切り替える', exact: true });
+    const dialog = page.getByRole('dialog', { name: '探す・操作', exact: true });
     const input = dialog.locator('.sw-input');
-    const trigger = page.locator('.statusbar button[title="ウィンドウを切り替える (Alt+P)"]');
-    const dismiss = () => dialog.getByRole('button', { name: 'ウィンドウ一覧を閉じる', exact: true });
+    const trigger = page.locator('.statusbar button[title="探す・操作 (Alt+P)"]');
+    const dismiss = () => dialog.getByRole('button', { name: '探す・操作を閉じる', exact: true });
     const open = async () => { await trigger.click(); await dialog.waitFor(); };
     await dialog.waitFor();
     check(await dialog.evaluate(node => node.contains(document.activeElement)), 'opening keeps focus inside the palette');
@@ -76,6 +76,38 @@ module.exports = async function prepareSwitcher(page, { state, scene }) {
     check((await dialog.locator('.sw-row .sub-rest').allTextContents()).every(text => text.includes('DGX Spark')), 'device search only returns the named device');
     await input.fill('');
     await page.waitForFunction(() => document.querySelectorAll('.switcher .sw-row').length === 24);
+    // Scopes: tabs of this workspace, then commands from the registry.
+    const scopeButton = name => dialog.getByRole('button', { name, exact: true });
+    await scopeButton('タブ').click();
+    check(await scopeButton('タブ').getAttribute('aria-pressed') === 'true', 'the tab scope can be selected');
+    await input.fill('');
+    await dialog.locator('.sw-tab').first().waitFor();
+    check(await dialog.locator('.sw-row:not(.sw-tab)').count() === 0, 'the tab scope lists only open tabs');
+    check((await dialog.locator('.sw-section').first().innerText()).startsWith('パネル「'), 'tab groups are named after the shown tab');
+    await scopeButton('操作').click();
+    await input.fill('キーバー');
+    await dialog.locator('.sw-cmd').first().waitFor();
+    check((await dialog.locator('.sw-row.on .sw-command').innerText()) === 'キーバーの表示を切り替える', 'command search matches menu labels');
+    const keybarBefore = await page.locator('.keybar').count();
+    await input.focus(); await page.keyboard.press('Enter');
+    check(!await dialog.isVisible(), 'running a command closes the palette');
+    await page.waitForFunction(n => document.querySelectorAll('.keybar').length !== n, keybarBefore);
+    // Alt+Shift+P opens the command scope directly; a leading > switches to it.
+    await page.keyboard.press('Alt+Shift+P');
+    await dialog.waitFor();
+    check(await scopeButton('操作').getAttribute('aria-pressed') === 'true', 'Alt+Shift+P opens the command scope');
+    await scopeButton('端末').click();
+    await input.fill('>キーバー');
+    check(await scopeButton('操作').getAttribute('aria-pressed') === 'true' && await input.inputValue() === 'キーバー', 'a leading > switches to commands');
+    await input.focus(); await page.keyboard.press('Enter');
+    await page.waitForFunction(n => document.querySelectorAll('.keybar').length === n, keybarBefore);
+    check(!await dialog.isVisible(), 'the toggled command runs again from the > prefix');
+    await page.keyboard.press('Alt+/');
+    const shortcuts = page.getByRole('dialog', { name: 'ショートカット一覧', exact: true });
+    await shortcuts.waitFor();
+    check(await shortcuts.getByText('Alt+Shift+P', { exact: true }).count() === 1, 'the shortcut list includes the palette keys');
+    await page.keyboard.press('Escape');
+    await shortcuts.waitFor({ state: 'hidden' });
     assert.deepEqual(failures, [], scene.name + ' keyboard and live state failures');
     console.log(scene.name + ': composition, focus, device search, scrolling, reordering and live removal passed');
   };

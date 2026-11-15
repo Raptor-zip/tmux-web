@@ -16,12 +16,13 @@ import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedPr
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { workspaceMenuItems, TAB_MENU, TERMINAL_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU } from './menus';
-import { buildMenu, type AppContext, type TabContext, type ViewContext } from './commands';
+import { buildMenu, paletteCommands, type AppContext, type TabContext, type ViewContext } from './commands';
 import { KeyBar } from './components/KeyBar';
 import { useSharedSetting } from './shared-setting';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, tabPayload, type DragPayload, type DropTarget } from './components/SplitView';
-import { Switcher, type SwitchItem } from './components/Switcher';
+import { Switcher, type PaletteScope, type PaletteTabGroup, type SwitchItem } from './components/Switcher';
+import { Shortcuts } from './components/Shortcuts';
 import { ContextMenu, type MenuEntry } from './components/ContextMenu';
 import type { TerminalStatus } from './components/Terminal';
 import { isTerminalHandle, type TabHandle } from './components/TerminalTabs';
@@ -183,7 +184,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
   const launchInFlight = useRef(false);
-  const [switcherOpen, setSwitcherOpen] = useState(false);
+  /** 開いているパレットのスコープ。null なら閉じている */
+  const [palette, setPalette] = useState<PaletteScope | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; leafId: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[] } | null>(null);
   const [drag, setDrag] = useState<DragPayload | null>(null);
@@ -1057,7 +1060,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     const onKey = (e: KeyboardEvent) => {
       // 設定でオフにしたときは何も奪わず、xterm に任せる（Alt+B などがそのまま ESC b として届く）
       if (!altKeys) return;
-      if (!active || e.shiftKey || projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
+      if (!active || projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
       const key = e.key.toLowerCase();
       const digit = e.code.startsWith('Digit')
         ? Number(e.code.slice(5))
@@ -1070,6 +1073,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       };
 
       if (document.querySelector('dialog[open], [role=menu], [aria-modal=true]')) return;
+      // Alt+Shift+P：パレットを『操作』で開く。ほかの Alt+Shift はワークスペース（Desktops.tsx）が受ける
+      if (e.shiftKey) {
+        if (e.code === 'KeyP') { stop(); setPalette('command'); }
+        return;
+      }
+      // Alt+/：ショートカット一覧。配列によって key が変わるので code も見る
+      if (e.code === 'Slash' || e.key === '/') { stop(); setShortcutsOpen(true); return; }
       if (key === 'enter') { stop(); setPanelFocus(v => !v); return; }
       if (digit >= 1 && digit <= 9) {
         const tab = focusedLeaf?.tabs[digit - 1];
@@ -1098,7 +1108,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         setSidebarOpen((v) => !v);
       } else if (key === 'p') {
         stop();
-        setSwitcherOpen((v) => !v);
+        setPalette((v) => (v ? null : 'terminal'));
       } else if (key === 't') {
         stop();
         newTerminal(focusedIdRef.current);
@@ -1142,7 +1152,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onOpenScreenTab: () => openScreen(activeDevice.id, focusedIdRef.current),
       canOpenTerminal: !!focusedDevice && sessions.some(s => deviceOf(s.id) === focusedDevice),
       onOpenFiles: () => activePane && setFilesPaneId(activePane.id),
-      onOpenSwitcher: () => setSwitcherOpen(true),
+      onOpenSwitcher: () => setPalette('terminal'),
+      onOpenShortcuts: () => setShortcutsOpen(true),
+      approvalPending: !!approval.pending,
+      onOpenApproval: () => setApprovalOpen(true),
       onSendCommand: () =>
         activePane &&
         setDialog({
@@ -1155,6 +1168,45 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         }),
       onPaste: pasteClipboard,
   };
+
+  /** パレットの『タブ』：このワークスペースのタブをパネル別に。パネルは表示中のタブ名で示す */
+  const paletteTabGroups = useMemo<PaletteTabGroup[]>(() => {
+    const describe = (tab: TabRef) => {
+      const device = devices.find(d => d.id === tabDevice(tab));
+      const deviceText = `${device?.name || '接続先を確認中'}${device && !device.connected ? ' · 未接続' : ''}`;
+      if (isScreenTab(tab)) {
+        return { title: 'リモートデスクトップ', task: device?.name || '画面', device: deviceText,
+          search: ['リモートデスクトップ', 'デスクトップ', '画面', device?.name].join(' ') };
+      }
+      const win = tab.windowId ? windows.find(w => w.id === tab.windowId) : windows.find(w => w.sessionId === tab.sessionId && w.active);
+      const view = win ? views.get(win.id) : undefined;
+      const title = view?.project || tab.sessionName || '端末';
+      const task = view?.primary || tab.windowName || '端末';
+      return { title, task, device: deviceText, search: [view?.project, view?.primary, tab.sessionName, device?.name].join(' ') };
+    };
+    return leaves.map(leaf => {
+      const tabsInLeaf = leaf.tabs.map(tab => ({ id: tab.id, active: tab.id === leaf.activeId, ...describe(tab) }));
+      return {
+        leafId: leaf.id,
+        name: tabsInLeaf.find(t => t.active)?.title ?? tabsInLeaf[0]?.title ?? '',
+        focused: leaf.id === (focusedLeaf?.id ?? leaves[0]?.id),
+        tabs: tabsInLeaf,
+      };
+    });
+  }, [leaves, focusedLeaf, devices, windows, views]);
+
+  /** パレットの『操作』。パレット自身を開く操作は出さない */
+  const paletteCommandList = () => paletteCommands({
+    app: appContext,
+    panel: { multiple: leaves.length >= 2, toggleFocus: () => setPanelFocus(v => !v) },
+    tab: focusedTab ? tabContext(focusedTab.id) : undefined,
+    view: { fontSize, lineHeight, setFontSize, setLineHeight, stepLineHeight: onLineHeightStep },
+    create: {
+      devices: devices.map(d => ({ id: d.id, name: d.name, connected: d.connected })),
+      newTerminal: (deviceId) => newTerminal(focusedIdRef.current, undefined, deviceId),
+      openScreen: (deviceId) => openScreen(deviceId, focusedIdRef.current),
+    },
+  }, new Set(['navigate.switcher']));
 
   /** 端末を右クリックしたときに出す項目。tmux の display-menu の代わり */
   const menuItems = (): MenuEntry[] => buildMenu(TERMINAL_MENU, {
@@ -1240,6 +1292,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                 statuses={termStatuses}
                 focusMode={panelFocus}
                 onToggleFocus={() => setPanelFocus(v => !v)}
+                onOverview={() => setPalette('tab')}
                 focusedId={focusedId}
                 devices={devices}
                 onOpenScreen={(leafId, deviceId) => openScreen(deviceId, leafId)}
@@ -1340,8 +1393,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         <span className="sb-right">
           <button
             className="sb-item"
-            title="ウィンドウを切り替える (Alt+P)"
-            onClick={() => setSwitcherOpen(true)}
+            title="探す・操作 (Alt+P)"
+            onClick={() => setPalette('terminal')}
           >
             {tabs.length} タブ{leaves.length > 1 && ` / ${leaves.length} 分割`}
           </button>
@@ -1377,13 +1430,21 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}
       {screenOpen && <ScreenViewer devices={devices} deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)}
         onOpenAsTab={(deviceId) => { setScreenOpen(null); openScreen(deviceId, focusedIdRef.current); }} />}
-      {switcherOpen && (
+      {palette && (
         <Switcher
+          initialScope={palette}
           items={switchItems}
+          tabGroups={paletteTabGroups}
+          commands={paletteCommandList()}
+          approval={approval.pending ? { cmd: approval.pending.cmd } : null}
           onPick={openWindow}
-          onClose={() => setSwitcherOpen(false)}
+          onPickTab={(leafId, tabId) => { setFocusedId(leafId); activate(tabId); }}
+          onApproval={() => setApprovalOpen(true)}
+          onShortcuts={() => setShortcutsOpen(true)}
+          onClose={() => setPalette(null)}
         />
       )}
+      {shortcutsOpen && <Shortcuts altKeys={altKeys} onClose={() => setShortcutsOpen(false)} />}
 
 
       {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}

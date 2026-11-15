@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMenu, COMMANDS, FAMILIES, findCommand, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
+import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
 import { DESKTOP_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU, MENUS, NEW_MENU, TAB_MENU, TERMINAL_MENU, WORKSPACE_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
@@ -36,14 +36,14 @@ const app = (over: Partial<AppContext> = {}): AppContext => ({
   session: null, window: null, activePane: null, mode: 'mirror', showStatusBar: false, showKeyBar: false, altKeys: true,
   onAction() {}, onNewTab() {}, onLaunchAgent() {}, launchingAgent: null, onSplitNewWindow() {}, onToggle() {},
   onCopyPane() {}, onKillPane() {}, onOpenFiles() {}, onRemoteControl() {}, onExitClaude() {}, onOpenScreen() {}, onOpenScreenTab() {},
-  onOpenSwitcher() {}, onSendCommand() {}, onPaste() {}, ...over,
+  onOpenSwitcher() {}, onOpenShortcuts() {}, approvalPending: false, onOpenApproval() {}, onSendCommand() {}, onPaste() {}, ...over,
 });
 
 const labels = (ctx: CommandContext) => buildMenu(WORKSPACE_MENU, ctx).map(e => (e ? e.label : '---'));
 
 test('workspace menu keeps its order and labels', () => {
   assert.deepEqual(labels({ app: app() }), [
-    '新しい端末をタブで開く', '新しい端末を右に並べる', '新しい端末を下に並べる', 'ウィンドウを切り替える…', '---',
+    '新しい端末をタブで開く', '新しい端末を右に並べる', '新しい端末を下に並べる', '探す・操作', '---',
     'Claude を新しいタブで起動', 'Codex を新しいタブで起動', '---',
     '作業フォルダーを開く', 'コマンドを送る…', '全文をコピー（履歴込み）', 'ペインを拡大（tmux）', 'ペインを終了…', '---',
     'リモートデスクトップをタブで開く', 'リモートデスクトップをダイアログで開く', 'キーバーを表示', 'tmux のステータス行を表示', '直接接続に切り替える',
@@ -159,4 +159,31 @@ test('renamed commands keep their old names as search aliases', () => {
   // 同じ処理だった 2 つのコピーは 1 つにまとめた
   assert.equal(findCommand('pane.copyText'), undefined);
   assert.equal(findCommand('pane.copyScreen'), undefined);
+});
+
+test('palette commands search labels and aliases and run with their context', () => {
+  const calls: string[] = [];
+  const list = paletteCommands({ app: app({ onNewTab: () => calls.push('new'), onOpenSwitcher: () => calls.push('palette') }) }, new Set(['navigate.switcher']));
+  assert.ok(!list.some(c => c.id === 'navigate.switcher'), 'excluded commands are left out');
+  assert.ok(!list.some(c => c.id === 'tab.close'), 'commands without their context are left out');
+  assert.ok(!list.some(c => c.id === 'navigate.approval'), 'approval appears only while one is pending');
+  const find = (q: string) => list.filter(c => matchesCommand(c, q)).map(c => c.label);
+  assert.ok(find('本文をコピー').includes('全文をコピー（履歴込み）'), 'old names find the renamed command');
+  assert.ok(find('キーバー').includes('キーバーの表示を切り替える'), 'menu labels are searchable');
+  assert.ok(find('新しい 端末 タブ').includes('新しい端末をタブで開く'), 'every word must match');
+  assert.deepEqual(find('no-such-command'), []);
+  list.find(c => c.id === 'terminal.newTab')!.run();
+  assert.deepEqual(calls, ['new']);
+  const split = list.find(c => c.id === 'terminal.splitRight')!;
+  assert.ok(split.disabledReason, 'disabled commands carry their reason');
+  const pending = paletteCommands({ app: app({ approvalPending: true }) });
+  assert.ok(pending.some(c => c.label === '承認待ちを確認'));
+  const devices = paletteCommands({ create: { devices: [{ id: 'a', name: 'A', connected: true }, { id: 'b', name: 'B', connected: false }], newTerminal() {}, openScreen() {} } });
+  assert.deepEqual(devices.filter(c => c.id === 'create.terminalOnDevice').map(c => [c.label, !!c.disabledReason]), [['A で端末を開く', false], ['B で端末を開く', true]]);
+});
+
+test('shortcut list is generated from command hints', () => {
+  const keys = commandShortcuts().map(s => s.keys);
+  for (const k of ['Alt+T', 'Alt+W', 'Alt+P', 'Alt+/', 'Alt+Enter']) assert.ok(keys.includes(k), `${k} is listed`);
+  assert.ok(!keys.includes('6px'), 'non-key hints are not shortcuts');
 });
