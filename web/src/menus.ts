@@ -29,6 +29,7 @@ export const WORKSPACE_MENU: readonly MenuSlot[] = [
   'view.keyBar',
   'view.statusBar',
   'view.mode',
+  'view.altKeys',
 ];
 
 /**

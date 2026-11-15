@@ -21,6 +21,8 @@ export interface AppContext {
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
   showKeyBar: boolean;
+  /** Alt のショートカットをアプリで受けるか（tw.altKeys）。オフなら Alt キーは端末へそのまま届く */
+  altKeys: boolean;
   onAction(action: string, params: Record<string, unknown>): void;
   /** 新しいウィンドウを作って、いまのタイルにタブで足す */
   onNewTab(): void;
@@ -28,11 +30,13 @@ export interface AppContext {
   launchingAgent: 'claude' | 'codex' | null;
   /** 新しいウィンドウを作って、その向きに並べる */
   onSplitNewWindow(side: 'right' | 'bottom'): void;
-  onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar'): void;
+  onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar' | 'altKeys'): void;
   onCopyPane(): void;
   onKillPane(): void;
   onOpenFiles(): void;
   onRemoteControl(): void;
+  /** 入力先の Claude に /exit を送る（確認してから） */
+  onExitClaude(): void;
   onOpenScreen(): void;
   /** リモートデスクトップをタブで開く（端末と並べて見る） */
   onOpenScreenTab(): void;
@@ -229,10 +233,10 @@ export const COMMANDS: Command[] = [
     when: isClaude, run: c => c.onRemoteControl(),
   }),
   define({
-    id: 'agent.exitClaude', scope: 'app', group: 'agent', label: 'Claude を終了する', danger: true,
+    id: 'agent.exitClaude', scope: 'app', group: 'agent', label: 'Claude を終了…', aliases: ['Claude を終了する', '/exit'], danger: true,
     when: isClaude,
     disabledReason: c => (c.activePane?.busy ? 'Claude が作業中です' : null),
-    run: c => c.activePane && c.onAction('runCommand', { target: c.activePane.id, command: '/exit' }),
+    run: c => c.onExitClaude(),
   }),
 
   // ---- 移動・表示
@@ -312,6 +316,13 @@ export const COMMANDS: Command[] = [
     id: 'view.mode', scope: 'app', group: 'view', label: '接続方式を切り替える',
     menuLabel: c => (c.mode === 'mirror' ? '直接接続に切り替える' : 'ミラー接続に切り替える'),
     run: c => c.onToggle('mode'),
+  }),
+  define({
+    // 設定ダイアログ（ステップ10）ができるまでの仮置き。ワークスペースメニューの末尾に出す
+    id: 'view.altKeys', scope: 'app', group: 'view', label: 'Alt ショートカットを使う',
+    aliases: ['Alt キー', 'ショートカットを無効にする'],
+    hint: c => (c.altKeys ? 'オン' : 'オフ'),
+    run: c => c.onToggle('altKeys'),
   }),
 
   // ---- タブ

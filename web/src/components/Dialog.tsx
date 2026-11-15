@@ -21,12 +21,16 @@ export function Dialog({ spec, onClose }: { spec: DialogSpec; onClose(): void })
   const [value, setValue] = useState(spec.defaultValue ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    // 開いた直後に操作できるようフォーカスを移す
-    (spec.kind === 'prompt' ? inputRef.current : confirmRef.current)?.focus();
+    // 開いた直後に操作できるようフォーカスを移す。
+    // 取り返しのつかない確認（danger）はキャンセルに置き、Enter の押しっぱなしや
+    // 続けざまのキー入力でそのまま実行されないようにする。
+    const target = spec.kind === 'prompt' ? inputRef.current : spec.danger ? cancelRef.current : confirmRef.current;
+    target?.focus();
     inputRef.current?.select();
-  }, [spec.kind]);
+  }, [spec.kind, spec.danger]);
 
   const submit = () => {
     onClose();
@@ -53,7 +57,7 @@ export function Dialog({ spec, onClose }: { spec: DialogSpec; onClose(): void })
         )}
 
         <div className="dialog-actions">
-          <button className="btn" onClick={onClose}>
+          <button ref={cancelRef} className="btn" onClick={onClose}>
             キャンセル
           </button>
           <button

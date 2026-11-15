@@ -33,9 +33,9 @@ test('every menu slot names a registered command', () => {
 });
 
 const app = (over: Partial<AppContext> = {}): AppContext => ({
-  session: null, window: null, activePane: null, mode: 'mirror', showStatusBar: false, showKeyBar: false,
+  session: null, window: null, activePane: null, mode: 'mirror', showStatusBar: false, showKeyBar: false, altKeys: true,
   onAction() {}, onNewTab() {}, onLaunchAgent() {}, launchingAgent: null, onSplitNewWindow() {}, onToggle() {},
-  onCopyPane() {}, onKillPane() {}, onOpenFiles() {}, onRemoteControl() {}, onOpenScreen() {}, onOpenScreenTab() {},
+  onCopyPane() {}, onKillPane() {}, onOpenFiles() {}, onRemoteControl() {}, onExitClaude() {}, onOpenScreen() {}, onOpenScreenTab() {},
   onOpenSwitcher() {}, onSendCommand() {}, onPaste() {}, ...over,
 });
 
@@ -47,6 +47,7 @@ test('workspace menu keeps its order and labels', () => {
     'Claude を新しいタブで起動', 'Codex を新しいタブで起動', '---',
     '作業フォルダーのファイルを見る', 'コマンドを送る…', '本文をコピー', 'ペインを全画面 / 元に戻す', 'ペインを閉じる…', '---',
     'リモートデスクトップをタブで開く', 'リモートデスクトップをダイアログで開く', 'キーバーを表示', 'tmux のステータス行を表示', '直接接続に切り替える',
+    'Alt ショートカットを使う',
   ]);
   const first = buildMenu(WORKSPACE_MENU, { app: app() })[0] as MenuItem;
   assert.equal(first.hint, 'Alt+T');
@@ -59,8 +60,22 @@ test('menu items run the registered action with their context', () => {
   const calls: string[] = [];
   const items = buildMenu(WORKSPACE_MENU, { app: app({ onNewTab: () => calls.push('new'), onToggle: k => calls.push(k) }) });
   (items[0] as MenuItem).run();
+  (items.find(e => e?.label === '直接接続に切り替える') as MenuItem).run();
   (items.at(-1) as MenuItem).run();
-  assert.deepEqual(calls, ['new', 'mode']);
+  assert.deepEqual(calls, ['new', 'mode', 'altKeys']);
+});
+
+test('Alt shortcut toggle shows its state and Claude exit asks before sending /exit', () => {
+  const alt = (on: boolean) => buildMenu(WORKSPACE_MENU, { app: app({ altKeys: on }) }).at(-1) as MenuItem;
+  assert.equal(alt(true).hint, 'オン');
+  assert.equal(alt(false).hint, 'オフ');
+  const sent: unknown[] = [];
+  const claude = { id: '%1', busy: false, proc: { agent: 'Claude' } } as unknown as AppContext['activePane'];
+  const items = buildMenu(WORKSPACE_MENU, { app: app({ activePane: claude, onAction: (_a, p) => sent.push(p), onExitClaude: () => sent.push('confirm') }) });
+  const exit = items.find(e => e?.label === 'Claude を終了…') as MenuItem;
+  assert.equal(exit.danger, true);
+  exit.run();
+  assert.deepEqual(sent, ['confirm'], 'the menu only opens the confirmation; /exit is sent after it');
 });
 
 const tab = (over: Partial<TabContext> = {}): TabContext => ({

@@ -5,6 +5,7 @@ import { DESKTOP_SETTINGS_KEY, desktopPresets, loadDesktopSettings, type Desktop
 import { claimScreen, joinScreen, ownsScreen, releaseScreen, screenOwner, type ScreenLeaseEntry } from '../screen-lease';
 import type { LosslessRFB } from '../vendor/lossless-rfb';
 import { Icon } from './Icon';
+import { Dialog } from './Dialog';
 
 /** 隠れてからこの時間が経ったら切断する。すぐ戻ってきたときは繋いだまま見せる */
 export const SCREEN_IDLE_MS = 30_000;
@@ -56,6 +57,8 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   const selectedIdRef = useRef(selectedDeviceId);
   selectedIdRef.current = selectedDeviceId;
   const [attempt, setAttempt] = useState(0);
+  /** Ctrl+Alt+Del はロック画面やタスクマネージャーを出すので、送る前に確認する */
+  const [confirmCad, setConfirmCad] = useState(false);
   const [connected, setConnected] = useState(false);
   const [message, setMessage] = useState('デスクトップに接続中…');
   const [error, setError] = useState('');
@@ -413,7 +416,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         <span>{viewOnly ? '見るだけ：マウス・キー操作は送信しません' : '画面をクリックするとマウス・キーボードで操作できます'}</span>
         <div role="group" aria-label="リモートへキーを送信">
           <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendKey(ESCAPE, 'Escape'); client.current?.focus(); }}>Esc を送る</button>
-          <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendCtrlAltDel(); client.current?.focus(); }}>Ctrl+Alt+Del を送る</button>
+          <button className="btn" disabled={!connected || viewOnly} onClick={() => setConfirmCad(true)}>Ctrl+Alt+Del を送る…</button>
         </div>
       </div>
       <button className="btn" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />再接続</button>
@@ -474,6 +477,18 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
           </>}
       </div></div>}
     </div>
+    {confirmCad && <Dialog spec={{
+      kind: 'confirm',
+      title: `${selectedName} に Ctrl+Alt+Del を送りますか？`,
+      detail: '接続先でセキュリティ画面（ロック・サインアウト・タスクマネージャー）が開きます。',
+      confirmLabel: '送る',
+      danger: true,
+      onSubmit: () => {
+        client.current?.sendCtrlAltDel();
+        // 確認ダイアログが閉じてフォーカスを戻したあとで、画面へ移す
+        setTimeout(() => client.current?.focus(), 0);
+      },
+    }} onClose={() => setConfirmCad(false)} />}
     {notice && <div className="desktop-notification"><p className="desktop-notice" role="status">{notice}</p></div>}
   </div>;
 

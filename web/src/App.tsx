@@ -96,6 +96,56 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
   return [value, setValue] as const;
 }
 
+/**
+ * 全ワークスペース（App が複数並ぶ）で同じ値を見る設定。
+ * usePersisted は各 App が自分の値を持つので、あるワークスペースで切り替えても、
+ * 別のワークスペースへ移ると古い値のままになる。キーの横取りのように、どこで切り替えても
+ * すぐ効いてほしい設定はこちらを使い、変わったことを他の App とほかのタブへ知らせる。
+ */
+const SETTING_EVENT = 'tw-setting';
+/** この画面での最新値。localStorage に書けない環境（プライベートモードなど）でも App 同士で揃える */
+const settingMemory = new Map<string, boolean>();
+function useSharedSetting(key: string, initial: boolean) {
+  const read = useCallback(() => {
+    const kept = settingMemory.get(key);
+    if (kept !== undefined) return kept;
+    try {
+      const raw = localStorage.getItem(key);
+      return raw === null ? initial : JSON.parse(raw) === true;
+    } catch {
+      return initial;
+    }
+  }, [key, initial]);
+  const [value, setValue] = useState(read);
+  useEffect(() => {
+    const sync = (e: Event) => {
+      if (e instanceof StorageEvent) {
+        if (e.key !== key) return;
+        settingMemory.delete(key); // ほかのタブで変わった。保存された値を読み直す
+      } else if ((e as CustomEvent<string>).detail !== key) return;
+      setValue(read());
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener(SETTING_EVENT, sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener(SETTING_EVENT, sync);
+    };
+  }, [key, read]);
+  const update = useCallback((next: (v: boolean) => boolean) => {
+    const v = next(read());
+    settingMemory.set(key, v);
+    try {
+      localStorage.setItem(key, JSON.stringify(v));
+    } catch {
+      /* 保存できなくても、この画面の中では切り替える */
+    }
+    setValue(v);
+    window.dispatchEvent(new CustomEvent(SETTING_EVENT, { detail: key }));
+  }, [key, read]);
+  return [value, update] as const;
+}
+
 export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
   desktopLayouts: DesktopLayoutRegistry;
@@ -134,6 +184,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const [mode, setMode] = usePersisted<'mirror' | 'direct'>('tw.mode', 'mirror');
   const [showStatusBar, setShowStatusBar] = usePersisted('tw.statusBar', false);
   const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar.v2', false);
+  /** Alt のショートカットをアプリで受けるか。オフなら Alt キーはすべて端末（readline や TUI）へ届く */
+  const [altKeys, setAltKeys] = useSharedSetting('tw.altKeys', true);
   // 一覧はプロジェクト（作業ディレクトリのリポジトリ）単位を既定にする。
   // 1 つのディレクトリに 1 つのエージェント、という使い方に一覧の形を合わせる
   const [groupBy, setGroupBy] = usePersisted<GroupBy>('tw.groupBy', 'project');
@@ -997,12 +1049,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   );
 
   const onToggle = useCallback(
-    (key: 'mode' | 'showStatusBar' | 'showKeyBar') => {
+    (key: 'mode' | 'showStatusBar' | 'showKeyBar' | 'altKeys') => {
       if (key === 'mode') setMode((m) => (m === 'mirror' ? 'direct' : 'mirror'));
       if (key === 'showStatusBar') setShowStatusBar((v) => !v);
       if (key === 'showKeyBar') setShowKeyBar((v) => !v);
+      if (key === 'altKeys') setAltKeys((v) => !v);
     },
-    [setMode, setShowStatusBar, setShowKeyBar],
+    [setMode, setShowStatusBar, setShowKeyBar, setAltKeys],
   );
 
   // ------------------------------------------------------------ 切り替え
@@ -1049,6 +1102,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 設定でオフにしたときは何も奪わず、xterm に任せる（Alt+B などがそのまま ESC b として届く）
+      if (!altKeys) return;
       if (!active || e.shiftKey || projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
       const key = e.key.toLowerCase();
       const digit = e.code.startsWith('Digit')
@@ -1101,7 +1156,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
+  }, [altKeys, active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
   const appContext: AppContext = {
       session: currentSession,
@@ -1110,6 +1165,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       mode: mode,
       showStatusBar: showStatusBar,
       showKeyBar: showKeyBar,
+      altKeys: altKeys,
       onAction: doAction,
       onNewTab: () => newTerminal(focusedIdRef.current),
       onLaunchAgent: launchAgent,
@@ -1119,6 +1175,16 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onCopyPane: copyPane,
       onKillPane: killPane,
       onRemoteControl: () => activePane && setRemotePane(activePane.id),
+      onExitClaude: () => {
+        const pane = activePane;
+        if (!pane) return;
+        confirmThen(
+          'Claude を終了しますか？',
+          `${pane.path} で動いている Claude に /exit を送ります。会話は終わり、端末はシェルに戻ります。`,
+          () => doAction('runCommand', { target: pane.id, command: '/exit' }),
+          { confirmLabel: '終了する' },
+        );
+      },
       onOpenScreen: () => setScreenOpen(activeDevice.id),
       onOpenScreenTab: () => openScreen(activeDevice.id, focusedIdRef.current),
       canOpenTerminal: !!focusedDevice && sessions.some(s => deviceOf(s.id) === focusedDevice),

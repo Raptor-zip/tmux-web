@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scoped, deviceOf, routeAction, scopeState } from '../src/devices';
+import { scoped, deviceOf, routeAction, scopeState, removalConfirm } from '../src/devices';
 import { allTabs, makeLeaf, makeTab, addTab, remapByName, pruneStale } from '../src/layout';
 import type { TmuxState } from '../src/types';
 
@@ -30,4 +30,12 @@ test('same-named sessions remap within their device and disconnected devices kee
   assert.equal(allTabs(preserved)[1].tab.windowId, 'spark~@1');
   assert.equal(allTabs(pruneStale(tree, new Set(['$1']), offline)!).length, 2);
   assert.equal(allTabs(pruneStale(tree, new Set(['$1']))!).length, 1);
+});
+
+test('removing a device asks first, names the device and is marked destructive', () => {
+  const spec = removalConfirm({ name: 'ThinkPad' });
+  assert.match(spec.title, /「ThinkPad」の登録を解除しますか/);
+  assert.equal(spec.danger, true);
+  assert.equal(spec.confirmLabel, '登録を解除');
+  assert.match(spec.detail, /tmux と実行中の処理はそのまま残り/);
 });

@@ -10,6 +10,19 @@ export interface Device {
   server?: TmuxState['server'];
   serverPid?: number | null;
 }
+/**
+ * 「登録を解除」の確認文。押した直後に消さず、何が残って何が見えなくなるかを伝えてから実行する。
+ * 取り返しのつかない操作として扱い、確認ダイアログの最初のフォーカスはキャンセルに置く。
+ */
+export function removalConfirm(device: Pick<Device, 'name'>): { title: string; detail: string; confirmLabel: string; danger: true } {
+  return {
+    title: `「${device.name}」の登録を解除しますか？`,
+    detail: 'このデバイスの端末とリモートデスクトップは、この画面から開けなくなります。デバイス側の tmux と実行中の処理はそのまま残り、もう一度登録すれば戻せます。',
+    confirmLabel: '登録を解除',
+    danger: true,
+  };
+}
+
 export const deviceOf = (id?: string | null): string => id?.includes('~') ? id.split('~')[0] : 'local';
 export const unscoped = (id: string): string => id.includes('~') ? id.slice(id.indexOf('~') + 1) : id;
 export const scoped = (device: string, id: string): string => device === 'local' ? id : `${device}~${id}`;
