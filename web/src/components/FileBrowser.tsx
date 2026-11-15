@@ -227,7 +227,7 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
               <select aria-label="並び順" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
                 <option value="recent">更新順</option><option value="name">名前順</option>
               </select>
-              <button className="btn" disabled={loading || busy} onClick={() => { reloadSelected.current = true; setRevision((v) => v + 1); }}>更新</button>
+              <button className="btn" disabled={loading || busy} onClick={() => { reloadSelected.current = true; setRevision((v) => v + 1); }}>再読み込み</button>
             </div>
             <div className="file-list" aria-busy={loading}>
               {loading && <p role="status">読み込み中…</p>}

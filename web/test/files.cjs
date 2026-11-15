@@ -63,7 +63,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
     await page.screenshot({ path: join(out, `${scene.name}-upload.png`), animations: 'disabled' });
     if (phase === 'after') {
       for (const breadcrumb of await dialog.locator('.file-breadcrumbs button').all()) assert.equal(await breadcrumb.isDisabled(), true, 'every breadcrumb is locked during upload');
-      assert.equal(await dialog.getByRole('button', { name: '更新', exact: true }).isDisabled(), true);
+      assert.equal(await dialog.getByRole('button', { name: '再読み込み', exact: true }).isDisabled(), true);
       await dialog.getByRole('button', { name: '送信を中止', exact: true }).click();
       await dialog.getByRole('status').filter({ hasText: '送信を中止しました' }).waitFor();
       holdUpload = false; releaseUpload();
@@ -94,11 +94,11 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
         assert.equal(ticket, stableTicket, 'background list updates preserve an unchanged preview');
         saved.splice(saved.findIndex(item => item.name === 'background.txt'), 1);
         removeImage = true;
-        await dialog.getByRole('button', { name: '更新', exact: true }).click();
+        await dialog.getByRole('button', { name: '再読み込み', exact: true }).click();
         await dialog.locator('.file-empty').waitFor();
         assert.equal(await dialog.getByRole('link', { name: 'ダウンロード', exact: true }).count(), 0, 'deleted files lose their stale preview link');
         removeImage = false;
-        await dialog.getByRole('button', { name: '更新', exact: true }).click();
+        await dialog.getByRole('button', { name: '再読み込み', exact: true }).click();
         await row('preview.png').waitFor();
         await dialog.getByRole('button', { name: '閉じる', exact: true }).click();
         await openBrowser();
@@ -117,7 +117,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
       await page.screenshot({ path: join(out, `${scene.name}-text.png`), animations: 'disabled' });
       if (scene.width > 760) {
         root = '/home/demo/projects/other';
-        await dialog.getByRole('button', { name: '更新', exact: true }).click();
+        await dialog.getByRole('button', { name: '再読み込み', exact: true }).click();
         await dialog.locator('.file-empty').waitFor();
         assert.equal(await dialog.locator('.file-root').textContent(), root, 'project changes discard the previous project preview');
         root = initialRoot;
