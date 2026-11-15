@@ -43,7 +43,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
   });
   const openBrowser = async () => {
     await page.locator('.tile.focused').getByRole('button', { name: 'パネルの操作', exact: true }).click();
-    await page.getByRole('menuitem', { name: '作業フォルダーのファイルを見る', exact: true }).click();
+    await page.getByRole('menuitem', { name: '作業フォルダーを開く', exact: true }).click();
     await page.locator('.file-row').first().waitFor();
   };
   const dialog = page.getByRole('dialog', { name: 'ファイル一覧とプレビュー' });
@@ -121,7 +121,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
         await dialog.locator('.file-empty').waitFor();
         assert.equal(await dialog.locator('.file-root').textContent(), root, 'project changes discard the previous project preview');
         root = initialRoot;
-        await dialog.getByRole('button', { name: 'ルート', exact: true }).click();
+        await dialog.getByRole('button', { name: '作業フォルダー', exact: true }).click();
         await row('notes.txt').click(); await dialog.locator('.file-text').waitFor();
       }
       const contained = await page.evaluate(() => { document.querySelector('.tile.focused .xterm-helper-textarea')?.focus(); return !!document.activeElement?.closest('.file-browser'); });

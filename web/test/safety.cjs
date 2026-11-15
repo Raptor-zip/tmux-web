@@ -69,7 +69,7 @@ module.exports = async (page, { scene, terminalInputs, requests }) => {
 
   // Destructive confirmations start on Cancel, so Enter does not run them
   await openMenu();
-  await page.getByRole('menuitem', { name: /^ペインを閉じる…/ }).click();
+  await page.getByRole('menuitem', { name: /^ペインを終了…/ }).click();
   const dialog = page.locator('dialog[open].prompt-dialog');
   await dialog.waitFor();
   assert.equal(await focusedText(page), 'キャンセル', 'danger confirmation focuses Cancel first');

@@ -247,7 +247,8 @@ export const COMMANDS: Command[] = [
 
   // ---- ペイン
   define({
-    id: 'pane.files', scope: 'app', group: 'pane', label: '作業フォルダーのファイルを見る',
+    id: 'pane.files', scope: 'app', group: 'pane', label: '作業フォルダーを開く',
+    aliases: ['作業フォルダーのファイルを見る', 'ファイル'],
     disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onOpenFiles(),
   }),
   define({
@@ -255,11 +256,8 @@ export const COMMANDS: Command[] = [
     disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onSendCommand(),
   }),
   define({
-    id: 'pane.copyText', scope: 'app', group: 'clipboard', label: '本文をコピー',
-    disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onCopyPane(),
-  }),
-  define({
-    id: 'pane.copyScreen', scope: 'app', group: 'clipboard', label: '画面全体をコピー', hint: 'スクロールバック込み',
+    id: 'pane.copyAll', scope: 'app', group: 'clipboard', label: '全文をコピー（履歴込み）',
+    aliases: ['本文をコピー', '画面全体をコピー', 'スクロールバック込み'],
     disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onCopyPane(),
   }),
   define({
@@ -267,18 +265,19 @@ export const COMMANDS: Command[] = [
     run: c => c.onPaste(),
   }),
   define({
-    id: 'pane.zoom', scope: 'app', group: 'pane', label: 'ペインを全画面 / 元に戻す',
+    id: 'pane.zoom', scope: 'app', group: 'pane', label: 'ペインを拡大（tmux）',
+    aliases: ['ペインを全画面 / 元に戻す', 'ズーム'],
     disabledReason: c => (c.activePane ? null : NO_PANE),
     run: c => c.activePane && c.onAction('zoomPane', { target: c.activePane.id }),
   }),
   define({
-    id: 'pane.kill', scope: 'app', group: 'pane', label: 'ペインを閉じる…', danger: true,
+    id: 'pane.kill', scope: 'app', group: 'pane', label: 'ペインを終了…', aliases: ['ペインを閉じる…'], danger: true,
     disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onKillPane(),
   }),
 
   // ---- 選択
   define({
-    id: 'selection.copy', scope: 'selection', group: 'clipboard', label: '選択部分をコピー',
+    id: 'selection.copy', scope: 'selection', group: 'clipboard', label: '選択をコピー', aliases: ['選択部分をコピー'],
     hint: c => `${c.text.split('\n').length} 行`,
     when: c => !!c.text, run: c => c.copy(),
   }),
@@ -327,11 +326,11 @@ export const COMMANDS: Command[] = [
 
   // ---- タブ
   define({
-    id: 'tab.moveLeft', scope: 'tab', group: 'tab', label: '左へ移動',
+    id: 'tab.moveLeft', scope: 'tab', group: 'tab', label: '左へ移す', aliases: ['左へ移動'],
     disabledReason: c => (c.index === 0 ? '先頭のタブです' : null), run: c => c.moveLeft(),
   }),
   define({
-    id: 'tab.moveRight', scope: 'tab', group: 'tab', label: '右へ移動',
+    id: 'tab.moveRight', scope: 'tab', group: 'tab', label: '右へ移す', aliases: ['右へ移動'],
     disabledReason: c => (c.index === c.count - 1 ? '末尾のタブです' : null), run: c => c.moveRight(),
   }),
   define({
@@ -349,27 +348,29 @@ export const COMMANDS: Command[] = [
     disabledReason: c => (c.right === 0 ? '右側にタブがありません' : null), run: c => c.closeRight(),
   }),
   define({
-    id: 'tab.splitRight', scope: 'tab', group: 'tab', label: '右に切り出す', hint: '並べて見る',
+    id: 'tab.splitRight', scope: 'tab', group: 'tab', label: '右に分割して移す', aliases: ['右に切り出す'], hint: '並べて見る',
     disabledReason: c => (c.count < 2 ? 'パネルのタブが1つのときは使えません' : null), run: c => c.split('right'),
   }),
   define({
-    id: 'tab.splitBottom', scope: 'tab', group: 'tab', label: '下に切り出す', hint: '並べて見る',
+    id: 'tab.splitBottom', scope: 'tab', group: 'tab', label: '下に分割して移す', aliases: ['下に切り出す'], hint: '並べて見る',
     disabledReason: c => (c.count < 2 ? 'パネルのタブが1つのときは使えません' : null), run: c => c.split('bottom'),
   }),
 
-  // ---- tmux のウィンドウ
+  // ---- tmux のウィンドウ（画面上は「端末」と呼ぶ）
   define({
-    id: 'window.rename', scope: 'tab', group: 'window', label: 'ウィンドウ名を変更…',
+    id: 'window.rename', scope: 'tab', group: 'window', label: '端末の名前を変更…', aliases: ['ウィンドウ名を変更…'],
     when: c => !c.screen, disabledReason: c => (c.hasWindow ? null : NO_WINDOW), run: c => c.renameWindow(),
   }),
   define({
-    id: 'window.kill', scope: 'tab', group: 'window', label: 'ウィンドウを閉じる…', hint: 'tmux ごと', danger: true,
+    id: 'window.kill', scope: 'tab', group: 'window', label: '端末を終了…',
+    aliases: ['ウィンドウを閉じる…'], hint: 'tmux ごと', danger: true,
     when: c => !c.screen, disabledReason: c => (c.hasWindow ? null : NO_WINDOW), run: c => c.killWindow(),
   }),
 
   // ---- パネル
   define({
-    id: 'panel.toggleFocus', scope: 'panel', group: 'panel', label: 'このパネルを広げる / 元に戻す', hint: 'Alt+Enter',
+    id: 'panel.toggleFocus', scope: 'panel', group: 'panel', label: 'パネルを最大化 / 並びに戻す',
+    aliases: ['このパネルを広げる / 元に戻す'], hint: 'Alt+Enter',
     disabledReason: c => (c.multiple ? null : ONE_PANEL), run: c => c.toggleFocus(),
   }),
   define({

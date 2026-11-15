@@ -97,9 +97,9 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   await connected();
   await waitFor(() => open().length === 1, 'exactly one connection after returning to the tab');
 
-  // 右に切り出すと、端末と画面を並べて同時に見られる
+  // 右に分割して移すと、端末と画面を並べて同時に見られる
   await page.locator('.tab.tab-screen').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: /^右に切り出す/ }).click();
+  await page.getByRole('menuitem', { name: /^右に分割して移す/ }).click();
   await page.waitForTimeout(300);
   assert.equal(await page.locator('.tile').count(), 2);
   await connected();

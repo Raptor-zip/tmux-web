@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMenu, COMMANDS, FAMILIES, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
+import { buildMenu, COMMANDS, FAMILIES, findCommand, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
 import { DESKTOP_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU, MENUS, NEW_MENU, TAB_MENU, TERMINAL_MENU, WORKSPACE_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
@@ -45,7 +45,7 @@ test('workspace menu keeps its order and labels', () => {
   assert.deepEqual(labels({ app: app() }), [
     '新しい端末をタブで開く', '新しい端末を右に並べる', '新しい端末を下に並べる', 'ウィンドウを切り替える…', '---',
     'Claude を新しいタブで起動', 'Codex を新しいタブで起動', '---',
-    '作業フォルダーのファイルを見る', 'コマンドを送る…', '本文をコピー', 'ペインを全画面 / 元に戻す', 'ペインを閉じる…', '---',
+    '作業フォルダーを開く', 'コマンドを送る…', '全文をコピー（履歴込み）', 'ペインを拡大（tmux）', 'ペインを終了…', '---',
     'リモートデスクトップをタブで開く', 'リモートデスクトップをダイアログで開く', 'キーバーを表示', 'tmux のステータス行を表示', '直接接続に切り替える',
     'Alt ショートカットを使う',
   ]);
@@ -92,11 +92,11 @@ test('terminal menu shows selection items only when text is selected', () => {
   });
   assert.deepEqual(names(TERMINAL_MENU, ctx('')), [
     '新しい端末をタブで開く', '新しい端末を右に並べる', '新しい端末を下に並べる', '---',
-    '画面全体をコピー', '貼り付け', '---', 'このパネルを広げる / 元に戻す', '---', 'タブを閉じる',
+    '全文をコピー（履歴込み）', '貼り付け', '---', 'パネルを最大化 / 並びに戻す', '---', 'タブを閉じる',
   ]);
   const withSelection = buildMenu(TERMINAL_MENU, ctx('a\nb'));
-  assert.deepEqual((withSelection[0] as MenuItem), { ...(withSelection[0] as MenuItem), label: '選択部分をコピー', hint: '2 行' });
-  assert.equal((withSelection.find(e => e?.label === 'このパネルを広げる / 元に戻す') as MenuItem).disabled, true);
+  assert.deepEqual((withSelection[0] as MenuItem), { ...(withSelection[0] as MenuItem), label: '選択をコピー', hint: '2 行' });
+  assert.equal((withSelection.find(e => e?.label === 'パネルを最大化 / 並びに戻す') as MenuItem).disabled, true);
   // 入力先のタブが無いときも「タブを閉じる」は押せない項目として残る
   const noTab = buildMenu(TERMINAL_MENU, { ...ctx(''), tab: undefined });
   assert.equal((noTab.at(-1) as MenuItem).label, 'タブを閉じる');
@@ -105,8 +105,8 @@ test('terminal menu shows selection items only when text is selected', () => {
 
 test('tab menu keeps its order and switches screen/terminal items', () => {
   assert.deepEqual(names(TAB_MENU, { tab: tab() }), [
-    '左へ移動', '右へ移動', '作業2 へ移動', '---', 'タブを閉じる', '他のタブを閉じる', '右側のタブを閉じる', '---',
-    '右に切り出す', '下に切り出す', '---', 'パネル 2 へ移動（3タブ）', '---', 'ウィンドウ名を変更…', 'ウィンドウを閉じる…',
+    '左へ移す', '右へ移す', '作業2 へ移動', '---', 'タブを閉じる', '他のタブを閉じる', '右側のタブを閉じる', '---',
+    '右に分割して移す', '下に分割して移す', '---', 'パネル 2 へ移動（3タブ）', '---', '端末の名前を変更…', '端末を終了…',
   ]);
   assert.deepEqual(names(TAB_MENU, { tab: tab({ screen: true }) }).slice(-1), ['ダイアログで大きく開く']);
   const moved: string[] = [];
@@ -136,4 +136,27 @@ test('font size and line height menus keep their short labels and limits', () =>
   (buildMenu(LINE_HEIGHT_MENU, { view })[4] as MenuItem).run();
   assert.equal(line, 1.15);
   assert.deepEqual(names(DESKTOP_MENU, { desktop: { rename() {} } }), ['名前を変更…']);
+});
+
+test('renamed commands keep their old names as search aliases', () => {
+  const renamed: Record<string, string[]> = {
+    'pane.copyAll': ['本文をコピー', '画面全体をコピー'],
+    'pane.files': ['作業フォルダーのファイルを見る'],
+    'pane.zoom': ['ペインを全画面 / 元に戻す'],
+    'pane.kill': ['ペインを閉じる…'],
+    'selection.copy': ['選択部分をコピー'],
+    'tab.splitRight': ['右に切り出す'],
+    'tab.splitBottom': ['下に切り出す'],
+    'window.rename': ['ウィンドウ名を変更…'],
+    'window.kill': ['ウィンドウを閉じる…'],
+    'panel.toggleFocus': ['このパネルを広げる / 元に戻す'],
+  };
+  for (const [id, old] of Object.entries(renamed)) {
+    const command = findCommand(id);
+    assert.ok(command, id);
+    for (const name of old) assert.ok(command.aliases?.includes(name), `${id} keeps ${name}`);
+  }
+  // 同じ処理だった 2 つのコピーは 1 つにまとめた
+  assert.equal(findCommand('pane.copyText'), undefined);
+  assert.equal(findCommand('pane.copyScreen'), undefined);
 });

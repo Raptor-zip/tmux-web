@@ -871,7 +871,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     try {
       const { text } = await fetchCapture(activePane.id, 5000, true);
       await navigator.clipboard.writeText(text.replace(/\s+$/, ''));
-      toast(`ペイン ${activePane.index} の内容をコピーしました`, 'info');
+      toast(`ペイン ${activePane.index} の全文（履歴込み）をコピーしました`, 'info');
     } catch (err) {
       toast(`コピーに失敗: ${(err as Error).message}`);
     }
@@ -881,20 +881,22 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     if (!activePane) return;
     const last = panes.filter((p) => p.windowId === activePane.windowId).length <= 1;
     confirmThen(
-      `ペイン ${activePane.index} を閉じますか？`,
+      `ペイン ${activePane.index} を終了しますか？`,
       `${paneCommand(activePane)} が ${activePane.path} で動いています。` +
-        (last ? '\nこのウィンドウ最後のペインなので、ウィンドウごと無くなります。' : ''),
+        (last ? '\nこの端末の最後のペインなので、端末ごと無くなります。' : ''),
       () => doAction('killPane', { target: activePane.id }),
+      { confirmLabel: '終了する' },
     );
   }, [activePane, panes, confirmThen, doAction]);
 
   const killWindow = useCallback(
     (win: TmuxWindow) =>
       confirmThen(
-        `ウィンドウ「${win.name}」を閉じますか？`,
+        `端末「${win.name}」を終了しますか？`,
         'この中で動いているプロセスはすべて終了します。' +
           '\n（タブだけ閉じたいなら「タブを閉じる」を使ってください）',
         () => doAction('killWindow', { target: win.id }),
+        { confirmLabel: '終了する' },
       ),
     [confirmThen, doAction],
   );
@@ -950,7 +952,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           win &&
           setDialog({
             kind: 'prompt',
-            title: `ウィンドウ「${win.name}」の名前を変える`,
+            title: `端末「${win.name}」の名前を変更`,
             defaultValue: win.name,
             confirmLabel: '変更',
             onSubmit: (name) =>

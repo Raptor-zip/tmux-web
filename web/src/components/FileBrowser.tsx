@@ -201,7 +201,7 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
         }}>
         <header className="file-header">
           <strong>{deviceName} のファイル</strong>
-          <span className="file-root" title={listing?.root}>{listing?.root ?? '作業フォルダ'}</span>
+          <span className="file-root" title={listing?.root}>{listing?.root ?? '作業フォルダー'}</span>
           <button ref={closeButton} className="btn" onClick={onClose}>閉じる</button>
         </header>
         <div className="file-columns">
@@ -209,8 +209,8 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
             onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); if (!busy) setDragOver(true); } }}
             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
             onDrop={e => { e.preventDefault(); setDragOver(false); if ([...e.dataTransfer.items].some(item => item.webkitGetAsEntry?.()?.isDirectory)) setNotice('フォルダーの中のファイルを選んでアップロードしてください。'); else void upload([...e.dataTransfer.files]); }}>
-            <nav className="file-breadcrumbs" aria-label="フォルダ">
-              <button className="btn" disabled={busy || loading} onClick={() => navigate('')}>ルート</button>
+            <nav className="file-breadcrumbs" aria-label="フォルダー">
+              <button className="btn" disabled={busy || loading} onClick={() => navigate('')}>作業フォルダー</button>
               {directory.split('/').filter(Boolean).map((part, i, parts) => (
                 <button className="btn" key={i} disabled={busy || loading} onClick={() => navigate(parts.slice(0, i + 1).join('/'))}>{part}</button>
               ))}
@@ -238,7 +238,7 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
                   disabled={entry.directory && busy} onClick={() => entry.directory ? navigate(entry.path) : preview(entry)}>
                   <span className="file-kind" aria-hidden="true">{entry.directory ? <Icon name="folder" /> : entry.mime.startsWith('image/') ? <Icon name="image" /> : entry.mime.startsWith('video/') ? <Icon name="video" /> : entry.mime.startsWith('audio/') ? <Icon name="audio" /> : <Icon name="file" />}</span>
                   <span className="file-details"><span className="file-name">{entry.name}</span>
-                    <span className="file-meta">{entry.directory ? 'フォルダ' : formatSize(entry.size)} · {new Date(entry.modified).toLocaleString('ja-JP')}</span>
+                    <span className="file-meta">{entry.directory ? 'フォルダー' : formatSize(entry.size)} · {new Date(entry.modified).toLocaleString('ja-JP')}</span>
                   </span>
                   {entry.directory && <span aria-hidden="true">›</span>}
                 </button>

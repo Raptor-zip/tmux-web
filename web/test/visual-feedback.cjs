@@ -168,7 +168,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await page.getByRole('button',{name:'入力欄を閉じる',exact:true}).click();
    console.log('terminal controls wait for tmux readiness and preserve the draft');
   }
-  const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^このパネルを広げる \/ 元に戻す/}).click();};
+  const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^パネルを最大化 \/ 並びに戻す/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
   if(scene.action==='switcher')await page.locator('.statusbar button[title="ウィンドウを切り替える (Alt+P)"]').click();
@@ -177,7 +177,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
   if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'リモートデスクトップをダイアログで開く',exact:true}).click();}
-  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーのファイルを見る',exact:true}).click();}
+  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーを開く',exact:true}).click();}
   if(checkFiles) await checkFiles();
   if(scene.name.startsWith('remote-') && scene.action==='desktop'){
    if(phase==='after')await page.getByRole('button',{name:'リモートデスクトップ',exact:true}).click();
@@ -267,7 +267,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    const terminal=page.locator('.tile:visible .terminal-host').first();
    await terminal.click({button:'right',position:{x:80,y:80}});
    await page.getByRole('menuitem',{name:/^新しい端末を右に並べる/}).waitFor();
-   assert.equal(await page.getByRole('menuitem',{name:/tmux|ペイン|ウィンドウを閉じる/}).count(),0,'no tmux structural actions in terminal menu');
+   assert.equal(await page.getByRole('menuitem',{name:/tmux|ペイン|ウィンドウを閉じる|端末を終了|端末の名前/}).count(),0,'no tmux structural actions in terminal menu');
    await page.screenshot({path:join(out,'terminal-context-menu.png'),animations:'disabled'});
    await page.keyboard.press('Escape');
    await terminal.click({button:'right',modifiers:['Shift'],position:{x:80,y:80}});

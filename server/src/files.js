@@ -42,7 +42,7 @@ async function resolveFile(root, relative = '') {
   }
   const file = await fsp.realpath(path.resolve(root, relative));
   if (path.relative(root, file).split(path.sep).some((part) => hidden(part))) throw fail(403, '隠しファイルは開けません');
-  if (!inside(root, file)) throw fail(403, '作業フォルダの外は開けません');
+  if (!inside(root, file)) throw fail(403, '作業フォルダーの外は開けません');
   return file;
 }
 
@@ -113,12 +113,12 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
   app.post('/api/files/upload', express.raw({ type: 'application/octet-stream', limit: '50mb' }), async (req, res) => {
     try {
       const root = await rootFor(req.query.pane);
-      if (req.query.root !== root) throw fail(409, '作業フォルダが変わりました。一覧を開き直してください');
+      if (req.query.root !== root) throw fail(409, '作業フォルダーが変わりました。一覧を開き直してください');
       const directory = await resolveFile(root, req.query.path || '');
       const name = req.query.name;
       if (typeof name !== 'string' || !name || /[/\\\x00-\x1f\x7f]/.test(name) || hidden(name)) throw fail(400, '通常のファイル名を指定してください');
       if (!Buffer.isBuffer(req.body)) throw fail(400, 'ファイルがありません');
-      if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'アップロード先はフォルダを選んでください');
+      if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'アップロード先はフォルダーを選んでください');
       let index = 1;
       while (true) {
         const saved = fitName(name, 240, index === 1 ? '' : `-${index}`);
@@ -161,10 +161,10 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
   app.post('/api/files/archive', async (req, res) => {
     try {
       const root = await rootFor(req.body?.pane);
-      if (req.body?.root !== root) throw fail(409, '作業フォルダが変わりました。一覧を開き直してください');
+      if (req.body?.root !== root) throw fail(409, '作業フォルダーが変わりました。一覧を開き直してください');
       const relative = req.body?.path || '';
       const directory = await resolveFile(root, relative);
-      if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'フォルダを選んでください');
+      if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'フォルダーを選んでください');
       res.json({ url: `/files/content?ticket=${issue({ root, path: relative, archive: true })}` });
     } catch (error) { handleError(res, error); }
   });
@@ -172,7 +172,7 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
   app.post('/api/files/open', async (req, res) => {
     try {
       const root = await rootFor(req.body?.pane);
-      if (req.body?.root !== root) throw fail(409, '作業フォルダが変わりました。一覧を開き直してください');
+      if (req.body?.root !== root) throw fail(409, '作業フォルダーが変わりました。一覧を開き直してください');
       const relative = req.body?.path;
       if (typeof relative !== 'string') throw fail(400, 'ファイルを選んでください');
       const file = await resolveFile(root, relative);
@@ -188,7 +188,7 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
       const data = verify(req.query.ticket);
       const file = await resolveFile(data.root, data.path);
       if (data.archive) {
-        if (!(await fsp.stat(file)).isDirectory()) throw fail(400, 'フォルダを選んでください');
+        if (!(await fsp.stat(file)).isDirectory()) throw fail(400, 'フォルダーを選んでください');
         const child = spawn('tar', ['-czf', '-', '--exclude=*/.*', '--exclude=*/node_modules', '--exclude=*/__pycache__', '-C', path.dirname(file), '--', path.basename(file)], { stdio: ['ignore', 'pipe', 'pipe'] });
         res.set({ 'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(file))}.tar.gz`, 'Cache-Control': 'private, no-store' });
         child.on('error', error => handleError(res, error));
@@ -204,7 +204,7 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
       if (process.platform === 'linux') {
         const opened = await fsp.realpath(`/proc/self/fd/${handle.fd}`);
         if (path.relative(data.root, opened).split(path.sep).some((part) => hidden(part))) throw fail(403, '隠しファイルは開けません');
-        if (!inside(data.root, opened)) throw fail(403, '作業フォルダの外は開けません');
+        if (!inside(data.root, opened)) throw fail(403, '作業フォルダーの外は開けません');
       }
       const stat = await handle.stat();
       if (!stat.isFile()) throw fail(400, '通常のファイルだけ開けます');

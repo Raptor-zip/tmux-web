@@ -20,7 +20,7 @@ export const WORKSPACE_MENU: readonly MenuSlot[] = [
   SEP,
   'pane.files',
   'pane.sendCommand',
-  'pane.copyText',
+  'pane.copyAll',
   'pane.zoom',
   'pane.kill',
   SEP,
@@ -34,7 +34,7 @@ export const WORKSPACE_MENU: readonly MenuSlot[] = [
 
 /**
  * 端末を右クリックしたときのメニュー。tmux の display-menu の代わり。
- * 選択があるときはそれが主役。「画面全体をコピー」を先頭に置くと、選択したつもりで
+ * 選択があるときはそれが主役。「全文をコピー」を先頭に置くと、選択したつもりで
  * 画面全体が入ってしまうので、選択の有無で並びを変える（選択の項目は選択があるときだけ出る）
  */
 export const TERMINAL_MENU: readonly MenuSlot[] = [
@@ -45,7 +45,7 @@ export const TERMINAL_MENU: readonly MenuSlot[] = [
   { id: 'terminal.splitRight', hint: '画面を分割' },
   { id: 'terminal.splitBottom', hint: '画面を分割' },
   SEP,
-  'pane.copyScreen',
+  'pane.copyAll',
   'clipboard.paste',
   SEP,
   'panel.toggleFocus',

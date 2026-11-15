@@ -1832,7 +1832,7 @@ input:focus-visible,
   .tab-close { min-width: 32px; min-height: 32px; }
 }
 
-/* 作業フォルダの一覧とメディアプレビュー */
+/* 作業フォルダーの一覧とメディアプレビュー */
 .file-browser {
   width: min(1100px, 96vw);
   height: min(820px, 92dvh);
