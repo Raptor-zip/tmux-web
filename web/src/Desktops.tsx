@@ -12,6 +12,7 @@ import { useWorkspaceStatus, useWorkspaceValue, workspaceStore } from './workspa
 import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
+import { useSharedSetting } from './shared-setting';
 import { addDesktop, desktopKey, INITIAL_DESKTOPS, openScreenTab, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
 
 export default function Desktops() {
@@ -165,9 +166,11 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
     if (child.left < parent.left) list.current.scrollLeft -= parent.left - child.left;
     else if (child.right > parent.right) list.current.scrollLeft += child.right - parent.right;
   }, [state.activeId]);
+  // tw.altKeys がオフなら、ワークスペースの Alt+Shift 操作も奪わず端末へ渡す
+  const [altKeys] = useSharedSetting('tw.altKeys', true);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || dialog || document.querySelector('dialog[open], [aria-modal="true"], .modal-backdrop, [role="menu"]')) return;
+      if (!altKeys || !event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || dialog || document.querySelector('dialog[open], [aria-modal="true"], .modal-backdrop, [role="menu"]')) return;
       if (event.code === 'KeyN') { event.preventDefault(); event.stopImmediatePropagation(); create(); return; }
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
       event.preventDefault(); event.stopImmediatePropagation();
@@ -177,7 +180,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [state, dialog]);
+  }, [altKeys, state, dialog]);
   return <div className="desktop-shell">
     <header className="desktop-bar">
       <div className="desktop-tabs" role="tablist" aria-label="仮想デスクトップ" ref={list} onScroll={cancelPress}>

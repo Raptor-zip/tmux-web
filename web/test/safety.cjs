@@ -57,6 +57,12 @@ module.exports = async (page, { scene, terminalInputs, requests }) => {
   await page.waitForTimeout(150);
   assert.equal(await sidebarHidden(), before, 'Alt+B no longer toggles the sidebar when shortcuts are off');
   assert.ok(terminalInputs.slice(sentOff).join('').includes('\x1bb'), 'Alt+B reaches the terminal as ESC b when shortcuts are off');
+  // Workspace-level Alt+Shift shortcuts (new workspace) are released too
+  const workspaces = await page.locator('.desktop-tab').count();
+  await terminal.focus();
+  await page.keyboard.press('Alt+Shift+N');
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('.desktop-tab').count(), workspaces, 'Alt+Shift+N does not create a workspace when shortcuts are off');
   await openMenu();
   await page.getByRole('menuitem', { name: /Alt ショートカットを使う/ }).click();
   assert.equal(await page.evaluate(() => localStorage.getItem('tw.altKeys')), 'true');
