@@ -187,3 +187,26 @@ test('shortcut list is generated from command hints', () => {
   for (const k of ['Alt+T', 'Alt+W', 'Alt+P', 'Alt+/', 'Alt+Enter']) assert.ok(keys.includes(k), `${k} is listed`);
   assert.ok(!keys.includes('6px'), 'non-key hints are not shortcuts');
 });
+
+test('menus can carry headings, one-level submenus and accelerator keys', () => {
+  const ran: string[] = [];
+  const ctx: CommandContext = { tab: tab({ moveLeft: () => ran.push('left') }) };
+  const items = buildMenu([
+    { heading: '配置' },
+    { submenu: '配置', accel: 'l', items: [{ id: 'tab.moveLeft', accel: 'h' }, 'tab.moveRight'] },
+    null,
+    { heading: '空の段' },
+    null,
+    { submenu: '出ない段', items: ['screen.tabAsDialog'] },
+  ], ctx);
+  // 中身の無いサブメニューと、直後が区切りの見出しは出さない
+  assert.deepEqual(items.map(e => (e ? e.label : '---')), ['配置', '配置']);
+  assert.equal((items[0] as { heading?: true }).heading, true);
+  const sub = items[1] as MenuItem;
+  assert.equal(sub.accel, 'l');
+  assert.deepEqual(sub.submenu!.map(e => (e ? e.label : '---')), ['左へ移す', '右へ移す']);
+  assert.equal((sub.submenu![0] as MenuItem).accel, 'h');
+  (sub.submenu![0] as MenuItem).run();
+  assert.deepEqual(ran, ['left']);
+  assert.throws(() => buildMenu([{ submenu: 'a', items: [{ submenu: 'b', items: [] }] }], ctx), /nested submenu/);
+});

@@ -480,8 +480,16 @@ export function findCommand(id: string): Command | undefined {
   return commandById.get(id);
 }
 
-/** メニューの 1 行。id だけか、そのメニューでだけヒントを変えるときは {id, hint} */
-export type MenuSlot = string | { id: string; hint?: string } | null;
+/**
+ * メニューの 1 行。id だけか、そのメニューでだけヒントや 1 文字キーを付けるときは {id, hint, accel}。
+ * {heading} は段の見出し、{submenu, items} は 1 段だけのサブメニュー（中にサブメニューは置けない）。
+ */
+export type MenuSlot =
+  | string
+  | { id: string; hint?: string; accel?: string }
+  | { heading: string }
+  | { submenu: string; items: readonly MenuSlot[]; accel?: string }
+  | null;
 
 /** 区切り線。ContextMenu の SEP と同じ値 */
 export const SEP = null;
@@ -491,12 +499,21 @@ export const SEP = null;
  * when が false の操作は出さない。文脈の欄が無い操作は、押せない項目として出す。
  * 先頭と末尾に残った区切り線だけを落とす（間の区切りはそのまま）。
  */
-export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext): MenuEntry[] {
+export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext, nested = false): MenuEntry[] {
   const out: MenuEntry[] = [];
   for (const slot of slots) {
     if (slot === null) { out.push(SEP); continue; }
+    if (typeof slot !== 'string' && 'heading' in slot) { out.push({ heading: true, label: slot.heading }); continue; }
+    if (typeof slot !== 'string' && 'submenu' in slot) {
+      if (nested) throw new Error(`nested submenu: ${slot.submenu}`);
+      const items = buildMenu(slot.items, ctx, true);
+      // 中身が全部出ないときは、サブメニューごと出さない
+      if (items.some(e => e && !('heading' in e))) out.push({ label: slot.submenu, accel: slot.accel, submenu: items, run: () => {} });
+      continue;
+    }
     const id = typeof slot === 'string' ? slot : slot.id;
     const override = typeof slot === 'string' ? undefined : slot.hint;
+    const accel = typeof slot === 'string' ? undefined : slot.accel;
     const fam = familyById.get(id);
     if (fam) {
       const section = ctx[fam.scope];
@@ -506,6 +523,7 @@ export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext): Menu
         out.push({
           label: fam.itemLabel(section, item),
           hint: override ?? fam.hint?.(section, item),
+          accel,
           disabled: reason !== null,
           disabledReason: reason ?? undefined,
           danger: fam.danger,
@@ -528,15 +546,19 @@ export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext): Menu
     out.push({
       label,
       hint,
+      accel,
       disabled: reason !== null,
       disabledReason: reason ?? undefined,
       danger: command.danger,
       run: () => command.run(section),
     });
   }
-  while (out.length && out[0] === SEP) out.shift();
-  while (out.length && out[out.length - 1] === SEP) out.pop();
-  return out;
+  // 見出しの直後が区切り・見出し・末尾なら、その見出しは落とす（中身の無い段を出さない）
+  const isHead = (e: MenuEntry | undefined) => !!e && 'heading' in e;
+  const kept = out.filter((e, i) => !isHead(e) || (i + 1 < out.length && out[i + 1] !== SEP && !isHead(out[i + 1])));
+  while (kept.length && kept[0] === SEP) kept.shift();
+  while (kept.length && kept[kept.length - 1] === SEP) kept.pop();
+  return kept;
 }
 
 /** パレットの『操作』に出す 1 行 */

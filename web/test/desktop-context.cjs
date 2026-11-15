@@ -27,6 +27,17 @@ module.exports = async function checkDesktopContext(page, { scene, out, screensh
   const edit = page.getByRole('menuitem',{name:'名前を変更…',exact:true});
   await edit.waitFor();
   assert.equal(await second.getAttribute('aria-selected'),'true','opening menu on inactive tab keeps active desktop');
+  assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('role')),'menuitem','the menu focuses its first item, not the close button');
+  assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'名前を変更…');
+  assert.equal(await page.getByRole('menu').getAttribute('aria-label'),'デスクトップ1','the menu is titled with its target');
+  if (scene.touch) {
+    // タッチのシートでは、右上の × で閉じる（先頭の『閉じる』項目は無い）
+    assert.equal(await page.getByRole('menuitem',{name:'閉じる',exact:true}).count(),0);
+    await page.getByRole('button',{name:'メニューを閉じる',exact:true}).click();
+    assert.equal(await page.getByRole('menu').count(),0,'the sheet × closes the menu');
+    await first.click({button:'right'});
+    await edit.waitFor();
+  }
   if (screenshots) await page.screenshot({path:join(out,scene.name+'-menu.png'),animations:'disabled'});
   await edit.click();
   assert.equal(await page.locator('.dialog-input').inputValue(),'デスクトップ1');

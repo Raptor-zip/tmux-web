@@ -13,6 +13,7 @@ import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { useSharedSetting } from './shared-setting';
+import { useLongPress } from './hooks/useLongPress';
 import { addDesktop, desktopKey, INITIAL_DESKTOPS, openScreenTab, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
 
 export default function Desktops() {
@@ -47,16 +48,9 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const [tabMenu, setTabMenu] = useState<{ id: string; x: number; y: number } | null>(null);
-  const press = useRef<{ pointerId: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
-  const heldTab = useRef<string | null>(null);
-  const cancelPress = useCallback(() => {
-    if (press.current) clearTimeout(press.current.timer);
-    press.current = null;
-  }, []);
-  useEffect(() => {
-    window.addEventListener('blur', cancelPress);
-    return () => { cancelPress(); window.removeEventListener('blur', cancelPress); };
-  }, [cancelPress]);
+  // タッチの長押し（550ms・8px 以内・1 本指）でワークスペースのメニューを開く
+  const longPress = useLongPress<string>((id, { x, y }) => setTabMenu({ id, x, y }));
+  const cancelPress = longPress.cancel;
   const desktopLayouts = useRef<DesktopLayoutRegistry>(new Map());
   const [dropDesktopId, setDropDesktopId] = useState<string | null>(null);
   const dragCleanup = useRef<(() => void) | null>(null);
@@ -188,29 +182,13 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
           <button id={`desktop-tab-${desktop.id}`} data-desktop-id={desktop.id} className={`desktop-tab ${desktop.id === state.activeId ? 'on' : ''} ${dropDesktopId === desktop.id ? 'drop-target' : ''}`} role="tab" aria-selected={desktop.id === state.activeId}
             aria-controls={`desktop-panel-${desktop.id}`} tabIndex={desktop.id === state.activeId ? 0 : -1}
             title={`${desktop.name}（右クリック・長押しで名前変更）`} aria-haspopup="menu" aria-expanded={tabMenu?.id === desktop.id}
-            onClick={e => {
-              if (heldTab.current === desktop.id) { e.preventDefault(); heldTab.current = null; return; }
-              select(desktop.id);
-            }}
+            {...longPress.bind(desktop.id)}
+            onClick={() => select(desktop.id)}
             onContextMenu={e => {
               e.preventDefault(); cancelPress();
               const box = e.currentTarget.getBoundingClientRect();
               setTabMenu({ id: desktop.id, x: e.clientX || box.left, y: e.clientY || box.bottom });
             }}
-            onPointerDown={e => {
-              cancelPress(); heldTab.current = null;
-              if (e.pointerType === 'mouse' || !e.isPrimary || e.button !== 0) return;
-              const { clientX: x, clientY: y, pointerId } = e;
-              press.current = { pointerId, x, y, timer: setTimeout(() => {
-                heldTab.current = desktop.id;
-                setTabMenu({ id: desktop.id, x, y });
-              }, 550) };
-            }}
-            onPointerMove={e => {
-              const start = press.current;
-              if (start && (e.pointerId !== start.pointerId || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8)) cancelPress();
-            }}
-            onPointerUp={cancelPress} onPointerCancel={cancelPress} onPointerLeave={cancelPress}
             onDoubleClick={() => { select(desktop.id); rename(desktop); }}
             onKeyDown={e => {
               if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
@@ -242,7 +220,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
         {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
       </section>)}
     </div>
-    {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: { rename: () => {
+    {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} title={state.items.find(item => item.id === tabMenu.id)?.name} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: { rename: () => {
       const desktop = state.items.find(item => item.id === tabMenu.id);
       if (desktop) rename(desktop);
     } } })} />}

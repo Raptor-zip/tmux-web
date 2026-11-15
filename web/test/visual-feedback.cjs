@@ -271,6 +271,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await terminal.click({button:'right',position:{x:80,y:80}});
    await page.getByRole('menuitem',{name:/^新しい端末を右に並べる/}).waitFor();
    assert.equal(await page.getByRole('menuitem',{name:/tmux|ペイン|ウィンドウを閉じる|端末を終了|端末の名前/}).count(),0,'no tmux structural actions in terminal menu');
+   assert.equal(await page.evaluate(()=>{const first=document.querySelector('[role=menu] [role=menuitem]');return !!first && document.activeElement===first;}),true,'the terminal menu focuses its first item');
    await page.screenshot({path:join(out,'terminal-context-menu.png'),animations:'disabled'});
    await page.keyboard.press('Escape');
    await terminal.click({button:'right',modifiers:['Shift'],position:{x:80,y:80}});
