@@ -4,11 +4,28 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
+import type { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { uploadPasteImage, wsUrl } from '../api';
 import { quotePath } from '../attachments';
 import { unscoped } from '../devices';
 import { TerminalSelection } from '../terminal-selection';
+import { loadedWebglAddon, loadWebglAddon, markWebglUnavailable, shouldUseWebgl } from '../terminal-renderer';
+
+/** GPU のコンテキストをこの回数失ったら、その端末は DOM 描画に固定する */
+const MAX_WEBGL_LOSSES = 3;
+
+/** WebGL 描画が使っている GPU コンテキスト（リンク下線用の 2D canvas は除く） */
+function webglContexts(term: Terminal | null): WebGL2RenderingContext[] {
+  const canvases = term?.element?.querySelectorAll<HTMLCanvasElement>('.xterm-screen canvas:not(.xterm-link-layer)') ?? [];
+  const contexts: WebGL2RenderingContext[] = [];
+  canvases.forEach((canvas) => {
+    // 既に webgl2 で作られた canvas なので、新しいコンテキストは作られず同じものが返る
+    const gl = canvas.getContext('webgl2');
+    if (gl) contexts.push(gl);
+  });
+  return contexts;
+}
 
 // Tokyo Night (night), with soft bright colors to avoid fluorescent highlights.
 // Palette: https://github.com/folke/tokyonight.nvim
@@ -97,6 +114,91 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   const rafRef = useRef(0);
+  const webglRef = useRef<WebglAddon | null>(null);
+  const webglLossesRef = useRef(0);
+
+  /**
+   * 描画方式を合わせる。WebGL は「画面に出ている端末」だけが持つ。
+   *
+   * - 非表示の端末やバックグラウンドのタブでは手放す。ブラウザが同時に持てる
+   *   WebGL コンテキストは 16 個前後しかなく、裏の端末が抱えると足りなくなる。
+   * - スリープ復帰で GPU のコンテキストが失われる問題（以前 canvas 描画をやめた理由）も、
+   *   隠れている間は持たず、表示するときに作り直すことで避ける。
+   * - それでも表示中に失われたら DOM 描画に戻す。端末の中身は xterm 側のバッファに
+   *   あるので、描き直すだけで表示は元どおりになる。
+   */
+  const dropWebglRef = useRef(() => {});
+  dropWebglRef.current = () => {
+    const addon = webglRef.current;
+    if (!addon) return;
+    webglRef.current = null;
+    // dispose() は canvas を外すだけで、GPU のコンテキストはガベージコレクションまで残る。
+    // 残ったぶんが上限に数えられると、表示中の端末のコンテキストが古い順に奪われるので、
+    // 外す前に掴んでおき、外したあとで明示的に手放す（もうリスナーが無いので喪失には数えない）。
+    const contexts = webglContexts(termRef.current);
+    try {
+      addon.dispose();
+    } catch {
+      /* 既に壊れていても DOM 描画へは戻る */
+    }
+    for (const gl of contexts) {
+      try {
+        if (!gl.isContextLost()) gl.getExtension('WEBGL_lose_context')?.loseContext();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+  const syncRendererRef = useRef(() => {});
+  syncRendererRef.current = () => {
+    const term = termRef.current;
+    if (!term) return;
+    const want = visibleRef.current
+      && document.visibilityState === 'visible'
+      && webglLossesRef.current < MAX_WEBGL_LOSSES
+      && shouldUseWebgl();
+    if (!want) {
+      // ここでは測り直さない。DOM 描画は文字の寸法がわずかに違い、測り直すと
+      // 裏に回るたびに列数が変わって tmux 側のリサイズが往復してしまう。
+      // 隠れている端末やページは描かれないので、寸法は WebGL のときのままでよい。
+      dropWebglRef.current();
+      return;
+    }
+    if (webglRef.current) return;
+    // 本体と分けて配っているので、初回だけ読み込みを待ってからやり直す
+    const Webgl = loadedWebglAddon();
+    if (!Webgl) {
+      void loadWebglAddon().then(() => syncRendererRef.current(), () => {
+        webglLossesRef.current = MAX_WEBGL_LOSSES;
+      });
+      return;
+    }
+    let addon: WebglAddon | null = null;
+    try {
+      addon = new Webgl();
+      const current = addon;
+      current.onContextLoss(() => {
+        if (webglRef.current !== current) return;
+        webglLossesRef.current += 1;
+        dropWebglRef.current();
+        // DOM 描画に切り替わると文字の寸法がわずかに変わるので測り直す
+        safeFitRef.current();
+        try { termRef.current?.refresh(0, Math.max(0, (termRef.current?.rows ?? 1) - 1)); } catch { /* 破棄済み */ }
+        // 一時的な喪失なら、次に表示し直すときにもう一度 WebGL を試す
+      });
+      term.loadAddon(current);
+      webglRef.current = current;
+      safeFitRef.current();
+    } catch {
+      // WebGL2 が作れない環境。この端末は DOM 描画のまま使い、ほかの端末にも試させない
+      webglLossesRef.current = MAX_WEBGL_LOSSES;
+      markWebglUnavailable();
+      try { addon?.dispose(); } catch { /* ignore */ }
+      webglRef.current = null;
+      // 作りかけの描画層（リンク下線用の canvas）が残るので外す。DOM 描画は canvas を使わない
+      term.element?.querySelectorAll('.xterm-screen canvas').forEach((canvas) => canvas.remove());
+    }
+  };
 
   /** tmux への入力はここだけを通す。空文字は送らない（IME 確定後の空振りを弾く） */
   const sendInputRef = useRef((data: string) => {
@@ -217,10 +319,10 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
      * ここに届く。これが無いと「選択したのにブラウザには何も入らない」になる。
      */
     term.loadAddon(new ClipboardAddon());
-    // 標準の DOM レンダラを使う。canvas はスリープ復帰時に context / atlas を
-    // 失うことがあり、refresh() だけでは非同期の描画エラーから復旧できない。
     termRef.current = term;
     fitRef.current = fit;
+    // 描画方式は syncRendererRef が決める（表示中かつハードウェア GPU なら WebGL）
+    syncRendererRef.current();
     safeFitRef.current();
 
     // 復帰やモニタ変更後に、表示領域を測り直して端末全体を描き直す。
@@ -235,11 +337,24 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
     };
     const scheduleRepaint = () => {
       window.clearTimeout(repaintTimer);
-      repaintTimer = window.setTimeout(() => { safeFitRef.current(); repaint(); }, 80);
+      repaintTimer = window.setTimeout(() => { syncRendererRef.current(); safeFitRef.current(); repaint(); }, 80);
     };
     const onVisible = () => {
       if (document.visibilityState === 'visible') scheduleRepaint();
+      // 裏に回ったら WebGL を手放す（スリープ中のコンテキスト喪失を持ち越さない）
+      else syncRendererRef.current();
     };
+    // Web フォントが後から読み込まれたら、古い字形で作った WebGL の文字テクスチャを捨てる
+    const onFontsLoaded = () => {
+      if (!webglRef.current) return;
+      try {
+        webglRef.current.clearTextureAtlas();
+      } catch {
+        /* ignore */
+      }
+      scheduleRepaint();
+    };
+    document.fonts?.addEventListener('loadingdone', onFontsLoaded);
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     window.addEventListener('pageshow', onVisible);
@@ -493,6 +608,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       window.clearTimeout(repaintTimer);
       dprQuery?.removeEventListener('change', onDprChange);
       document.removeEventListener('visibilitychange', onVisible);
+      document.fonts?.removeEventListener('loadingdone', onFontsLoaded);
       window.removeEventListener('focus', onVisible);
       window.removeEventListener('pageshow', onVisible);
       host.removeEventListener('touchstart', touchStart, true);
@@ -509,6 +625,7 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
       host.removeEventListener('paste', onPasteImage, true);
       host.removeEventListener('mouseup', copySelection);
       touchKeyboard.removeEventListener('change', updateKeyboard);
+      dropWebglRef.current();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -700,6 +817,8 @@ export const TerminalView = forwardRef<TerminalHandle, Props>(function TerminalV
   // 非表示の間も xterm と WebSocket を残す。復帰時は最後の画面をそのまま
   // 表示し、表示領域だけを再計測する（再接続や tmux の再描画を待たない）。
   useLayoutEffect(() => {
+    // 表示中の端末だけが WebGL を持つ（隠したら手放し、出したら作り直す）
+    syncRendererRef.current();
     if (!visible) return;
     safeFitRef.current();
     const term = termRef.current;

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 module.exports = async function checkTerminalWake(page, { terminalTransports, terminalInputs }) {
   const rows = page.locator('.xterm-rows').first();
   await rows.waitFor();
-  assert.equal(await page.locator('.xterm-screen canvas').count(), 0, 'terminal rendering does not depend on a canvas context');
+  assert.equal(await page.locator('.xterm-screen canvas').count(), 0, 'software GL keeps the DOM renderer (no WebGL canvas)');
   await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('ThinkPad'));
 
   for (let cycle = 0; cycle < 3; cycle++) {

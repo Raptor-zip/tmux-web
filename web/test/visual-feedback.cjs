@@ -61,12 +61,13 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  const server=http.createServer(app);await new Promise(r=>server.listen(testPort,'127.0.0.1',r));
  const browser=process.env.BROWSER_ENGINE==='webkit'
   ? await webkit.launch({headless:true,...(process.env.WEBKIT_BIN?{executablePath:process.env.WEBKIT_BIN}:{})})
-  : await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||'/home/somak/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome',args:['--no-sandbox']});
+  : await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||'/home/somak/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome',args:['--no-sandbox',...(process.env.CHROME_ARGS?process.env.CHROME_ARGS.split(' '):[])]});
  const results=[];
  try{
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now,keepStorage,direct})=>{Date.now=()=>now;if(direct)localStorage.setItem('tw.mode','"direct"');if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK,direct:!!process.env.TERMINAL_DIRECT_CHECK});
+  if(process.env.TERMINAL_RENDERER)await context.addInitScript(renderer=>localStorage.setItem('tw.renderer',JSON.stringify(renderer)),process.env.TERMINAL_RENDERER);
   const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];let workspaceState={type:'workspace',initialized:false,revision:0,values:{}};const transferTasks=[],transfers=[];page.on('pageerror',e=>errors.push(e.message));
   if(process.env.TRANSFER_REPORT)page.on('requestfinished',request=>{
    const url=new URL(request.url());if(!/\.(?:js|css)$/.test(url.pathname))return;
@@ -117,6 +118,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   await page.goto(`http://127.0.0.1:${testPort}/`);await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(checkStateConnection) await checkStateConnection();
   if(process.env.TERMINAL_WAKE_CHECK) await require('./terminal-wake.cjs')(page,{terminalTransports,terminalInputs});
+  if(process.env.TERMINAL_WEBGL_CHECK) await require('./terminal-webgl.cjs')(page,{terminalTransports,terminalInputs});
   if(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection') await require('./terminal-selection.cjs')(page,{terminalTransports,terminalInputs,phase,out});
   if(process.env.TERMINAL_DIRECT_CHECK && scene.name==='terminal-target') await require('./terminal-direct.cjs')(page,{terminalTransports});
   if(process.env.TERMINAL_TARGET_CHECK && scene.name==='terminal-target') await require('./terminal-target.cjs')(page,{terminalTransports,terminalSelections});
