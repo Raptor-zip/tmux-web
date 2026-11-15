@@ -356,6 +356,52 @@ export function dedupeTabs(tree: LayoutNode, keepId?: string | null): LayoutNode
   return drop.length === 0 ? tree : closeTabs(tree, drop);
 }
 
+// ------------------------------------------------------------- 元に戻す
+
+/** まとめて閉じたあと『元に戻す』を受け付ける時間 */
+export const UNDO_MS = 5000;
+
+/**
+ * 直前のレイアウトのスナップショット。まとめて閉じる操作の前後を 1 つだけ覚える。
+ * after は閉じた直後の木で、元に戻すときに「その後ほかの変更が入っていないか」を見るのに使う。
+ */
+export interface LayoutSnapshot {
+  before: LayoutNode;
+  after: LayoutNode | null;
+  focusedId: string | null;
+  at: number;
+}
+
+/** 同じ配置か。同期を通った木は作り直された別のオブジェクトなので、中身で比べる */
+export function sameLayout(a: LayoutNode | null, b: LayoutNode | null): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
+export function snapshotLayout(
+  before: LayoutNode,
+  after: LayoutNode | null,
+  focusedId: string | null,
+  at = Date.now(),
+): LayoutSnapshot {
+  return { before, after, focusedId, at };
+}
+
+/**
+ * スナップショットへ戻せるか。戻せるなら戻す先を返し、戻せないなら null。
+ * 時間切れ、または閉じたあとに別の変更（別の画面からの同期を含む）が入っていたら戻さない。
+ * 戻した結果はふつうの更新として書くので、workspace-sync でもそのまま同期される。
+ */
+export function undoLayout(
+  current: LayoutNode | null,
+  snap: LayoutSnapshot | null,
+  now = Date.now(),
+): { layout: LayoutNode; focusedId: string | null } | null {
+  if (!snap) return null;
+  if (now - snap.at > UNDO_MS) return null;
+  if (!sameLayout(current, snap.after)) return null;
+  return { layout: snap.before, focusedId: snap.focusedId };
+}
+
 // -------------------------------------------------------------- 矩形を求める
 
 /** 各タイルの矩形を % で返す */

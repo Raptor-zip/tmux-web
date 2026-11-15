@@ -62,7 +62,20 @@ module.exports = async function checkTabMenu(page, { scene, out, touch }) {
     assert.match(await paste.getAttribute('title'), /前面/);
     await item('まとめて閉じる').click();
     await page.getByRole('menuitem', { name: /^他のタブ（\d+）$/ }).waitFor();
-    await closeMenu();
+    // まとめて閉じたら 5 秒間『元に戻す』が出て、押すと閉じる前の並びに戻る
+    const tabNames = () => page.locator('.tile:visible .tab .tab-name').allTextContents();
+    const beforeClose = await tabNames();
+    await page.getByRole('menuitem', { name: /^他のタブ（\d+）$/ }).click();
+    await menu.waitFor({ state: 'detached' });
+    const undo = page.locator('.toast').getByRole('button', { name: '元に戻す', exact: true });
+    await undo.waitFor();
+    assert.ok((await tabNames()).length < beforeClose.length, 'other tabs were closed');
+    assert.match(await page.locator('.toast.has-action').textContent(), /他のタブを \d+ 枚閉じました/);
+    await page.screenshot({ path: join(out, 'tab-menu-undo-toast.png'), animations: 'disabled' });
+    await undo.click();
+    await undo.waitFor({ state: 'detached' });
+    await page.waitForFunction(n => document.querySelectorAll('.tile .tab .tab-name').length >= n, beforeClose.length);
+    assert.deepEqual(await tabNames(), beforeClose, 'undo restores the tabs in their order');
 
     // Shift+F10 でもタブメニュー
     await page.locator('.tile:visible .tab.active').focus();

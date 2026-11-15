@@ -54,6 +54,11 @@ import {
   pruneStale,
   remapByName,
   removeLeaf,
+  sameLayout,
+  snapshotLayout,
+  undoLayout,
+  UNDO_MS,
+  type LayoutSnapshot,
   splitWithTab,
   stampNames,
   setRatio,
@@ -67,6 +72,8 @@ interface Toast {
   id: number;
   text: string;
   kind: 'error' | 'info';
+  /** トーストに添えるボタン（『元に戻す』など） */
+  action?: { label: string; run: () => void };
 }
 
 /**
@@ -213,10 +220,11 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     return () => { desktopLayouts.delete(workspaceId); };
   }, [desktopLayouts, workspaceId, focusedId, setLayout, setFocusedId]);
 
-  const toast = useCallback((text: string, kind: Toast['kind'] = 'error') => {
+  const toast = useCallback((text: string, kind: Toast['kind'] = 'error', action?: Toast['action']) => {
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, text, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
+    setToasts((t) => [...t, { id, text, kind, action }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? UNDO_MS : 5000);
+    return id;
   }, []);
 
   /**
@@ -744,9 +752,59 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [setLayout],
   );
 
+  /** まとめて閉じる直前の配置。『元に戻す』トーストと対で 1 つだけ持つ */
+  const undoRef = useRef<{ snap: LayoutSnapshot; toastId: number } | null>(null);
+  const dropUndo = useCallback(() => {
+    const held = undoRef.current;
+    if (!held) return;
+    undoRef.current = null;
+    setToasts((list) => list.filter((x) => x.id !== held.toastId));
+  }, []);
+  // 閉じたあとに別の変更（別の画面からの同期を含む）が入ったら、もう戻さない
+  useEffect(() => {
+    const held = undoRef.current;
+    if (held && !sameLayout(layout, held.snap.after)) dropUndo();
+  }, [layout, dropUndo]);
+
+  /**
+   * まとめて閉じて、5 秒間『元に戻す』を出す。戻すときもふつうの更新として書くので、
+   * workspace-sync で他の画面にも同じように届く。
+   */
+  const closeWithUndo = useCallback(
+    (fn: (tree: LayoutNode) => LayoutNode | null, message: (before: LayoutNode, after: LayoutNode | null) => string) => {
+      const before = layoutRef.current;
+      if (!before) return;
+      const after = fn(before);
+      if (sameLayout(before, after)) return;
+      dropUndo();
+      const snap = snapshotLayout(before, after, focusedIdRef.current);
+      layoutRef.current = after;
+      setLayout(after);
+      const toastId = toast(message(before, after), 'info', {
+        label: '元に戻す',
+        run: () => {
+          const held = undoRef.current;
+          const back = held?.snap === snap ? undoLayout(layoutRef.current, snap) : null;
+          dropUndo();
+          if (!back) return;
+          layoutRef.current = back.layout;
+          setLayout(back.layout);
+          setFocusedId(back.focusedId);
+        },
+      });
+      undoRef.current = { snap, toastId };
+      setTimeout(() => { if (undoRef.current?.snap === snap) undoRef.current = null; }, UNDO_MS);
+    },
+    [setLayout, setFocusedId, toast, dropUndo],
+  );
+
   const closeTile = useCallback(
-    (leafId: string) => setLayout((prev) => (prev ? removeLeaf(prev, leafId) : prev)),
-    [setLayout],
+    (leafId: string) =>
+      closeWithUndo(
+        (tree) => removeLeaf(tree, leafId),
+        (before) => `パネルを閉じました（${findLeaf(before, leafId)?.tabs.length ?? 0} タブ）`,
+      ),
+    [closeWithUndo],
   );
 
   /** タブ列や端末に落とされた。ここで動くのはブラウザ側の配置だけで、tmux は触らない */
@@ -941,8 +999,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         moveToDesktop: (id) => onMoveDesktopTab(workspaceId, tabId, id),
         moveToPanel: (id) => { setLayout(prev => prev ? moveTab(prev, tabId, id, null) : prev); setFocusedId(id); },
         close: () => closeTabById(tabId),
-        closeOthers: () => setLayout((prev) => (prev ? closeTabs(prev, others) : prev)),
-        closeRight: () => setLayout((prev) => (prev ? closeTabs(prev, right) : prev)),
+        closeOthers: () => closeWithUndo((prev) => closeTabs(prev, others), () => `他のタブを ${others.length} 枚閉じました`),
+        closeRight: () => closeWithUndo((prev) => closeTabs(prev, right), () => `右側のタブを ${right.length} 枚閉じました`),
         split: (side) => onDrop({ kind: 'split', leafId: leaf.id, side }, tabPayload(tab, label)),
         // 同じ画面を二重に繋がないよう、タブを閉じてからダイアログで開く
         openAsDialog: () => { if (isScreenTab(tab)) { closeTabById(tabId); setScreenOpen(tab.deviceId); } },
@@ -959,7 +1017,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         killWindow: () => win && killWindow(win),
       };
     },
-    [windows, views, devices, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
+    [windows, views, devices, closeTabById, closeWithUndo, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
   );
 
   /**
@@ -1491,7 +1549,18 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
 
       <div className="toasts" role="status" aria-live="polite">
-        {toasts.map((t) => (
+        {toasts.map((t) => t.action ? (
+          <div key={t.id} className={`toast ${t.kind} has-action`}>
+            <button
+              className="toast-text"
+              title="クリックで閉じる"
+              onClick={() => setToasts((list) => list.filter((x) => x.id !== t.id))}
+            >
+              {t.text}
+            </button>
+            <button className="toast-action" onClick={t.action.run}>{t.action.label}</button>
+          </div>
+        ) : (
           <button
             key={t.id}
             className={`toast ${t.kind}`}

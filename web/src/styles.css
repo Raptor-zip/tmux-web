@@ -2197,3 +2197,47 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 }
 .text-copy-actions { flex: none; margin: 0; padding: 12px 16px; }
 @media (any-pointer: coarse) { .text-copy-actions .btn { min-height: 44px; } }
+
+/* 『元に戻す』付きのトースト。本文は押すと消え、右のボタンで閉じる前の配置に戻す */
+.toast.has-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 0 14px;
+  cursor: default;
+}
+.toast.has-action:hover {
+  border-color: var(--border-strong);
+}
+.toast-text {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.toast-action {
+  min-height: 40px;
+  min-width: 44px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  border-left: 1px solid var(--border-strong);
+  cursor: pointer;
+}
+.toast-action:hover {
+  background: var(--bg-3, rgba(255, 255, 255, 0.06));
+}
+@media (pointer: coarse) {
+  .toast-text,
+  .toast-action {
+    min-height: 44px;
+  }
+}

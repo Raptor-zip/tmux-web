@@ -127,3 +127,23 @@ test('shared keys exclude unrelated browser preferences', () => {
   for (const key of ['tw.desktops', 'tw.layout', 'tw.layout.second', 'tw.serverPid.second', 'tw.device', 'tw.focusedLeaf']) assert.ok(isWorkspaceKey(key));
   for (const key of ['tw.fontSize', 'tw.mode', 'tw.desktops.other', '__proto__', 'tw.layout../bad']) assert.equal(isWorkspaceKey(key), false);
 });
+
+test('undoing a bulk close is synced as an ordinary patch on top of the close', async t => {
+  const f = fixture(t); f.ws.message(snapshot);
+  const before = '{"type":"leaf","id":"t1","tabs":[{"id":"w1"},{"id":"w2"}],"activeId":"w1"}';
+  const closed = '{"type":"leaf","id":"t1","tabs":[{"id":"w1"}],"activeId":"w1"}';
+  f.store.set('tw.layout', before);
+  await tick();
+  f.ws.message({ ...snapshot, 'tw.layout': before }, { ack: f.ws.sent[0].id, revision: 2 });
+  f.store.set('tw.layout', closed);
+  await tick();
+  assert.deepEqual(f.ws.sent[1].changes['tw.layout'], { before, after: closed });
+  f.ws.message({ ...snapshot, 'tw.layout': closed }, { ack: f.ws.sent[1].id, revision: 3 });
+  // 元に戻す = 閉じる前の値をふつうに書く
+  f.store.set('tw.layout', before);
+  await tick();
+  assert.deepEqual(f.ws.sent[2].changes['tw.layout'], { before: closed, after: before });
+  f.ws.message({ ...snapshot, 'tw.layout': before }, { ack: f.ws.sent[2].id, revision: 4 });
+  assert.equal(f.store.get('tw.layout'), before);
+  assert.equal(f.ws.sent.length, 3);
+});
