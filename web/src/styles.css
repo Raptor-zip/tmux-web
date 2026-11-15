@@ -1932,6 +1932,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .sw-hint { flex: none; font-family: var(--sans); font-size: 11px; color: var(--fg-faint); }
 .sw-foot-link { margin-left: auto; padding: 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
 .sw-foot-link:hover { color: var(--fg); }
+@media (any-pointer: coarse) { .sw-scope, .sw-foot-link { min-height: 44px; } }
 .shortcuts-modal { width: min(560px, calc(100vw - 24px)); }
 .shortcuts-modal[open] { display: flex; flex-direction: column; max-height: calc(var(--app-height, 100dvh) - 32px); overflow: hidden; }
 .shortcuts-note { margin: 0; padding: 10px 16px; color: var(--yellow); font-size: 12px; border-bottom: 1px solid var(--border); }
