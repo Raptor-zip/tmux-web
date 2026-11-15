@@ -13,4 +13,14 @@ export class LosslessRFB extends RFB {
   protected _sendEncodings() {
     RFB.messages.clientEncodings(this._sock, desktopEncodings(this._fbDepth, this._compressionLevel, this.lossless ? null : this.qualityLevel));
   }
+
+  /**
+   * 押したままのキーをリモート側で離す。noVNC が離すのはブラウザのウィンドウが
+   * フォーカスを失ったときだけなので、アプリのショートカット（Alt+数字など）で
+   * タブを移ると、リモートでは Alt が押されたままになる。フォーカスが画面から外れたとき、
+   * 隠したとき、切断する前にこれを呼ぶ。
+   */
+  releaseAllKeys() {
+    try { this._keyboard?._allKeysUp?.(); } catch { /* 切断済み */ }
+  }
 }

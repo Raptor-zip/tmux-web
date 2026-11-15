@@ -37,7 +37,7 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
   await copyClick();
   await notice.filter({hasText:'この端末のクリップボードにコピーしました'}).waitFor();
   assert.deepEqual(await writes(), [value], 'Unicode, newline and tab survive copy');
-  assert.equal(await page.locator('#desktop-text').count(), 0, 'direct copy needs no input panel');
+  assert.equal(await page.locator('.desktop-clipboard textarea').count(), 0, 'direct copy needs no input panel');
   assert.equal(requests.at(-1), '/api/desktop/clipboard');
 
   await page.getByRole('button', {name:'見るだけ',exact:true}).click();
@@ -52,10 +52,10 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
   value = '手動コピー用の日本語';
   await copyClick();
   await notice.filter({hasText:'自動コピーが許可されていません'}).waitFor();
-  const input = page.locator('#desktop-text');
+  const input = page.locator('.desktop-clipboard textarea');
   assert.equal(await input.inputValue(), value);
   await page.waitForFunction(() => {
-    const el = document.getElementById('desktop-text');
+    const el = document.querySelector('.desktop-clipboard textarea');
     return document.activeElement === el && el.selectionEnd === el.value.length && el.selectionStart === 0;
   });
   if (screenshot) await page.screenshot({path:require('node:path').join(out,'remote-copy-fallback.png'),animations:'disabled'});

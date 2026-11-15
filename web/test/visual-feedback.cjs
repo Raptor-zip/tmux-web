@@ -7,6 +7,34 @@ const http=require('node:http');
 const express=require('express');
 const assert=require('node:assert/strict');
 const phase=process.argv[2]||'after';
+// SCREEN_TAB_CHECK 用の最小 RFB 3.8 サーバ（認証なし・320x200 を 1 枚だけ送る）。
+// noVNC は WebSocket の実体を検査するので、Playwright の routeWebSocket ではなく本物のソケットで受ける。
+let screenTransports=[];
+function fakeRfb(ws){
+ const transport={socket:ws,closed:false,keys:[]};screenTransports.push(transport);
+ ws.on('close',()=>{transport.closed=true;});
+ let stage='version',buffer=Buffer.alloc(0);const W=320,H=200;
+ ws.send(Buffer.from('RFB 003.008\n'));
+ ws.on('message',raw=>{buffer=Buffer.concat([buffer,Buffer.from(raw)]);
+  for(;;){
+   if(stage==='version'){if(buffer.length<12)return;buffer=buffer.subarray(12);ws.send(Buffer.from([1,1]));stage='security';continue;}
+   if(stage==='security'){if(buffer.length<1)return;buffer=buffer.subarray(1);ws.send(Buffer.from([0,0,0,0]));stage='init';continue;}
+   if(stage==='init'){if(buffer.length<1)return;buffer=buffer.subarray(1);const name=Buffer.from('fake');const init=Buffer.alloc(24+name.length);
+    init.writeUInt16BE(W,0);init.writeUInt16BE(H,2);Buffer.from([32,24,0,1,0,255,0,255,0,255,16,8,0,0,0,0]).copy(init,4);init.writeUInt32BE(name.length,20);name.copy(init,24);ws.send(init);stage='normal';continue;}
+   if(buffer.length<1)return;const type=buffer[0];
+   if(type===0){if(buffer.length<20)return;buffer=buffer.subarray(20);continue;}
+   if(type===2){if(buffer.length<4)return;const n=buffer.readUInt16BE(2);if(buffer.length<4+n*4)return;buffer=buffer.subarray(4+n*4);continue;}
+   if(type===3){if(buffer.length<10)return;const incremental=buffer[1];buffer=buffer.subarray(10);if(incremental&&transport.framed)continue;transport.framed=true;
+    const head=Buffer.alloc(16);head.writeUInt16BE(1,2);head.writeUInt16BE(W,8);head.writeUInt16BE(H,10);head.writeInt32BE(0,12);
+    const pixels=Buffer.alloc(W*H*4);for(let i=0;i<W*H;i++){pixels[i*4]=0x40;pixels[i*4+1]=0x90;pixels[i*4+2]=0x30;}ws.send(Buffer.concat([head,pixels]));continue;}
+   if(type===4){if(buffer.length<8)return;transport.keys.push({down:buffer[1],key:buffer.readUInt32BE(4)});buffer=buffer.subarray(8);continue;}
+   if(type===5){if(buffer.length<6)return;buffer=buffer.subarray(6);continue;}
+   if(type===6){if(buffer.length<8)return;const n=buffer.readUInt32BE(4);if(buffer.length<8+n)return;buffer=buffer.subarray(8+n);continue;}
+   buffer=Buffer.alloc(0);return;
+  }
+ });
+}
+
 const root=resolve(__dirname,'../..');
 const out=process.env.TEST_OUTPUT||join(root,'artifacts/visual-feedback',phase);fs.mkdirSync(out,{recursive:true});
 const testPort=Number(process.env.TEST_PORT||17656);
@@ -59,6 +87,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  if(process.env.COMPRESSED_STATIC){const {installWeb}=await import('../../server/src/web.js');installWeb(app,process.env.STATIC_ROOT||join(root,'web/dist'));}
  else{app.use(express.static((process.env.STATIC_ROOT||join(root,'web/dist'))));app.get('*',(_q,r)=>r.sendFile(join(process.env.STATIC_ROOT||join(root,'web/dist'),'index.html')));}
  const server=http.createServer(app);await new Promise(r=>server.listen(testPort,'127.0.0.1',r));
+ if(process.env.SCREEN_TAB_CHECK){const {WebSocketServer}=require('ws');const wss=new WebSocketServer({noServer:true});
+  server.on('upgrade',(req,socket,head)=>{if(!/\/desktop(\?|$)/.test(req.url)){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>fakeRfb(ws));});}
  const browser=process.env.BROWSER_ENGINE==='webkit'
   ? await webkit.launch({headless:true,...(process.env.WEBKIT_BIN?{executablePath:process.env.WEBKIT_BIN}:{})})
   : await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||'/home/somak/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome',args:['--no-sandbox',...(process.env.CHROME_ARGS?process.env.CHROME_ARGS.split(' '):[])]});
@@ -68,7 +98,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now,keepStorage,direct})=>{Date.now=()=>now;if(direct)localStorage.setItem('tw.mode','"direct"');if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK,direct:!!process.env.TERMINAL_DIRECT_CHECK});
   if(process.env.TERMINAL_RENDERER)await context.addInitScript(renderer=>localStorage.setItem('tw.renderer',JSON.stringify(renderer)),process.env.TERMINAL_RENDERER);
-  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];let workspaceState={type:'workspace',initialized:false,revision:0,values:{}};const transferTasks=[],transfers=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];screenTransports=[];let workspaceState={type:'workspace',initialized:false,revision:0,values:{}};const transferTasks=[],transfers=[];page.on('pageerror',e=>errors.push(e.message));
   if(process.env.TRANSFER_REPORT)page.on('requestfinished',request=>{
    const url=new URL(request.url());if(!/\.(?:js|css)$/.test(url.pathname))return;
    transferTasks.push((async()=>{const response=await request.response();const headers=await response.allHeaders();const sizes=await request.sizes();transfers.push({asset:url.pathname.split('/').at(-1),encoding:headers['content-encoding']||'identity',wireBodyBytes:sizes.responseBodySize,decodedBytes:(await response.body()).length});})().catch(error=>errors.push(error.message)));
@@ -84,13 +114,15 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    else if(path==='/api/state'){body=state(remote?'spark':'local');if(remote&&scene.offline){body={error:'デバイスに接続できません'};status=502;}}
    else if(path==='/api/approvals')body={pending:null,secure:true};
    else if(path==='/api/projects/recent')body={projects:[]};
+   else if(path==='/api/desktop/status'&&process.env.SCREEN_TAB_CHECK)body={available:true,width:320,height:200,viewers:screenTransports.filter(t=>!t.closed).length};
+   else if(path==='/api/desktop/ping')body={ok:true};
    else if(path==='/api/desktop/status')body={available:false,error:'デスクトップに接続できません。デバイスのログイン状態を確認してください。',viewers:0};
    else if(path==='/api/files')body={root:'/home/demo/projects/atlas-web',path:'',items:[{name:'src',path:'src',directory:true,size:0,modified:now,mime:''},{name:'responsive-workspace-review.md',path:'responsive-workspace-review.md',directory:false,size:2840,modified:now,mime:'text/plain'},{name:'package.json',path:'package.json',directory:false,size:960,modified:now,mime:'text/plain'}]};
    else if(path==='/api/keys')body={keys:[]};
    else if(path==='/api/action')body={ok:true,result:null};
    await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
   });
-  await page.routeWebSocket(/\/ws\//,ws=>{
+  await page.routeWebSocket(url=>/\/ws\//.test(url.pathname)&&!(process.env.SCREEN_TAB_CHECK&&/\/desktop$/.test(url.pathname)),ws=>{
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
    if(url.pathname.endsWith('/workspace')){
     const send=extra=>ws.send(JSON.stringify({...workspaceState,...extra}));send();
@@ -118,6 +150,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   await page.goto(`http://127.0.0.1:${testPort}/`);await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(checkStateConnection) await checkStateConnection();
   if(process.env.TERMINAL_WAKE_CHECK) await require('./terminal-wake.cjs')(page,{terminalTransports,terminalInputs});
+  if(process.env.SCREEN_TAB_CHECK && scene.name==='terminal-target') await require('./screen-tab.cjs')(page,{screenTransports,terminalTransports,workspace:()=>workspaceState,out});
   if(process.env.TERMINAL_WEBGL_CHECK) await require('./terminal-webgl.cjs')(page,{terminalTransports,terminalInputs});
   if(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection') await require('./terminal-selection.cjs')(page,{terminalTransports,terminalInputs,phase,out});
   if(process.env.TERMINAL_DIRECT_CHECK && scene.name==='terminal-target') await require('./terminal-direct.cjs')(page,{terminalTransports});
@@ -143,7 +176,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
-  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'リモートデスクトップを開く',exact:true}).click();}
+  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'リモートデスクトップをダイアログで開く',exact:true}).click();}
   if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーのファイルを見る',exact:true}).click();}
   if(checkFiles) await checkFiles();
   if(scene.name.startsWith('remote-') && scene.action==='desktop'){

@@ -11,9 +11,11 @@ import { deviceOf } from './devices';
  * 「各タイルの矩形（%）」だけを計算し、描画側はフラットな絶対配置にする。
  */
 
-/** タブ 1 枚 = tmux のウィンドウ 1 つ */
-export interface TabRef {
+/** 端末のタブ。1 枚 = tmux のウィンドウ 1 つ */
+export interface TerminalTab {
   id: string;
+  /** 端末のタブは kind を持たない（保存済みの配置と同じ形のまま） */
+  kind?: undefined;
   sessionId: string;
   /** null ならそのセッションのアクティブウィンドウを映す */
   windowId: string | null;
@@ -26,6 +28,36 @@ export interface TabRef {
   windowName?: string;
   windowIndex?: number;
 }
+
+/**
+ * リモートデスクトップ（VNC）のタブ。1 枚 = デバイスの画面 1 つ。
+ *
+ * コードの中で「desktop」は仮想デスクトップ（Desktops.tsx）を指すので、
+ * 混同しないよう種類名は screen にしている。画面上の呼び名は「リモートデスクトップ」。
+ */
+export interface ScreenTab {
+  id: string;
+  kind: 'screen';
+  /** devices.ts のデバイス id（'local' かリモートの id）。tmux の id ではない */
+  deviceId: string;
+}
+
+export type TabRef = TerminalTab | ScreenTab;
+
+export function isScreenTab(tab: TabRef): tab is ScreenTab {
+  return tab.kind === 'screen';
+}
+
+export function isTerminalTab(tab: TabRef): tab is TerminalTab {
+  return tab.kind !== 'screen';
+}
+
+/** タブが属するデバイス。画面タブに deviceOf(sessionId) を使うと黙って 'local' になるので必ずこれを使う */
+export function tabDevice(tab: TabRef): string {
+  return isScreenTab(tab) ? tab.deviceId : deviceOf(tab.sessionId);
+}
+
+const DEVICE_ID = /^[a-zA-Z0-9_-]{1,80}$/;
 
 /** タイル = タブの束。activeId が前面のタブ */
 export interface LeafNode {
@@ -66,8 +98,12 @@ export function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${clientId}-${seq}`;
 }
 
-export function makeTab(sessionId: string, windowId: string | null): TabRef {
+export function makeTab(sessionId: string, windowId: string | null): TerminalTab {
   return { id: newId('w'), sessionId, windowId };
+}
+
+export function makeScreenTab(deviceId: string): ScreenTab {
+  return { id: newId('d'), kind: 'screen', deviceId };
 }
 
 export function makeLeaf(tabs: TabRef | TabRef[]): LeafNode {
@@ -106,8 +142,10 @@ export function findTab(
  * windowId が null のタブはセッションのアクティブウィンドウを映すので、
  * 同じセッションの null 同士も同じものを映していることになる。
  */
-export function targetKey(tab: Pick<TabRef, 'sessionId' | 'windowId'>): string {
-  return `${tab.sessionId}:${tab.windowId ?? '*'}`;
+export function targetKey(tab: Pick<TerminalTab, 'sessionId' | 'windowId'> | ScreenTab): string {
+  if ('kind' in tab && tab.kind === 'screen') return `screen:${tab.deviceId}`;
+  const terminal = tab as Pick<TerminalTab, 'sessionId' | 'windowId'>;
+  return `${terminal.sessionId}:${terminal.windowId ?? '*'}`;
 }
 
 /** 同じものを映しているタブを探す。except は自分自身を除くため */
@@ -121,6 +159,23 @@ export function findByTarget(
   return (
     allTabs(tree).find((x) => x.tab.id !== exceptTabId && targetKey(x.tab) === key) ?? null
   );
+}
+
+/** そのデバイスの画面を映しているタブを探す。同じ画面を 2 枚で開かないため */
+export function findScreenTab(
+  tree: LayoutNode,
+  deviceId: string,
+  exceptTabId?: string | null,
+): { leaf: LeafNode; tab: ScreenTab } | null {
+  const found = allTabs(tree).find((x) => x.tab.id !== exceptTabId && isScreenTab(x.tab) && x.tab.deviceId === deviceId);
+  return found ? { leaf: found.leaf, tab: found.tab as ScreenTab } : null;
+}
+
+/** 同じものを映しているタブ（端末なら同じウィンドウ、画面なら同じデバイス） */
+export function findSameTarget(tree: LayoutNode, tab: TabRef, exceptTabId?: string | null): { leaf: LeafNode; tab: TabRef } | null {
+  return isScreenTab(tab)
+    ? findScreenTab(tree, tab.deviceId, exceptTabId)
+    : findByTarget(tree, tab.sessionId, tab.windowId, exceptTabId);
 }
 
 // ------------------------------------------------------------------ 書き換える
@@ -290,7 +345,8 @@ function mapTree(node: LayoutNode, fn: (n: LayoutNode) => LayoutNode): LayoutNod
  * タイルごと消えてしまい、再起動のたびに配置が痩せていく。
  */
 export function dedupeTabs(tree: LayoutNode, keepId?: string | null): LayoutNode | null {
-  const tabs = allTabs(tree).map((x) => x.tab).filter((t) => t.windowId !== null);
+  // 画面タブは同じデバイスを 2 枚で映さない（接続も 2 本になる）ので畳む
+  const tabs = allTabs(tree).map((x) => x.tab).filter((t) => isScreenTab(t) || t.windowId !== null);
   const keep = new Map<string, string>();
   for (const tab of tabs) {
     const key = targetKey(tab);
@@ -379,6 +435,7 @@ export function stampNames(tree: LayoutNode, { sessions, windows }: NameSource):
   const next = mapLeaves(tree, (leaf) => {
     let changed = false;
     const tabs = leaf.tabs.map((tab) => {
+      if (isScreenTab(tab)) return tab;
       const session = sessions.find((s) => s.id === tab.sessionId);
       const win = tab.windowId ? windows.find((w) => w.id === tab.windowId) : null;
       const stamped: TabRef = {
@@ -422,6 +479,8 @@ export function remapByName(tree: LayoutNode, src: NameSource, unavailable = new
   const mapped = new Map<string, string>();
 
   const resolve = (tab: TabRef): TabRef | null => {
+    // 画面タブは tmux と関係ないので、サーバが入れ替わってもそのまま
+    if (isScreenTab(tab)) return tab;
     if (unavailable.has(deviceOf(tab.sessionId))) return tab;
     const session = tab.sessionName
       ? sessions.find((s) => s.name === tab.sessionName && deviceOf(s.id) === deviceOf(tab.sessionId))
@@ -485,6 +544,7 @@ export function remapByName(tree: LayoutNode, src: NameSource, unavailable = new
         continue;
       }
       const same =
+        next === tab || isScreenTab(next) || isScreenTab(tab) ||
         next.sessionId === tab.sessionId &&
         next.windowId === tab.windowId &&
         next.sessionName === tab.sessionName &&
@@ -500,7 +560,8 @@ export function remapByName(tree: LayoutNode, src: NameSource, unavailable = new
 /** localStorage から読んだ木が今の tmux の状態とずれていないか確かめる */
 export function pruneStale(tree: LayoutNode, validSessionIds: Set<string>, unavailable = new Set<string>()): LayoutNode | null {
   return mapLeaves(tree, (leaf) => {
-    const tabs = leaf.tabs.filter((t) => validSessionIds.has(t.sessionId) || unavailable.has(deviceOf(t.sessionId)));
+    // 画面タブはデバイスがオフラインでも残す（タブの中で「接続できません」を出す）
+    const tabs = leaf.tabs.filter((t) => isScreenTab(t) || validSessionIds.has(t.sessionId) || unavailable.has(deviceOf(t.sessionId)));
     return tabs.length === leaf.tabs.length ? leaf : settle({ ...leaf, tabs });
   });
 }
@@ -529,7 +590,19 @@ export function migrate(raw: unknown): LayoutNode | null {
     }
     if (n.type !== 'leaf') return null;
     if (Array.isArray(n.tabs)) {
-      const tabs = (n.tabs as TabRef[]).filter((t) => t && typeof t.sessionId === 'string');
+      const tabs = (n.tabs as unknown[]).flatMap((value): TabRef[] => {
+        if (!value || typeof value !== 'object') return [];
+        const t = value as Record<string, unknown>;
+        if (t.kind === 'screen') {
+          // 画面タブは必要な項目だけで組み直す（余計な値を同期に持ち込まない）
+          return typeof t.id === 'string' && typeof t.deviceId === 'string' && DEVICE_ID.test(t.deviceId)
+            ? [{ id: t.id, kind: 'screen', deviceId: t.deviceId }]
+            : [];
+        }
+        // 知らない種類のタブ（新しい版で作られたもの）は端末として扱わずに落とす
+        if (t.kind !== undefined) return [];
+        return typeof t.sessionId === 'string' ? [value as TerminalTab] : [];
+      });
       if (tabs.length === 0) return null;
       return {
         type: 'leaf',
@@ -539,7 +612,7 @@ export function migrate(raw: unknown): LayoutNode | null {
       };
     }
     if (typeof n.sessionId !== 'string') return null;
-    const tab: TabRef = {
+    const tab: TerminalTab = {
       id: newId('w'),
       sessionId: n.sessionId,
       windowId: typeof n.windowId === 'string' ? n.windowId : null,

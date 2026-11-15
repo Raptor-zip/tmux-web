@@ -95,6 +95,10 @@ test('invalid payloads cannot change settings or write invalid trees; deleting d
     { 'tw.layout': change(null, '{"type":"split"}') },
     { 'tw.desktops': change(desktops, 'null') },
     { 'tw.layout': change(null, JSON.stringify({ ...JSON.parse(layout(2)), activeId: 'missing' })) },
+    // 画面タブはデバイス id が必須で、tmux の id を混ぜた形や知らない種類は受け付けない
+    { 'tw.layout': change(null, JSON.stringify({ type: 'leaf', id: 'leaf-s', activeId: 'd1', tabs: [{ id: 'd1', kind: 'screen', deviceId: '../etc' }] })) },
+    { 'tw.layout': change(null, JSON.stringify({ type: 'leaf', id: 'leaf-s', activeId: 'd1', tabs: [{ id: 'd1', kind: 'screen' }] })) },
+    { 'tw.layout': change(null, JSON.stringify({ type: 'leaf', id: 'leaf-s', activeId: 'd1', tabs: [{ id: 'd1', kind: 'browser', sessionId: '$1', windowId: null }] })) },
   ]) {
     a.send(patch('bad', changes));
     const reply = await a.next();
@@ -110,4 +114,19 @@ test('invalid payloads cannot change settings or write invalid trees; deleting d
 test('the upgrade requires the existing Tailscale authorization', async t => {
   const f = await fixture(t);
   await assert.rejects(f.connect({}));
+});
+
+test('layouts may mix terminal tabs and remote desktop tabs', async t => {
+  const f = await fixture(t); const a = await f.connect(); const b = await f.connect();
+  const mixed = JSON.stringify({ type: 'leaf', id: 'leaf-m', activeId: 'd1', tabs: [
+    { id: 'w1', sessionId: '$1', windowId: '@1' },
+    { id: 'd1', kind: 'screen', deviceId: 'local' },
+    { id: 'd2', kind: 'screen', deviceId: 'spark-2' },
+  ] });
+  a.send(patch('mixed', { 'tw.desktops': change(null, desktops), 'tw.layout': change(null, mixed) }, true));
+  const reply = await a.next();
+  assert.equal(reply.error, undefined);
+  assert.equal(reply.revision, 1);
+  // ほかのブラウザにもそのまま届く
+  assert.equal((await b.next()).values['tw.layout'], mixed);
 });

@@ -2,8 +2,8 @@ import { ContextMenu, SEP, type MenuEntry } from './ContextMenu';
 import type { Device } from '../devices';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
-import type { DragPayload } from './SplitView';
-import type { LeafNode, TabRef } from '../layout';
+import { tabPayload, type DragPayload } from './SplitView';
+import { isScreenTab, type LeafNode, type TabRef } from '../layout';
 import type { Session } from '../types';
 import { whereWithSession, type WindowView } from '../windows';
 
@@ -31,12 +31,14 @@ interface Props {
   onClose(tabId: string): void;
   onCloseTile(): void;
   onNewTab(deviceId?: string): void;
+  /** そのデバイスのリモートデスクトップをタブで開く */
+  onOpenScreen(deviceId: string): void;
   onStartDrag(payload: DragPayload): void;
   onContextMenu(tabId: string, x: number, y: number): void;
 }
 
 /**
- * タイルの上に並ぶタブ。1 タブ = tmux のウィンドウ 1 つ。
+ * タイルの上に並ぶタブ。1 タブ = tmux のウィンドウ 1 つか、デバイスのリモートデスクトップ 1 つ。
  *
  * ブラウザのタブと同じ操作にしてある（クリックで切り替え・中クリックで閉じる・
  * 掴んで並べ替え／別のタイルへ移動・空きをダブルクリックで新しい端末）。
@@ -57,6 +59,7 @@ export function TabStrip({
   onClose,
   onCloseTile,
   onNewTab,
+  onOpenScreen,
   onStartDrag,
   onContextMenu,
 }: Props) {
@@ -130,7 +133,7 @@ export function TabStrip({
       <div
         className="tablist"
         role="tablist"
-        aria-label={desktopTabs ? "このデスクトップの端末" : "このパネルの端末"}
+        aria-label={desktopTabs ? "このデスクトップのタブ" : "このパネルのタブ"}
         ref={listRef}
         // 横に長いタブ列は、縦ホイールでも送れたほうが早い
         onWheel={(e) => {
@@ -144,14 +147,15 @@ export function TabStrip({
         {tabs.map(({ tab, leafId }, i) => {
           const { view, session, device } = viewOf(tab);
           const active = tab.id === leaf.activeId;
+          const screen = isScreenTab(tab);
           const kind = view?.status.kind ?? 'idle';
-          const label = view?.project || tab.sessionName || '—';
-          const where = view ? whereWithSession(view, session) : '接続が切れました';
+          const label = screen ? device?.name ?? 'リモートデスクトップ' : view?.project || tab.sessionName || '—';
+          const where = screen ? 'リモートデスクトップ' : view ? whereWithSession(view, session) : '接続が切れました';
           return (
             <div key={tab.id} className="tab-slot" data-strip-leaf={leafId}>
               {caret === tab.id && mark}
               <div
-                className={`tab st-${kind} ${active ? 'active' : ''} ${
+                className={`tab st-${kind} ${screen ? 'tab-screen' : ''} ${active ? 'active' : ''} ${
                   draggingTabId === tab.id ? 'dragging' : ''
                 }`}
                 data-tab-id={tab.id}
@@ -159,7 +163,7 @@ export function TabStrip({
                 role="tab"
                 tabIndex={active ? 0 : -1}
                 aria-selected={active}
-                title={[device?.name, view?.primary, where, view?.fullPath, view?.status.label]
+                title={(screen ? [device?.name, where, device && !device.connected ? '未接続' : ''] : [device?.name, view?.primary, where, view?.fullPath, view?.status.label])
                   .filter(Boolean)
                   .join('\n')}
                 onPointerDown={(e) => {
@@ -167,13 +171,7 @@ export function TabStrip({
                   if (e.button === 1) e.preventDefault();
                   if ((e.target as HTMLElement).closest('button')) return;
                   if (e.pointerType === 'mouse' && e.button === 0) onActivate(tab.id);
-                  armDrag(e, {
-                    kind: 'window',
-                    sessionId: tab.sessionId,
-                    windowId: tab.windowId,
-                    label,
-                    fromTabId: tab.id,
-                  });
+                  armDrag(e, tabPayload(tab, label));
                 }}
                 onClick={(e) => {
                   if (!(e.target as HTMLElement).closest('button')) onActivate(tab.id);
@@ -200,9 +198,10 @@ export function TabStrip({
                   e.preventDefault();
                 }}
               >
-                <span className={`state-dot ${kind}`} />
+                {screen ? <span className="tab-kind" aria-hidden="true"><Icon name="screen" /></span> : <span className={`state-dot ${kind}`} />}
                 <span className="tab-name">{label}</span>
-                {device && !device.local && <span className="tab-device" title={device.error}>{device.connected ? device.name : `${device.name} · 切断`}</span>}
+                {screen && device && !device.connected && <span className="tab-device" title={device.error}>切断</span>}
+                {!screen && device && !device.local && <span className="tab-device" title={device.error}>{device.connected ? device.name : `${device.name} · 切断`}</span>}
                 <button className="tab-menu" aria-label={`${label} のタブを移動・操作`} title="タブを移動・操作" aria-haspopup="menu"
                   onClick={e => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); onContextMenu(tab.id, r.left, r.bottom); }}>
                   <Icon name="more" />
@@ -227,10 +226,12 @@ export function TabStrip({
 
       <div className="strip-tools">
         {leaf.tabs.length > 1 && <button className="strip-btn tab-count" title="このパネルのタブを一覧で見る" aria-label={`このパネルの${leaf.tabs.length}タブを一覧で見る`} onClick={onOverview}>{leaf.tabs.length}</button>}
-        <button className="strip-btn" title="新しい端末を開く" aria-label="新しい端末をタブで開く" aria-haspopup="menu"
+        <button className="strip-btn" title="新しい端末・リモートデスクトップを開く" aria-label="新しい端末をタブで開く" aria-haspopup="menu"
           onClick={e => { const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.left,y:r.bottom,items:[
             {label:'現在のデバイスで端末を開く',hint:'Alt+T',run:()=>onNewTab()},
             ...devices.map(d=>({label:`${d.name} で端末を開く`,disabled:!d.connected,run:()=>onNewTab(d.id)})),
+            SEP,
+            ...devices.map(d=>({label:`${d.name} のリモートデスクトップを開く`,disabled:!d.connected,run:()=>onOpenScreen(d.id)})),
           ]}); }}><Icon name="plus" /></button>
         <button className="strip-btn" title="パネルの操作" aria-label="パネルの操作" aria-haspopup="menu"
           onClick={e => {const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.right,y:r.bottom,items:[

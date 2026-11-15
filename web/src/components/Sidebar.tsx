@@ -201,7 +201,8 @@ export function Sidebar({
 
   /** その組み合わせに意味があるか（自分自身への移動などを弾く） */
   const canDrop = (t: TreeDropTarget): boolean => {
-    if (!drag || !treeDrops || deviceOf(drag.sessionId) !== deviceOf(t.sessionId)) return false;
+    // リモートデスクトップのタブは tmux のウィンドウではないので、ツリーには落とせない
+    if (!drag || drag.kind === 'screen' || !treeDrops || deviceOf(drag.sessionId) !== deviceOf(t.sessionId)) return false;
     if (drag.kind === 'session') {
       // セッションはセッションにしか合流できない
       return t.kind === 'session' && t.sessionId !== drag.sessionId;

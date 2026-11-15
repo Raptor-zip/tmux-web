@@ -29,7 +29,11 @@ function validValue(key, raw) {
         && node.ratio > 0 && node.ratio < 1 && walk(node.a, depth + 1) && walk(node.b, depth + 1);
       if (node.type !== 'leaf' || !Array.isArray(node.tabs) || !node.tabs.length || node.tabs.length > 1000) return false;
       return node.tabs.every(tab => {
-        if (!object(tab) || !text(tab.id) || ids.has(tab.id) || !text(tab.sessionId) || !(tab.windowId === null || text(tab.windowId))) return false;
+        if (!object(tab) || !text(tab.id) || ids.has(tab.id)) return false;
+        // リモートデスクトップのタブ。tmux の id ではなくデバイスの id を持つ（devices.js と同じ形式）
+        if (tab.kind === 'screen') {
+          if (typeof tab.deviceId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(tab.deviceId)) return false;
+        } else if (tab.kind !== undefined || !text(tab.sessionId) || !(tab.windowId === null || text(tab.windowId))) return false;
         ids.add(tab.id); return true;
       }) && node.tabs.some(tab => tab.id === node.activeId);
     };

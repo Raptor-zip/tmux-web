@@ -327,7 +327,7 @@
  .desktop-device-label select { width:100%; }
  .desktop-viewer .desktop-device-label { gap:0; }
  .desktop-compact-head .btn { padding:4px 8px; }
- .desktop-compact-head > .btn[aria-controls="desktop-clipboard-panel"] { width:44px; flex:none; padding:0; }
+ .desktop-compact-head > .desktop-clipboard-toggle { width:44px; flex:none; padding:0; }
  .desktop-controls-toggle svg { display:none; }
  .desktop-viewer .desktop-settings-fields { gap:12px; padding:4px 0; }
  .desktop-settings-fields label { flex:1; }
@@ -357,4 +357,39 @@
 @media (any-pointer:coarse) and (min-width:761px) {
   .app.sidebar-hidden { --activity-w:44px; }
   .sidebar-launcher .icon-btn { width:44px; min-width:44px; height:48px; }
+}
+
+/* ---------------------------------------------------- リモートデスクトップのタブ
+   タイルの中に置く画面。端末と同じくタイル本体いっぱいに重ね、前面のタブだけを見せる。
+   .desktop-viewer の display:flex が hidden 属性に勝たないよう、隠すときは明示する。 */
+.tile-body > .screen-tab-view { position:absolute; inset:0; z-index:0; width:auto; height:auto; border:0; background:var(--term-bg,#000); --desktop-head-height:34px; }
+.tile-body > .screen-tab-view[hidden] { display:none; }
+.screen-tab-view:fullscreen { --desktop-head-height:44px; }
+.screen-tab-view .desktop-stage { background:var(--term-bg,#000); }
+.screen-tab-view .desktop-compact-head { gap:4px; padding:2px 4px; background:var(--bg-1); }
+.screen-tab-view .desktop-compact-head .btn { min-height:28px; padding:2px 8px; font-size:12px; }
+.screen-tab-view .desktop-icon-button { width:28px; }
+.screen-tab-view .desktop-device-label { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* タイルは画面の端に接しないので、ノッチ等の安全領域はタイル内では足さない（全画面のときだけ足す） */
+.screen-tab-view:not(:fullscreen) .desktop-compact-head { height:var(--desktop-head-height); padding-top:2px; padding-left:4px; padding-right:4px; }
+.screen-tab-view:not(:fullscreen) .desktop-popover { top:calc(var(--desktop-head-height) + 6px); right:6px; max-height:calc(100% - var(--desktop-head-height) - 12px); overflow:auto; }
+.screen-tab-view .desktop-message-content { padding:12px; }
+/* 狭いタイルでは、ボタンの文字を省いてアイコンだけにする */
+@container panel (max-width: 420px) {
+  .screen-tab-view .desktop-button-label,.screen-tab-view .desktop-controls-toggle span { display:none; }
+  /* 状態の文字は読み上げには残す（点だけ見せる） */
+  .screen-tab-view .desktop-status-text { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
+  /* 文字を隠すぶん、スマホ向けに隠しているアイコンは出す */
+  .screen-tab-view .desktop-controls-toggle svg { display:inline-block; }
+}
+/* タブ列の画面タブ。状態の点の代わりにモニタのアイコンを出す */
+.tab-kind { display:inline-flex; flex:none; align-self:center; color:var(--fg-dim); }
+.tab-kind svg { width:13px; height:13px; }
+.tab.active .tab-kind { color:var(--accent); }
+/* タブを掴んで動かしている間は、画面の上を通ってもリモートにマウス操作を送らない */
+.main.dragging .desktop-viewport canvas { pointer-events:none; }
+@media (max-width:760px), (any-pointer:coarse) {
+  .tile-body > .screen-tab-view { --desktop-head-height:44px; }
+  .screen-tab-view .desktop-compact-head .btn { min-height:40px; }
+  .screen-tab-view .desktop-icon-button { width:40px; }
 }

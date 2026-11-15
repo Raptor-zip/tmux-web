@@ -22,8 +22,12 @@ interface Props {
   onOpenFiles(): void;
   onRemoteControl(): void;
   onOpenScreen(): void;
+  /** リモートデスクトップをタブで開く（端末と並べて見る） */
+  onOpenScreenTab(): void;
   onOpenSwitcher(): void;
   onSendCommand(): void;
+  /** 前面がリモートデスクトップでも、そのデバイスの端末を新しく開ける */
+  canOpenTerminal?: boolean;
 }
 
 export function workspaceMenuItems({
@@ -44,18 +48,22 @@ export function workspaceMenuItems({
   onOpenFiles,
   onRemoteControl,
   onOpenScreen,
+  onOpenScreenTab,
   onOpenSwitcher,
   onSendCommand,
+  canOpenTerminal,
 }: Omit<Props, 'onToggleSidebar'>): MenuEntry[] {
   const pane = activePane?.id;
+  const canOpen = !!win || !!canOpenTerminal;
+  const canLaunch = !!session || !!canOpenTerminal;
   return [
     { label: '新しい端末をタブで開く', hint: 'Alt+T', run: onNewTab },
-    { label: '新しい端末を右に並べる', run: () => onSplitNewWindow('right'), disabled: !win },
-    { label: '新しい端末を下に並べる', run: () => onSplitNewWindow('bottom'), disabled: !win },
+    { label: '新しい端末を右に並べる', run: () => onSplitNewWindow('right'), disabled: !canOpen },
+    { label: '新しい端末を下に並べる', run: () => onSplitNewWindow('bottom'), disabled: !canOpen },
     { label: 'ウィンドウを切り替える…', hint: 'Alt+P', run: onOpenSwitcher },
     SEP,
-    { label: 'Claude を新しいタブで起動', run: () => onLaunchAgent('claude'), disabled: !session || launchingAgent !== null },
-    { label: 'Codex を新しいタブで起動', run: () => onLaunchAgent('codex'), disabled: !session || launchingAgent !== null },
+    { label: 'Claude を新しいタブで起動', run: () => onLaunchAgent('claude'), disabled: !canLaunch || launchingAgent !== null },
+    { label: 'Codex を新しいタブで起動', run: () => onLaunchAgent('codex'), disabled: !canLaunch || launchingAgent !== null },
     ...(activePane?.proc?.agent === 'Claude' ? [
       { label: 'Claude アプリに接続…', run: onRemoteControl },
       { label: 'Claude を終了する', run: () => pane && onAction('runCommand', { target: pane, command: '/exit' }), disabled: activePane.busy },
@@ -67,7 +75,8 @@ export function workspaceMenuItems({
     { label: 'ペインを全画面 / 元に戻す', run: () => pane && onAction('zoomPane', { target: pane }), disabled: !pane },
     { label: 'ペインを閉じる…', run: onKillPane, disabled: !pane },
     SEP,
-    { label: 'リモートデスクトップを開く', run: onOpenScreen },
+    { label: 'リモートデスクトップをタブで開く', run: onOpenScreenTab },
+    { label: 'リモートデスクトップをダイアログで開く', run: onOpenScreen },
     { label: `キーバーを${showKeyBar ? '隠す' : '表示'}`, run: () => onToggle('showKeyBar') },
     { label: `tmux のステータス行を${showStatusBar ? '隠す' : '表示'}`, run: () => onToggle('showStatusBar') },
     { label: mode === 'mirror' ? '直接接続に切り替える' : 'ミラー接続に切り替える', run: () => onToggle('mode') },

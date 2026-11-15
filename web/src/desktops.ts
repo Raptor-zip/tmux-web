@@ -1,4 +1,4 @@
-import { activateTab, addTab, allLeaves, closeTab, findByTarget, findLeaf, findTab, makeLeaf, type LayoutNode } from './layout';
+import { activateTab, addTab, allLeaves, closeTab, findSameTarget, findLeaf, findScreenTab, findTab, makeLeaf, makeScreenTab, type LayoutNode } from './layout';
 
 export interface Desktop { id: string; name: string }
 export interface Desktops { activeId: string; items: Desktop[] }
@@ -50,11 +50,24 @@ export function transferDesktopTab(source: LayoutNode, destination: LayoutNode |
     const leaf = makeLeaf(found.tab);
     return { source: remaining, destination: leaf, focusedId: leaf.id };
   }
-  const existing = findByTarget(destination, found.tab.sessionId, found.tab.windowId);
+  // 同じものを映すタブ（同じウィンドウ・同じデバイスの画面）がすでにあれば、それを前に出す
+  const existing = findSameTarget(destination, found.tab);
   const target = existing?.leaf ?? findLeaf(destination, focusedId ?? '') ?? allLeaves(destination)[0];
   return {
     source: remaining,
     destination: existing ? activateTab(destination, existing.tab.id) : addTab(destination, target.id, found.tab),
     focusedId: target.id,
   };
+}
+
+/** そのデバイスのリモートデスクトップをタブで開く。すでに開いていれば前に出す */
+export function openScreenTab(layout: LayoutNode | null, deviceId: string, focusedId: string | null) {
+  if (!layout) {
+    const leaf = makeLeaf(makeScreenTab(deviceId));
+    return { layout: leaf as LayoutNode, focusedId: leaf.id };
+  }
+  const existing = findScreenTab(layout, deviceId);
+  if (existing) return { layout: activateTab(layout, existing.tab.id), focusedId: existing.leaf.id };
+  const target = findLeaf(layout, focusedId ?? '') ?? allLeaves(layout)[0];
+  return { layout: addTab(layout, target.id, makeScreenTab(deviceId)), focusedId: target.id };
 }

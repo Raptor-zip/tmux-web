@@ -18,10 +18,11 @@ import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar
 import { workspaceMenuItems } from './components/Toolbar';
 import { KeyBar } from './components/KeyBar';
 import { Dialog, type DialogSpec } from './components/Dialog';
-import { SplitView, type DragPayload, type DropTarget } from './components/SplitView';
+import { SplitView, tabPayload, type DragPayload, type DropTarget } from './components/SplitView';
 import { Switcher, type SwitchItem } from './components/Switcher';
 import { ContextMenu, SEP, type MenuEntry } from './components/ContextMenu';
-import type { TerminalHandle, TerminalStatus } from './components/Terminal';
+import type { TerminalStatus } from './components/Terminal';
+import { isTerminalHandle, type TabHandle } from './components/TerminalTabs';
 import {
   activateTab,
   activeTab,
@@ -33,6 +34,14 @@ import {
   dedupeTabs,
   findByTarget,
   findLeaf,
+  findSameTarget,
+  findScreenTab,
+  isScreenTab,
+  isTerminalTab,
+  makeScreenTab,
+  tabDevice,
+  type TabRef,
+  type TerminalTab,
   findTab,
   makeLeaf,
   makeTab,
@@ -117,7 +126,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   }, [active, device?.fingerprint]);
 
   /** タイル id → ターミナル操作ハンドル。ツールバーやキーバーはフォーカス中のタイルに送る */
-  const termRefs = useRef(new Map<string, TerminalHandle>());
+  const termRefs = useRef(new Map<string, TabHandle>());
 
   const [layout, setLayout] = useWorkspaceValue<LayoutNode | null>(key('tw.layout'), null, migrate);
   const [focusedId, setFocusedId] = useWorkspaceValue<string | null>(key('tw.focusedLeaf'), null);
@@ -133,8 +142,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     let accumulated = 0;
     let lastTime = 0;
     const onWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey || !(event.target instanceof Element) ||
-          !event.target.closest('.terminal-wrap')) return;
+      // リモートデスクトップの上では Ctrl+ホイールをリモートへ渡す
+      if (!event.ctrlKey || !(event.target instanceof Element) || !event.target.closest('.terminal-wrap')) return;
+      // 画面タブではページの拡大だけ抑え、イベントは noVNC（リモート）へそのまま流す
+      if (event.target.closest('.screen-tab-view')) { event.preventDefault(); return; }
       // xterm/tmux にスクロールを送らず、ブラウザのページ拡大も抑える。
       event.preventDefault();
       event.stopPropagation();
@@ -283,7 +294,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    */
   const idsUnknown = useMemo(() => {
     if (serverDown || !layout) return false;
-    const list = allTabs(layout);
+    // 画面タブは tmux の id を持たないので、入れ替わりの判定には使わない
+    const list = allTabs(layout).filter(({ tab }) => isTerminalTab(tab)) as Array<{ tab: TerminalTab }>;
     return (
       list.length > 0 && list.every(({ tab }) => !pendingSessions.current.has(tab.sessionId) && !sessions.some((s) => s.id === tab.sessionId))
     );
@@ -401,26 +413,31 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [layout, focusedId],
   );
   const focusedTab = focusedLeaf ? activeTab(focusedLeaf) : null;
+  /** 前面のタブが端末ならそのタブ。リモートデスクトップなら null（tmux の操作の対象が無い） */
+  const focusedTerminalTab = focusedTab && isTerminalTab(focusedTab) ? focusedTab : null;
+  const focusedScreen = !!focusedTab && isScreenTab(focusedTab);
+  const focusedDevice = focusedTab ? tabDevice(focusedTab) : null;
   useEffect(() => {
-    if (focusedTab) setSelectedDevice(deviceOf(focusedTab.sessionId));
-  }, [focusedTab?.id, focusedTab?.sessionId]);
+    if (focusedDevice) setSelectedDevice(focusedDevice);
+  }, [focusedTab?.id, focusedDevice]);
   const focusedIdRef = useRef(focusedId);
   focusedIdRef.current = focusedId;
 
   const currentWindow = useMemo(
-    () => windows.find((w) => w.id === focusedTab?.windowId) ?? null,
-    [windows, focusedTab],
+    () => windows.find((w) => w.id === focusedTerminalTab?.windowId) ?? null,
+    [windows, focusedTerminalTab],
   );
   const currentSession = useMemo(
-    () => sessions.find((s) => s.id === focusedTab?.sessionId) ?? null,
-    [sessions, focusedTab],
+    () => sessions.find((s) => s.id === focusedTerminalTab?.sessionId) ?? null,
+    [sessions, focusedTerminalTab],
   );
   const activePane = useMemo(() => {
+    if (!focusedTerminalTab) return null;
     const list = panes
-      .filter((p) => p.windowId === focusedTab?.windowId)
+      .filter((p) => p.windowId === focusedTerminalTab.windowId)
       .sort((a, b) => a.index - b.index);
     return list.find((p) => p.active) ?? list[0] ?? null;
-  }, [panes, focusedTab]);
+  }, [panes, focusedTerminalTab]);
 
   /**
    * ウィンドウが消えたタブは閉じる。
@@ -436,7 +453,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     const dead = tabs
       .filter(
         ({ tab }) =>
-          tab.windowId && !unavailable.has(deviceOf(tab.sessionId)) && !live.has(tab.windowId) && !pendingWindows.current.has(tab.windowId),
+          isTerminalTab(tab) && tab.windowId && !unavailable.has(deviceOf(tab.sessionId)) && !live.has(tab.windowId) && !pendingWindows.current.has(tab.windowId),
       )
       .map(({ tab }) => tab.id);
     if (dead.length === 0) return;
@@ -457,25 +474,29 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    * tmux web を複数のウィンドウで開いたとき、タブの並びだけでどれがどれか分かる。
    */
   useEffect(() => {
-    const name = activePane?.project?.name;
+    const name = focusedScreen ? 'リモートデスクトップ' : activePane?.project?.name;
     if (!active) return;
     document.title = [workspaceName, name, device?.name].filter(Boolean).join(' — ');
-  }, [active, workspaceName, activePane, device?.name]);
+  }, [active, workspaceName, activePane, focusedScreen, device?.name]);
 
   /** 直前に見ていた順。切り替えパレットの並びに使う（ref だと並びが古いまま残る） */
   const [recent, setRecent] = useState<string[]>([]);
   useEffect(() => {
-    const id = focusedTab?.windowId;
+    const id = focusedTerminalTab?.windowId;
     if (!id) return;
     setRecent((prev) => (prev[0] === id ? prev : [id, ...prev.filter((x) => x !== id)].slice(0, 50)));
-  }, [focusedTab]);
+  }, [focusedTerminalTab]);
 
-  const focusedTerm = () => (focusedIdRef.current ? termRefs.current.get(focusedIdRef.current) : undefined);
+  /** 前面のタブの端末。リモートデスクトップのタブでは undefined（文字の送信や貼り付けをしない） */
+  const focusedTerm = () => {
+    const handle = focusedIdRef.current ? termRefs.current.get(focusedIdRef.current) : undefined;
+    return isTerminalHandle(handle) ? handle : undefined;
+  };
   /** 新しく開いたタイルはこの時点ではまだ描かれていないので、次のフレームで掴む */
   const focusSoon = (leafId: string) =>
     requestAnimationFrame(() => { if (activeRef.current) termRefs.current.get(leafId)?.focus(); });
 
-  const registerTerm = useCallback((id: string, handle: TerminalHandle | null) => {
+  const registerTerm = useCallback((id: string, handle: TabHandle | null) => {
     if (handle) termRefs.current.set(id, handle);
     else termRefs.current.delete(id);
   }, []);
@@ -515,7 +536,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           setLayout((prev) => {
             if (!prev) return prev;
             const ids = allTabs(prev)
-              .filter(({ tab }) => tab.sessionId === target)
+              .filter(({ tab }) => isTerminalTab(tab) && tab.sessionId === target)
               .map(({ tab }) => tab.id);
             return ids.length > 0 ? closeTabs(prev, ids) : prev;
           });
@@ -564,6 +585,35 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [setLayout, setSidebarOpen],
   );
 
+  /** デバイスのリモートデスクトップをタブで開く。すでに開いていればそれを前に出す */
+  const openScreen = useCallback(
+    (deviceId: string, leafId?: string | null) => {
+      const tree = layoutRef.current;
+      if (isNarrow()) setSidebarOpen(false);
+      if (!tree) {
+        const leaf = makeLeaf(makeScreenTab(deviceId));
+        setLayout(leaf);
+        setFocusedId(leaf.id);
+        focusSoon(leaf.id);
+        return;
+      }
+      const found = findScreenTab(tree, deviceId);
+      if (found) {
+        setLayout(activateTab(tree, found.tab.id));
+        setFocusedId(found.leaf.id);
+        focusSoon(found.leaf.id);
+        return;
+      }
+      const anchor = anchorLeaf(tree, leafId);
+      if (!anchor) return;
+      setLayout(addTab(tree, anchor.id, makeScreenTab(deviceId)));
+      setFocusedId(anchor.id);
+      focusSoon(anchor.id);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [setLayout, setSidebarOpen],
+  );
+
   const projectStarted = (project: StartedProject) => {
     pendingSessions.current.add(project.sessionId);
     setTimeout(() => { pendingSessions.current.delete(project.sessionId); pendingWindows.current.delete(project.windowId); refresh(); }, 10000);
@@ -583,13 +633,18 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     async (leafId?: string | null, agent?: 'claude' | 'codex', deviceId?: string) => {
       const tree = layoutRef.current;
       const anchor = tree ? anchorLeaf(tree, leafId) : null;
-      const tab = anchor ? activeTab(anchor) : null;
-      const session = deviceId
-        ? sessions.find(s => deviceOf(s.id) === deviceId)?.id
-        : tab?.sessionId ?? focusedTab?.sessionId ?? sessions.find(s => deviceOf(s.id) === activeDevice.id)?.id;
+      const anchorTab = anchor ? activeTab(anchor) : null;
+      // リモートデスクトップのタブからは、そのデバイスの端末を開く
+      const screenDevice = anchorTab && isScreenTab(anchorTab) ? anchorTab.deviceId : null;
+      const tab = anchorTab && isTerminalTab(anchorTab) ? anchorTab : null;
+      const device = deviceId ?? screenDevice;
+      const session = device
+        ? sessions.find(s => deviceOf(s.id) === device)?.id
+        : tab?.sessionId ?? focusedTerminalTab?.sessionId ?? sessions.find(s => deviceOf(s.id) === activeDevice.id)?.id;
+      if (!session && device) { setSelectedDevice(device); setProjectMode('existing'); return; }
       if (!session) { if (deviceId) setSelectedDevice(deviceId); setProjectMode('existing'); return; }
       const cwd =
-        deviceId ? undefined : panes.find((p) => p.windowId === tab?.windowId && p.active)?.path ?? activePane?.path;
+        device ? undefined : panes.find((p) => p.windowId === tab?.windowId && p.active)?.path ?? activePane?.path;
       try {
         const { result } = await runAction(agent ? 'launchAgent' : 'newWindow', { target: session, after: true, cwd, ...(agent ? { agent } : {}) });
         if (!result) return;
@@ -612,7 +667,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [focusedTab, sessions, panes, activePane, activeDevice.id, setLayout, refresh, toast],
+    [focusedTerminalTab, sessions, panes, activePane, activeDevice.id, setLayout, refresh, toast],
   );
 
   const launchAgent = async (agent: 'claude' | 'codex') => {
@@ -629,7 +684,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    */
   const splitIntoNewWindow = useCallback(
     async (side: 'right' | 'bottom') => {
-      const session = focusedTab?.sessionId ?? sessions[0]?.id;
+      // リモートデスクトップを見ているときは、そのデバイスの端末を隣に開く
+      const session = focusedTerminalTab?.sessionId
+        ?? (focusedDevice ? sessions.find(s => deviceOf(s.id) === focusedDevice)?.id : undefined)
+        ?? sessions[0]?.id;
       if (!session) return;
       try {
         // 新しい端末は、いま見ているペインと同じディレクトリで開く
@@ -660,7 +718,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [focusedTab, sessions, activePane, setLayout, refresh, toast],
+    [focusedTerminalTab, focusedDevice, sessions, activePane, setLayout, refresh, toast],
   );
 
   const activate = useCallback(
@@ -686,19 +744,23 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const onDrop = useCallback(
     (target: DropTarget, payload: DragPayload) => {
       const tree = layoutRef.current;
+      /** 落とされたものから新しく作るタブ（すでに開いていればそちらを動かす） */
+      const fresh = (): TabRef => payload.kind === 'screen' ? makeScreenTab(payload.deviceId) : makeTab(payload.sessionId, payload.windowId);
       if (!tree) {
-        const leaf = makeLeaf(makeTab(payload.sessionId, payload.windowId));
+        const leaf = makeLeaf(fresh());
         setLayout(leaf);
         setFocusedId(leaf.id);
         return;
       }
-      const open = findByTarget(tree, payload.sessionId, payload.windowId);
+      const open = payload.kind === 'screen'
+        ? findScreenTab(tree, payload.deviceId)
+        : findByTarget(tree, payload.sessionId, payload.windowId);
 
       if (target.kind === 'tab') {
         if (open) {
           setLayout(moveTab(tree, open.tab.id, target.leafId, target.before));
         } else {
-          setLayout(addTab(tree, target.leafId, makeTab(payload.sessionId, payload.windowId), target.before));
+          setLayout(addTab(tree, target.leafId, fresh(), target.before));
         }
         setFocusedId(target.leafId);
         focusSoon(target.leafId);
@@ -708,7 +770,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       // 端に落とした = 新しいタイルとして並べる。
       // 1 枚しかないタイルを自分自身の隣に出しても、同じものが並ぶだけなので何もしない
       if (open && open.leaf.id === target.leafId && open.leaf.tabs.length === 1) return;
-      const tab = open?.tab ?? makeTab(payload.sessionId, payload.windowId);
+      const tab = open?.tab ?? fresh();
       const base = open ? closeTab(tree, tab.id) : tree;
       if (!base) {
         const leaf = makeLeaf(tab);
@@ -733,6 +795,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    */
   const dropInTree = useCallback(
     (target: TreeDropTarget, payload: DragPayload) => {
+      // リモートデスクトップのタブは tmux のウィンドウではないので、木には落とせない
+      if (payload.kind === 'screen') return;
       if (deviceOf(target.sessionId) !== deviceOf(payload.sessionId)) { toast('デバイスをまたぐ移動・結合はできません。'); return; }
       if (payload.kind === 'session') {
         if (target.kind !== 'session') return;
@@ -905,7 +969,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       const found = tree ? findTab(tree, tabId) : null;
       if (!tree || !found) return;
       const { leaf, tab } = found;
-      const win = windows.find((w) => w.id === tab.windowId) ?? null;
+      const screen = isScreenTab(tab);
+      const win = isTerminalTab(tab) ? windows.find((w) => w.id === tab.windowId) ?? null : null;
+      const label = screen ? devices.find(d => d.id === tab.deviceId)?.name ?? 'リモートデスクトップ' : win?.name ?? '';
       const others = leaf.tabs.filter((t) => t.id !== tabId).map((t) => t.id);
       const at = leaf.tabs.findIndex((t) => t.id === tabId);
       const right = leaf.tabs.slice(at + 1).map((t) => t.id);
@@ -935,25 +1001,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           {
             label: '右に切り出す',
             hint: '並べて見る',
-            run: () => onDrop({ kind: 'split', leafId: leaf.id, side: 'right' }, {
-              kind: 'window',
-              sessionId: tab.sessionId,
-              windowId: tab.windowId,
-              label: win?.name ?? '',
-              fromTabId: tab.id,
-            }),
+            run: () => onDrop({ kind: 'split', leafId: leaf.id, side: 'right' }, tabPayload(tab, label)),
             disabled: leaf.tabs.length < 2,
           },
           {
             label: '下に切り出す',
             hint: '並べて見る',
-            run: () => onDrop({ kind: 'split', leafId: leaf.id, side: 'bottom' }, {
-              kind: 'window',
-              sessionId: tab.sessionId,
-              windowId: tab.windowId,
-              label: win?.name ?? '',
-              fromTabId: tab.id,
-            }),
+            run: () => onDrop({ kind: 'split', leafId: leaf.id, side: 'bottom' }, tabPayload(tab, label)),
             disabled: leaf.tabs.length < 2,
           },
           SEP,
@@ -962,7 +1016,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             run: () => { setLayout(prev => prev ? moveTab(prev, tabId, target.id, null) : prev); setFocusedId(target.id); },
           })),
           SEP,
-          {
+          ...(isScreenTab(tab) ? [
+            // 同じ画面を二重に繋がないよう、タブを閉じてからダイアログで開く
+            { label: 'ダイアログで大きく開く', run: () => { closeTabById(tabId); setScreenOpen(tab.deviceId); } },
+          ] : [{
             label: 'ウィンドウ名を変更…',
             run: () =>
               win &&
@@ -981,11 +1038,11 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             hint: 'tmux ごと',
             run: () => win && killWindow(win),
             disabled: !win,
-          },
+          }]),
         ],
       });
     },
-    [windows, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
+    [windows, devices, closeTabById, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
   );
 
   /**
@@ -1053,7 +1110,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
   /** 切り替えパレットに出す一覧。直前に見ていた順 → 状態の強い順 */
   const switchItems = useMemo<SwitchItem[]>(() => {
-    const openIds = new Set(tabs.map((t) => t.tab.windowId).filter(Boolean) as string[]);
+    const openIds = new Set(tabs.map((t) => isTerminalTab(t.tab) ? t.tab.windowId : null).filter(Boolean) as string[]);
     const order = recent;
     return windows
       .map((win) => ({
@@ -1154,6 +1211,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onKillPane: killPane,
       onRemoteControl: () => activePane && setRemotePane(activePane.id),
       onOpenScreen: () => setScreenOpen(activeDevice.id),
+      onOpenScreenTab: () => openScreen(activeDevice.id, focusedIdRef.current),
+      canOpenTerminal: !!focusedDevice && sessions.some(s => deviceOf(s.id) === focusedDevice),
       onOpenFiles: () => activePane && setFilesPaneId(activePane.id),
       onOpenSwitcher: () => setSwitcherOpen(true),
       onSendCommand: () =>
@@ -1189,9 +1248,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         views={views}
         home={home}
         groupBy={groupBy}
-        activeSessionId={focusedTab?.sessionId ?? null}
-        activeWindowId={focusedTab?.windowId ?? null}
-        openWindowIds={tabs.map(({ tab }) => tab.windowId)}
+        activeSessionId={focusedTerminalTab?.sessionId ?? null}
+        activeWindowId={focusedTerminalTab?.windowId ?? null}
+        openWindowIds={tabs.map(({ tab }) => isTerminalTab(tab) ? tab.windowId : null)}
         connected={connected}
         unauthorized={unauthorized}
         serverVersion={state?.server?.version}
@@ -1242,6 +1301,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                 onToggleFocus={() => setPanelFocus(v => !v)}
                 focusedId={focusedId}
                 devices={devices}
+                onOpenScreen={(leafId, deviceId) => openScreen(deviceId, leafId)}
                 sessions={sessions}
                 windows={windows}
                 views={views}
@@ -1299,12 +1359,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           </div>
         </div>
 
-        <MobileInput
+        {/* リモートデスクトップの文字入力は画面側の「文字入力」から送る */}
+        {!focusedScreen && <MobileInput
           connected={!!focusedId && !!termStatuses[focusedId]?.connected}
           onPaste={(text) => focusedTerm()?.paste(text)}
           onSend={(data) => focusedTerm()?.send(data)}
           onAttach={async (files) => {
-            const target = focusedTab && { sessionId: focusedTab.sessionId, windowId: focusedTab.windowId };
+            const target = focusedTerminalTab && { sessionId: focusedTerminalTab.sessionId, windowId: focusedTerminalTab.windowId };
             const terminal = focusedTerm();
             if (!target || !terminal) throw new Error('添付先の端末を選んでください。');
             const paths: string[] = [];
@@ -1317,8 +1378,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             const text = paths.map(quotePath).join(' ') + ' ';
             return { text, inserted: terminal.paste(text, target) };
           }}
-        />
-        {showKeyBar && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
+        />}
+        {showKeyBar && !focusedScreen && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
       </main>
 
       {devicesOpen && <Devices devices={devices} onChanged={reloadDevices} onClose={() => setDevicesOpen(false)} />}
@@ -1328,7 +1389,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       <footer className="statusbar">
         <button className="sb-item device-name" title="デバイス接続を管理" onClick={() => setDevicesOpen(true)}>{activeDevice.name}</button>
         <span className="sb-item">
-          {currentSession ? currentSession.name : 'セッションなし'}
+          {focusedScreen ? 'リモートデスクトップ' : currentSession ? currentSession.name : 'セッションなし'}
           {currentWindow && ` / ${currentWindow.index}:${windowName(currentWindow, activePane)}`}
         </span>
         {!connected && <span className="sb-item sb-bad">サーバと切断</span>}
@@ -1373,7 +1434,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       {projectMode && <ProjectStart deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
       {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure} onClose={() => setApprovalOpen(false)} onDone={() => { setApprovalOpen(false); approval.refresh(); }} />}
       {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}
-      {screenOpen && <ScreenViewer devices={devices} deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)} />}
+      {screenOpen && <ScreenViewer devices={devices} deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)}
+        onOpenAsTab={(deviceId) => { setScreenOpen(null); openScreen(deviceId, focusedIdRef.current); }} />}
       {switcherOpen && (
         <Switcher
           items={switchItems}

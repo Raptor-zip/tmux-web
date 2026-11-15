@@ -1,26 +1,30 @@
 import type { MenuEntry } from './ContextMenu';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
-import { deviceOf, type Device } from '../devices';
+import type { Device } from '../devices';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeTab,
   dividers,
   dropSideFor,
+  isScreenTab,
   leafRects,
+  tabDevice,
   type DropSide,
   type LayoutNode,
   type Rect,
   type TabRef,
 } from '../layout';
 import { TabStrip } from './TabStrip';
-import type { TerminalHandle, TerminalStatus } from './Terminal';
-import { TerminalTabs } from './TerminalTabs';
+import type { TerminalStatus } from './Terminal';
+import { TerminalTabs, type TabHandle } from './TerminalTabs';
 import type { Session, TmuxWindow } from '../types';
 import type { WindowView } from '../windows';
 
 /** サイドバーやタブから掴んだもの */
-export interface DragPayload {
+export type DragPayload = WindowDragPayload | ScreenDragPayload;
+
+export interface WindowDragPayload {
   /** session を掴んだときは windowId が null になり、代表ウィンドウが開かれる */
   kind: 'window' | 'session';
   sessionId: string;
@@ -28,6 +32,21 @@ export interface DragPayload {
   label: string;
   /** すでに開いているタブを掴んだ場合、その元タブの id。新規ではなく「移動」になる */
   fromTabId?: string | null;
+}
+
+/** リモートデスクトップのタブ。tmux の操作（ウィンドウの移動・統合）には使えない */
+export interface ScreenDragPayload {
+  kind: 'screen';
+  deviceId: string;
+  label: string;
+  fromTabId?: string | null;
+}
+
+/** 開いているタブを掴んだときの中身 */
+export function tabPayload(tab: TabRef, label: string): DragPayload {
+  return isScreenTab(tab)
+    ? { kind: 'screen', deviceId: tab.deviceId, label, fromTabId: tab.id }
+    : { kind: 'window', sessionId: tab.sessionId, windowId: tab.windowId, label, fromTabId: tab.id };
 }
 
 /** ドラッグ中のものを落とせる場所 */
@@ -65,6 +84,8 @@ interface Props {
   onCloseTab(tabId: string): void;
   onCloseTile(leafId: string): void;
   onNewTab(leafId: string, deviceId?: string): void;
+  /** そのデバイスのリモートデスクトップをタブで開く */
+  onOpenScreen(leafId: string, deviceId: string): void;
   onDrop(target: DropTarget, payload: DragPayload): void;
   onStartDrag(payload: DragPayload): void;
   onDragEnd(): void;
@@ -75,7 +96,7 @@ interface Props {
   onNotice(text: string): void;
   onTerminalContextMenu(leafId: string, x: number, y: number): void;
   onTabContextMenu(tabId: string, x: number, y: number): void;
-  registerTerm(leafId: string, handle: TerminalHandle | null): void;
+  registerTerm(leafId: string, handle: TabHandle | null): void;
 }
 
 const pct = (r: Rect) => ({
@@ -122,6 +143,7 @@ export function SplitView({
   onCloseTab,
   onCloseTile,
   onNewTab,
+  onOpenScreen,
   onDrop,
   onStartDrag,
   onDragEnd,
@@ -156,15 +178,25 @@ export function SplitView({
   const single = closableTile && (focusMode || (!resizing && autoFocus && (!forceSplit || window.innerWidth <= 760)));
   const selectedId = tiles.some(t => t.leaf.id === focusedId) ? focusedId : tiles[0]?.leaf.id;
   const openOverview = () => { setQuery(''); setOverview(true); };
+  /** 一覧の検索対象。画面タブは「リモートデスクトップ」「デスクトップ」でも引ける */
+  const searchText = (tab: TabRef) => {
+    const { view, device } = viewOf(tab);
+    const words = isScreenTab(tab)
+      ? ['リモートデスクトップ', 'デスクトップ', '画面', device?.name]
+      : [view?.project, view?.primary, tab.sessionName, device?.name];
+    return words.join(' ').toLocaleLowerCase();
+  };
 
   /** タブが映しているウィンドウ。windowId が null のタブはセッションのアクティブを見る */
   const viewOf = useCallback(
     (tab: TabRef) => {
+      const device = devices.find(d => d.id === tabDevice(tab));
+      if (isScreenTab(tab)) return { view: null, session: null, device };
       const session = sessions.find((s) => s.id === tab.sessionId) ?? null;
       const win = tab.windowId
         ? windows.find((w) => w.id === tab.windowId)
         : windows.find((w) => w.sessionId === tab.sessionId && w.active);
-      return { view: win ? views.get(win.id) ?? null : null, session, device: devices.find(d => d.id === deviceOf(tab.sessionId)) };
+      return { view: win ? views.get(win.id) ?? null : null, session, device };
     },
     [sessions, windows, views, devices],
   );
@@ -305,6 +337,7 @@ export function SplitView({
               onClose={onCloseTab}
               onCloseTile={() => onCloseTile(leaf.id)}
               onNewTab={(deviceId) => onNewTab(leaf.id, deviceId)}
+              onOpenScreen={(deviceId) => { onFocus(leaf.id); onOpenScreen(leaf.id, deviceId); }}
               onStartDrag={onStartDrag}
               onContextMenu={onTabContextMenu}
             />
@@ -315,6 +348,7 @@ export function SplitView({
                 visible={active && size.width > 0 && size.height > 0 && (!single || focused)}
                 pendingRemap={pendingRemap}
                 deviceName={device?.name}
+                devices={devices}
                 windowIndex={tab => viewOf(tab).view?.win.index ?? null}
                 mode={mode}
                 showStatusBar={showStatusBar}
@@ -396,15 +430,15 @@ export function SplitView({
       <div className="overview-search"><input aria-label="タブを検索" placeholder="プロジェクト・デバイス・作業名で検索" value={query} onChange={e=>setQuery(e.target.value)} /></div>
       <div className="overview-list">
       {tiles.map(({leaf},index) => {
-        const matches = leaf.tabs.filter(tab => { const {view,device}=viewOf(tab); return [view?.project, view?.primary, tab.sessionName,device?.name].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase()); });
+        const matches = leaf.tabs.filter(tab => searchText(tab).includes(query.toLocaleLowerCase()));
         if (!matches.length) return null;
         return <section key={leaf.id}><h3>パネル {index+1}{leaf.id===selectedId ? ' · 入力先' : ''}<span>{leaf.tabs.length} タブ</span></h3>
-          {matches.map(tab=>{const {view,device}=viewOf(tab);return <button key={tab.id} className="overview-tab" aria-current={tab.id===leaf.activeId && leaf.id===selectedId ? 'true' : undefined} onClick={()=>{onFocus(leaf.id);onActivateTab(tab.id);setOverview(false);if (!window.matchMedia('(pointer: coarse)').matches) requestAnimationFrame(()=>hostRef.current?.querySelector<HTMLTextAreaElement>('.tile.focused textarea')?.focus());}}>
+          {matches.map(tab=>{const {view,device}=viewOf(tab);const screen=isScreenTab(tab);return <button key={tab.id} className="overview-tab" aria-current={tab.id===leaf.activeId && leaf.id===selectedId ? 'true' : undefined} onClick={()=>{onFocus(leaf.id);onActivateTab(tab.id);setOverview(false);}}>
             <span className="overview-device">{device?.name || '接続先を確認中'}{device && !device.connected ? ' · 未接続' : ''}</span>
-            <strong>{view?.project || tab.sessionName}</strong><span className="overview-task">{view?.primary || tab.windowName || '端末'}</span><span className="overview-selected">{tab.id===leaf.activeId && leaf.id===selectedId ? '選択中' : '開く →'}</span>
+            <strong>{screen ? 'リモートデスクトップ' : view?.project || tab.sessionName}</strong><span className="overview-task">{screen ? (device?.name || '画面') : view?.primary || tab.windowName || '端末'}</span><span className="overview-selected">{tab.id===leaf.activeId && leaf.id===selectedId ? '選択中' : '開く →'}</span>
           </button>;})}</section>;
       })}
-      {!tiles.some(({leaf})=>leaf.tabs.some(tab=>{const {view,device}=viewOf(tab);return [view?.project,view?.primary,tab.sessionName,device?.name].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase());})) && <p className="overview-empty">一致するタブがありません</p>}
+      {!tiles.some(({leaf})=>leaf.tabs.some(tab=>searchText(tab).includes(query.toLocaleLowerCase()))) && <p className="overview-empty">一致するタブがありません</p>}
       </div>
     </Modal>}
     </div>

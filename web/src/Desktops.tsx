@@ -10,7 +10,7 @@ import { useWorkspaceStatus, useWorkspaceValue, workspaceStore } from './workspa
 import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
-import { addDesktop, desktopKey, INITIAL_DESKTOPS, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
+import { addDesktop, desktopKey, INITIAL_DESKTOPS, openScreenTab, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
 
 export default function Desktops() {
   const connection = useTmuxState();
@@ -243,7 +243,15 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
         if (desktop) rename(desktop);
       } },
     ]} />}
-    {remoteOpen && <ScreenViewer devices={connection.devices} deviceId="local" onClose={() => setRemoteOpen(false)} />}
+    {remoteOpen && <ScreenViewer devices={connection.devices} deviceId="local" onClose={() => setRemoteOpen(false)} onOpenAsTab={deviceId => {
+      // 同じ画面を二重に繋がないよう、ダイアログを閉じてから今のデスクトップのタブに開く
+      setRemoteOpen(false);
+      const handle = desktopLayouts.current.get(state.activeId);
+      if (!handle) return;
+      const current = handle.read();
+      const next = openScreenTab(current.layout, deviceId, current.focusedId);
+      handle.write(next.layout, next.focusedId);
+    }} />}
     {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
   </div>;
 }

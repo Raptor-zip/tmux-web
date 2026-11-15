@@ -8,9 +8,13 @@ declare module '@novnc/novnc' {
     compressionLevel: number;
     qualityLevel: number;
     focusOnClick: boolean;
+    /** 画面の外側（縮小したときの余白）の色 */
+    background: string;
     protected _sock: unknown;
     protected _fbDepth: number;
     protected _compressionLevel: number;
+    /** noVNC 内部のキーボード。押したままのキーを離す API が公開されていないため参照する */
+    protected _keyboard?: { _allKeysUp?(): void };
     static messages: { clientEncodings(sock: unknown, encodings: number[]): void };
     disconnect(): void;
     focus(): void;
