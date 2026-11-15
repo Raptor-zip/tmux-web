@@ -149,7 +149,8 @@ export function ContextMenu({ x, y, items, title, onClose }: Props) {
     if (item.disabled) return;
     if (item.submenu && index !== null) {
       parentButton.current = button;
-      if (sub?.index === index && !sheet && via === 'pointer') { setSub(null); return; }
+      // マウスでは乗った時点で開いているので、続くクリックで閉じない（開いたままにする）
+      if (sub?.index === index && !sheet && via === 'pointer') return;
       setSub({ index, via });
       return;
     }
@@ -244,7 +245,7 @@ export function ContextMenu({ x, y, items, title, onClose }: Props) {
       >
         {(heading || sheet) && <div className="ctx-title" role="presentation">
           <span>{heading}</span>
-          <button type="button" className="touch-menu-close" aria-label="メニューを閉じる" tabIndex={-1} onClick={onClose}>×</button>
+          <button type="button" className="touch-menu-close" aria-label="メニューを閉じる" title="メニューを閉じる" tabIndex={-1} onClick={onClose}>×</button>
         </div>}
         {inSheetSub ? <>
           <button role="menuitem" tabIndex={-1} className="ctx-back" onClick={closeSub}>‹ 戻る</button>
