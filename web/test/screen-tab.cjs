@@ -11,9 +11,9 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
     assert.fail(message);
   };
   const shown = page.locator('.screen-tab-view:not([hidden])');
-  // 画面タブの状態は、タイル見出しの差し込み口（.strip-screen）に出る。スマホでは見出しごと隠れるので attached で待つ
+  // 画面タブの状態は、タイル見出しの差し込み口（.strip-screen）に出る。スマホの見出し 1 行では画面の右上に重ねる
   const head = page.locator('.tile .strip-screen');
-  const connected = () => head.locator('.desktop-connection-status.is-connected').waitFor({ state: 'attached', timeout: 8000 }).catch(async error => {
+  const connected = () => page.locator('.tile .strip-screen .desktop-connection-status.is-connected, .screen-tab-view:not([hidden]) .screen-float-head .desktop-connection-status.is-connected').first().waitFor({ timeout: 8000 }).catch(async error => {
     console.error('screen state:', await page.locator('.screen-tab-view, .desktop-viewer').evaluateAll(views => views.map(v => ({ hidden: v.hidden, text: v.innerText.slice(0, 600).replace(/\n/g,' / ') }))));
     console.error('transports:', screenTransports.map(t => ({ closed: t.closed, framed: !!t.framed, keys: t.keys.length })));
     throw error;
@@ -187,6 +187,8 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   await page.waitForTimeout(400);
   await connected();
   await page.screenshot({ path: join(out, 'screen-tab-mobile.png') });
+  // タイル見出しが隠れても、状態は画面の右上に見えている（⌨ と Esc は入力行）
+  assert.ok(await shown.locator('.screen-float-head .desktop-connection-status').isVisible(), 'the connection state stays visible on phones');
   // スマホでは入力行が画面用のキーになる。Ctrl を押したままにして Esc を押すと、Ctrl+Esc が届いて Ctrl は離れる
   const bar = page.locator('.screen-input-bar');
   await bar.waitFor();
@@ -201,6 +203,16 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   assert.equal(await bar.getByRole('button', { name: 'Ctrl', exact: true }).getAttribute('aria-pressed'), 'false');
   // ［⌨ 文字入力］で、画面の下端に文字入力が開く
   await bar.getByRole('button', { name: '文字入力', exact: true }).click();
+  await shown.locator('.desktop-clipboard textarea').waitFor();
+  await page.keyboard.press('Escape');
+  // 見るだけのバッジもスマホで見える。入力行を隠していても、⋯ の画面メニューから文字入力を開ける
+  await page.locator('.phone-more').click();
+  await page.getByRole('menuitem', { name: '見るだけ', exact: true }).click();
+  await shown.locator('.screen-float-head .screen-badge', { hasText: '見るだけ' }).waitFor();
+  await page.locator('.phone-more').click();
+  await page.getByRole('menuitem', { name: '操作する', exact: true }).click();
+  await page.locator('.phone-more').click();
+  await page.getByRole('menuitem', { name: '文字入力', exact: true }).click();
   await shown.locator('.desktop-clipboard textarea').waitFor();
   await page.keyboard.press('Escape');
   console.log('screen tab: one-row header, Esc, screen menu, view-only badge, quality dialog, text input and notice, phone screen keys, open from tab strip, dedupe, synced layout, Ctrl+wheel, Alt release, grace period, dialog handover, open-as-tab, split view and idle disconnect passed');

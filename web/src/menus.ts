@@ -49,6 +49,7 @@ export const SCREEN_MENU: readonly MenuSlot[] = [
   'screen.viewOnly',
   'screen.fit',
   SEP,
+  'screen.text',
   'screen.copy',
   'screen.sendEscape',
   'screen.reconnect',

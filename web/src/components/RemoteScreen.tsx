@@ -52,6 +52,8 @@ interface Props {
   visible?: boolean;
   /** タイル見出しの差し込み口。状態・見るだけ・⌨・Esc をここに出す（無ければ画面の上に出す） */
   headSlot?: HTMLElement | null;
+  /** スマホ：タイル見出しが隠れているので、状態と見るだけのバッジを画面の右上に重ねる（⌨ と Esc は入力行にある） */
+  floatHead?: boolean;
   /** モーダルを閉じる */
   onClose?(): void;
   /** モーダルで見ている画面をタブとして開く（タブに戻す） */
@@ -128,7 +130,7 @@ function ScreenQuality({ settings, onApply, onClose }: { settings: DesktopSettin
 }
 
 export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScreen(
-  { variant, deviceId, devices = [], deviceName, visible = true, headSlot, onClose, onOpenAsTab, onStatus },
+  { variant, deviceId, devices = [], deviceName, visible = true, headSlot, floatHead = false, onClose, onOpenAsTab, onStatus },
   ref,
 ) {
   const modal = variant === 'modal';
@@ -159,7 +161,10 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   const textRef = useRef(text); textRef.current = text;
   /** 接続先から受け取ったクリップボード。書きかけの下書きは上書きせず、チップで知らせる */
   const [received, setReceived] = useState<string | null>(null);
-  const [notice, setNotice] = useState('');
+  // 同じ文言をもう一度出したときも 5 秒を数え直すよう、出した回数も持つ
+  const [noticeState, setNoticeState] = useState({ text: '', n: 0 });
+  const notice = noticeState.text;
+  const setNotice = (value: string) => setNoticeState(prev => ({ text: value, n: prev.n + 1 }));
   const [copying, setCopying] = useState(false);
   const copyLock = useRef(false);
   const clipboardText = useRef<HTMLTextAreaElement>(null);
@@ -285,10 +290,10 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
 
   // お知らせは一定時間で消す（× でもすぐ消せる）
   useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => setNotice(''), SCREEN_NOTICE_MS);
+    if (!noticeState.text) return;
+    const timer = setTimeout(() => setNoticeState(prev => ({ ...prev, text: '' })), SCREEN_NOTICE_MS);
     return () => clearTimeout(timer);
-  }, [notice]);
+  }, [noticeState]);
 
   // 他の画面で設定を変えたら、次の接続から同じ設定を使う
   useEffect(() => {
@@ -512,6 +517,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     openQuality: () => { setMenuAt(null); setQualityOpen(true); },
     sendCtrlAltDel: () => setConfirmCad(true),
     openGuide: () => { setMenuAt(null); setGuideOpen(true); },
+    openText: () => { setMenuAt(null); setTextOpen(true); },
   };
   const contextRef = useRef(context); contextRef.current = context;
   const focusRef = useRef(focusScreen); focusRef.current = focusScreen;
@@ -542,7 +548,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
       <span className={`desktop-status-text${compact && narrow ? ' sr-only' : ''}`}>{statusText}</span>
     </span>
     {viewOnly && <span className="screen-badge" title="マウス・キー操作は送りません。画面メニューの『操作する』で戻せます">見るだけ</span>}
-    <button ref={textToggle} className="btn desktop-clipboard-toggle" aria-label="文字入力" title="文字入力（日本語・貼り付け）"
+    <button ref={textToggle} className="btn desktop-clipboard-toggle" aria-label="文字入力" title="文字入力"
       aria-expanded={textOpen} aria-controls={clipboardId}
       onClick={() => { setMenuAt(null); setTextOpen(v => !v); }}>
       <Icon name="keyboard" />{!compact && <span className="desktop-button-label">文字入力</span>}
@@ -550,7 +556,8 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     {!(compact && narrow) && <button className="btn screen-esc" aria-label="Esc を送る" title="Esc を送る"
       disabled={!connected || viewOnly} onClick={sendEscape}>Esc</button>}
   </>;
-  const tileHead = !modal && !full && headSlot && visible;
+  const tileHead = !modal && !full && !floatHead && headSlot && visible;
+  const floating = !modal && !full && floatHead;
 
   const view = <div
     className={`screen-viewer desktop-viewer ${modal ? '' : 'screen-tab-view'}`}
@@ -582,6 +589,11 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
       <button ref={moreButton} className="btn desktop-icon-button screen-more" aria-label="画面の操作" title="画面の操作" aria-haspopup="menu" aria-expanded={!!menuAt}
         onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setTextOpen(false); setMenuAt(menuAt ? null : { x: r.right - 220, y: r.bottom }); }}><Icon name="more" /></button>
       <button className="btn desktop-icon-button" aria-label="リモートデスクトップを閉じる" title="リモートデスクトップを閉じる" onClick={onClose}><Icon name="close" /></button>
+    </div> : floating ? <div className="screen-float-head">
+      <span className={`desktop-connection-status ${connected ? 'is-connected' : ''}`} role="status" title={statusTitle}>
+        <span className={`dot ${connected ? 'ok' : error ? 'bad' : ''}`} /><span className="sr-only">{statusText}</span>
+      </span>
+      {viewOnly && <span className="screen-badge">見るだけ</span>}
     </div> : !tileHead && <div className="screen-head desktop-compact-head screen-inline-head">
       <strong className="desktop-device-label">{selectedName}</strong>
       {headParts(true)}

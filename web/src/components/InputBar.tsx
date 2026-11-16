@@ -313,7 +313,7 @@ export function ScreenInputBar({ connected, always, onKey, onText }: {
             </button>
           ))}
         </div>
-        <button type="button" className="input-toggle screen-text" aria-label="文字入力" title="文字入力（日本語・貼り付け）" onClick={onText}>
+        <button type="button" className="input-toggle screen-text" aria-label="文字入力" title="文字入力" onClick={onText}>
           ⌨ 文字入力
         </button>
       </div>

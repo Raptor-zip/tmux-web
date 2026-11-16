@@ -24,6 +24,8 @@ interface Props {
   lineHeight: number;
   /** タイル見出しの差し込み口。前面の画面タブが状態・見るだけ・⌨・Esc をここへ出す */
   headSlot?: HTMLElement | null;
+  /** タイル見出しが隠れている（スマホ）。画面タブは状態を画面の右上に重ねる */
+  floatHead?: boolean;
   registerTerm(leafId: string, handle: TabHandle | null): void;
   onStatus(leafId: string, status: TerminalStatus): void;
   onContextMenu(x: number, y: number): void;
@@ -79,6 +81,7 @@ export function TerminalTabs(props: Props) {
       devices={props.devices}
       visible={visible && selected?.id === tab.id}
       headSlot={selected?.id === tab.id ? props.headSlot : null}
+      floatHead={props.floatHead}
       onStatus={reportStatus(tab.id)}
     /> : <TerminalView
       key={tab.id}

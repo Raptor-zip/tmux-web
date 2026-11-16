@@ -1461,7 +1461,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       canFullscreen: false, narrow: false, current: tab.deviceId,
       devices: devices.map(d => ({ id: d.id, name: d.name, connected: d.connected })),
       setViewOnly: noop, setFit: noop, copy: noop, reconnect: noop, sendEscape: noop, toggleFullscreen: noop,
-      switchDevice: noop, openQuality: noop, sendCtrlAltDel: noop, openGuide: noop,
+      switchDevice: noop, openQuality: noop, sendCtrlAltDel: noop, openGuide: noop, openText: noop,
     };
     return {
       ...base,
@@ -1673,6 +1673,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             {layout ? (
               <SplitView
                 active={active}
+                stripHidden={!!phone}
                 tree={layout}
                 statuses={termStatuses}
                 focusMode={panelFocus}

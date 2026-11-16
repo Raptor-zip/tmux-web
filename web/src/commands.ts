@@ -183,6 +183,8 @@ export interface ScreenContext {
   openQuality(): void;
   sendCtrlAltDel(): void;
   openGuide(): void;
+  /** 文字入力を開く（入力行を隠しているスマホでも届くよう、メニューにも置く） */
+  openText(): void;
 }
 
 /** 文字サイズと行間 */
@@ -458,6 +460,10 @@ export const COMMANDS: Command[] = [
     disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.reconnect(),
   }),
   define({
+    id: 'screen.text', scope: 'screen', group: 'screen', label: '文字入力', aliases: ['文字入力・コピー', '日本語', '接続先へ貼り付け'],
+    disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.openText(),
+  }),
+  define({
     id: 'screen.sendEscape', scope: 'screen', group: 'screen', label: 'Esc を送る',
     // 見出しに Esc が入りきらない狭いタイルでだけ、メニューに出す
     when: c => c.narrow,
@@ -481,7 +487,7 @@ export const COMMANDS: Command[] = [
   }),
   define({
     id: 'screen.quality', scope: 'screen', group: 'screen', label: '画質…', aliases: ['画質・遅延設定', '画質と遅延'],
-    run: c => c.openQuality(),
+    disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.openQuality(),
   }),
   define({
     id: 'screen.ctrlAltDel', scope: 'screen', group: 'screen', label: 'Ctrl+Alt+Del を送る…', danger: true,
@@ -489,7 +495,7 @@ export const COMMANDS: Command[] = [
   }),
   define({
     id: 'screen.guide', scope: 'screen', group: 'screen', label: '操作ガイドと接続情報', aliases: ['操作ガイド', '接続情報', '通信往復'],
-    run: c => c.openGuide(),
+    disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.openGuide(),
   }),
 
   // ---- 表示

@@ -56,6 +56,8 @@ export type DropTarget =
 
 interface Props {
   active: boolean;
+  /** スマホの見出し 1 行のとき（タイル見出しは隠れる）。画面タブの状態は画面の右上に重ねる */
+  stripHidden?: boolean;
   devices: Device[];
   tree: LayoutNode;
   statuses: Record<string, TerminalStatus>;
@@ -125,6 +127,7 @@ function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
 
 export function SplitView({
   active,
+  stripHidden = false,
   devices,
   tree,
   focusMode,
@@ -375,7 +378,8 @@ export function SplitView({
                 onCopied={onCopied}
                 onNotice={onNotice}
                 registerTerm={registerTerm}
-                headSlot={slots[leaf.id] ?? null}
+                headSlot={stripHidden ? null : slots[leaf.id] ?? null}
+                floatHead={stripHidden}
               />
             </div>
           </div>

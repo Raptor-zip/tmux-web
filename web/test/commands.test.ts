@@ -277,12 +277,12 @@ const screenCtx = (over: Partial<ScreenContext> = {}): ScreenContext => ({
   ready: true, modal: false, connected: true, viewOnly: false, fit: true, copying: false, full: false, canFullscreen: true, narrow: false,
   devices: [{ id: 'local', name: 'ThinkPad', connected: true }, { id: 'spark', name: 'DGX Spark', connected: true }, { id: 'off', name: 'Off', connected: false }],
   current: 'local', setViewOnly() {}, setFit() {}, copy() {}, reconnect() {}, sendEscape() {}, toggleFullscreen() {},
-  openAsDialog() {}, switchDevice() {}, openQuality() {}, sendCtrlAltDel() {}, openGuide() {}, ...over,
+  openAsDialog() {}, switchDevice() {}, openQuality() {}, sendCtrlAltDel() {}, openGuide() {}, openText() {}, ...over,
 });
 
 test('screen menu follows the state of the screen and the place it is shown', () => {
   assert.deepEqual(names(SCREEN_MENU, { screen: screenCtx() }), [
-    '見るだけ', '原寸で表示', '---', '接続先からコピー', '再接続', '---', '全画面', 'ダイアログで大きく表示', '別のデバイスに切り替え', '---',
+    '見るだけ', '原寸で表示', '---', '文字入力', '接続先からコピー', '再接続', '---', '全画面', 'ダイアログで大きく表示', '別のデバイスに切り替え', '---',
     '画質…', 'Ctrl+Alt+Del を送る…', '操作ガイドと接続情報',
   ]);
   // 見るだけ・原寸・全画面中は、戻す側の名前になる。Fullscreen API が無ければ全画面は出ない
@@ -308,10 +308,13 @@ test('screen menu follows the state of the screen and the place it is shown', ()
   // 裏のタブ：状態を見られないので画面の操作は押せない。ダイアログ表示と切り替えはできる
   const back = buildMenu(SCREEN_MENU, { screen: screenCtx({ ready: false }) });
   assert.equal((back.find(e => e?.label === '見るだけ') as MenuItem).disabledReason, 'このタブを前面に出してから使えます');
+  for (const label of ['文字入力', '画質…', '操作ガイドと接続情報']) {
+    assert.equal((back.find(e => e?.label === label) as MenuItem).disabled, true, label);
+  }
   assert.equal((back.find(e => e?.label === 'ダイアログで大きく表示') as MenuItem).disabled, false);
   // 旧名でもパレットから引ける
   const palette = paletteCommands({ screen: screenCtx() });
-  for (const old of ['この端末へコピー', 'もう一度接続する', 'ダイアログで大きく開く', '画質・遅延設定']) {
+  for (const old of ['この端末へコピー', 'もう一度接続する', 'ダイアログで大きく開く', '画質・遅延設定', '文字入力・コピー']) {
     assert.ok(palette.some(c => matchesCommand(c, old)), old);
   }
 });
