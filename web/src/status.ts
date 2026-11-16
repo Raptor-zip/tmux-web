@@ -96,3 +96,16 @@ export function summarize(list: WindowStatus[]): Partial<Record<StatusKind, numb
   for (const s of list) out[s.kind] = (out[s.kind] ?? 0) + 1;
   return out;
 }
+
+/**
+ * Alt+J の行き先：入力待ちの id の並び waiting の中で、いま見ている currentId の次。
+ * 末尾の次は先頭に戻る。いま見ているものが入力待ちでなければ先頭。
+ * 入力待ちがいま見ているものだけ、または 1 件も無ければ null。
+ */
+export function nextWaiting(waiting: string[], currentId: string | null): string | null {
+  if (!waiting.length) return null;
+  const at = currentId ? waiting.indexOf(currentId) : -1;
+  if (at < 0) return waiting[0];
+  if (waiting.length < 2) return null;
+  return waiting[(at + 1) % waiting.length];
+}

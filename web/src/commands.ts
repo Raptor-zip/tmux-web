@@ -32,6 +32,10 @@ export interface AppContext {
   onSplitNewWindow(side: 'right' | 'bottom', agent?: 'claude' | 'codex'): void;
   /** 新規メニュー（＋▾）を入力先のパネルで開く */
   onOpenNewMenu(): void;
+  /** 入力待ちの端末の数 */
+  waitingCount?: number;
+  /** 次の入力待ちの端末へ移る（Alt+J） */
+  onNextWaiting?(): void;
   onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar' | 'altKeys'): void;
   onCopyPane(): void;
   onKillPane(): void;
@@ -303,6 +307,13 @@ export const COMMANDS: Command[] = [
     run: c => c.onOpenSwitcher(),
   }),
   define({
+    id: 'navigate.nextWaiting', scope: 'app', group: 'navigate', label: '次の入力待ちへ', hint: 'Alt+J',
+    aliases: ['入力待ち', '次の入力待ちへ移る', 'waiting'],
+    when: c => !!c.onNextWaiting,
+    disabledReason: c => (c.waitingCount ? null : '入力待ちの端末はありません'),
+    run: c => c.onNextWaiting?.(),
+  }),
+  define({
     id: 'navigate.shortcuts', scope: 'app', group: 'navigate', label: 'ショートカット一覧', hint: 'Alt+/',
     aliases: ['キーボード', 'ヘルプ'],
     run: c => c.onOpenShortcuts(),
@@ -314,7 +325,7 @@ export const COMMANDS: Command[] = [
 
   // ---- ペイン
   define({
-    id: 'pane.files', scope: 'app', group: 'pane', label: '作業フォルダーを開く',
+    id: 'pane.files', scope: 'app', group: 'pane', label: '作業フォルダーを開く', hint: 'Alt+O',
     aliases: ['作業フォルダーのファイルを見る', 'ファイル'],
     when: onTerminal, disabledReason: c => (c.activePane ? null : NO_PANE), run: c => c.onOpenFiles(),
   }),

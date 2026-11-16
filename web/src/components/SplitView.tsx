@@ -62,6 +62,8 @@ interface Props {
   onToggleFocus(): void;
   /** 自動の 1 パネル表示のチップ『他 N パネル』。パレットの『タブ』を開く */
   onOverview(): void;
+  /** 1 パネル表示（最大化中・狭くて自動）に入った / 出た。Alt+数字の数え方が変わる */
+  onSingleChange?(single: boolean): void;
   focusedId: string | null;
   sessions: Session[];
   windows: TmuxWindow[];
@@ -128,6 +130,7 @@ export function SplitView({
   statuses,
   onToggleFocus,
   onOverview,
+  onSingleChange,
   focusedId,
   sessions,
   windows,
@@ -173,6 +176,7 @@ export function SplitView({
   const closableTile = tiles.length > 1;
   const autoFocus = size.width > 0 && (window.innerWidth <= 760 || tiles.some(t => size.width * t.rect.width / 100 < 280 || size.height * t.rect.height / 100 < 160));
   const single = closableTile && (focusMode || (!resizing && autoFocus && (!forceSplit || window.innerWidth <= 760)));
+  useEffect(() => { onSingleChange?.(single); }, [single, onSingleChange]);
   const selectedId = tiles.some(t => t.leaf.id === focusedId) ? focusedId : tiles[0]?.leaf.id;
 
   /**

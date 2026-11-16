@@ -156,6 +156,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection') await require('./terminal-selection.cjs')(page,{terminalTransports,terminalInputs,phase,out});
   if(process.env.TERMINAL_DIRECT_CHECK && scene.name==='terminal-target') await require('./terminal-direct.cjs')(page,{terminalTransports});
   if(process.env.TAB_MENU_CHECK && (scene.name==='terminal-target' || scene.name==='terminal-selection')) await require('./tab-menu.cjs')(page,{scene,out,touch:!!scene.touch});
+  if(process.env.ALT_NAV_CHECK && scene.name==='laptop-four'){await require('./alt-nav.cjs')(page,{terminalInputs});assert.deepEqual(errors,[],'alt navigation runtime errors');}
   if(process.env.TERMINAL_TARGET_CHECK && scene.name==='terminal-target') await require('./terminal-target.cjs')(page,{terminalTransports,terminalSelections});
   if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
    assert.equal(await page.locator('.mobile-input .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
@@ -179,7 +180,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
   if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
-  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーを開く',exact:true}).click();}
+  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^作業フォルダーを開く/}).click();}
   if(checkFiles) await checkFiles();
   if(scene.name.startsWith('remote-') && scene.action==='desktop'){
    if(phase==='after')await page.getByRole('button',{name:'リモートデスクトップ',exact:true}).click();

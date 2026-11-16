@@ -62,10 +62,12 @@ import {
   splitWithTab,
   stampNames,
   setRatio,
+  stepInOrder,
+  visibleTabOrder,
   type LayoutNode,
 } from './layout';
 import { buildWindowViews, paneCommand, windowName, type WindowView } from './windows';
-import { STATUS_ORDER } from './status';
+import { nextWaiting, STATUS_ORDER } from './status';
 import type { Pane, TmuxWindow } from './types';
 
 interface Toast {
@@ -119,6 +121,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const key = (name: string) => desktopKey(workspaceId, name);
   const [selectedDevice, setSelectedDevice] = useWorkspaceValue(key('tw.device'), 'local');
   const [panelFocus, setPanelFocus] = useState(false);
+  /** いま 1 パネル表示か（最大化中、または狭くて自動）。SplitView が知らせる。Alt+数字の数え方が変わる */
+  const [singlePanel, setSinglePanel] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
   const activeDevice = devices.find(d => d.id === selectedDevice) ?? devices[0];
   const device = activeDevice?.server?.device;
@@ -194,7 +198,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
   const launchInFlight = useRef(false);
-  const latestKeys = useRef<{ openNewMenuAtStrip(): void; launchAgent(agent: 'claude' | 'codex'): void }>({ openNewMenuAtStrip: () => {}, launchAgent: () => {} });
+  const latestKeys = useRef<{
+    openNewMenuAtStrip(): void;
+    launchAgent(agent: 'claude' | 'codex'): void;
+    goNextWaiting(): void;
+    /** 作業フォルダーを開けたら true。端末のタブでなければ false（キーは端末へ流す） */
+    openFiles(): boolean;
+  }>({ openNewMenuAtStrip: () => {}, launchAgent: () => {}, goNextWaiting: () => {}, openFiles: () => false });
   /** 開いているパレットのスコープ。null なら閉じている */
   const [palette, setPalette] = useState<PaletteScope | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -274,6 +284,11 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       return result;
     },
     [windows, panes, devices, now],
+  );
+  /** 入力待ちの端末（Alt+J で順に回る）。並びは一覧と同じウィンドウ順 */
+  const waitingIds = useMemo(
+    () => windows.filter(w => views.get(w.id)?.status.kind === 'waiting').map(w => w.id),
+    [windows, views],
   );
 
   // ---------------------------------------------------------------- レイアウト
@@ -753,8 +768,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const activate = useCallback(
     (tabId: string) => {
       setLayout((prev) => (prev ? activateTab(prev, tabId) : prev));
+      // 1 パネル表示では、別のパネルのタブへ移ると見えるパネルも変わる（Alt+数字・Alt+[ ]）
       const leaf = layoutRef.current ? findTab(layoutRef.current, tabId)?.leaf : null;
-      if (leaf) focusSoon(leaf.id);
+      if (leaf) { setFocusedId(leaf.id); focusSoon(leaf.id); }
     },
     [setLayout],
   );
@@ -1081,15 +1097,22 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
   // ------------------------------------------------------------ 切り替え
 
-  /** フォーカス中のタイルのタブを n 枚ぶん送る */
+  /**
+   * Alt+1..9 / Alt+0 / Alt+[ ] が数えるタブ。見えているタブ列と同じ順：
+   * 分割表示では入力先のパネルの中、1 パネル表示ではワークスペース全体
+   */
+  const tabOrder = useMemo(
+    () => visibleTabOrder(layout, focusedLeaf, singlePanel),
+    [layout, focusedLeaf, singlePanel],
+  );
+
+  /** 見えているタブ列の中で、前面のタブから n 枚ぶん送る */
   const stepTab = useCallback(
     (delta: number) => {
-      if (!focusedLeaf || focusedLeaf.tabs.length < 2) return;
-      const at = focusedLeaf.tabs.findIndex((t) => t.id === focusedLeaf.activeId);
-      const next = focusedLeaf.tabs[(at + delta + focusedLeaf.tabs.length) % focusedLeaf.tabs.length];
-      if (next) activate(next.id);
+      const next = stepInOrder(tabOrder, focusedTab?.id ?? null, delta);
+      if (next && next.id !== focusedTab?.id) activate(next.id);
     },
-    [focusedLeaf, activate],
+    [tabOrder, focusedTab, activate],
   );
 
   /** 切り替えパレットに出す一覧。直前に見ていた順 → 状態の強い順 */
@@ -1151,7 +1174,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       if (e.code === 'Slash' || e.key === '/') { stop(); setShortcutsOpen(true); return; }
       if (key === 'enter') { stop(); setPanelFocus(v => !v); return; }
       if (digit >= 1 && digit <= 9) {
-        const tab = focusedLeaf?.tabs[digit - 1];
+        const tab = tabOrder[digit - 1];
         if (tab) {
           stop();
           activate(tab.id);
@@ -1159,7 +1182,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         return;
       }
       if (digit === 0) {
-        const tab = focusedLeaf?.tabs[focusedLeaf.tabs.length - 1];
+        const tab = tabOrder[tabOrder.length - 1];
         if (tab) {
           stop();
           activate(tab.id);
@@ -1172,6 +1195,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       } else if (e.code === 'BracketRight' || key === ']') {
         stop();
         stepTab(1);
+      } else if (e.code === 'KeyJ' || key === 'j') {
+        // Alt+J：次の入力待ちの端末へ
+        stop();
+        latestKeys.current.goNextWaiting();
+      } else if (e.code === 'KeyO' || key === 'o') {
+        // Alt+O：入力先の端末の作業フォルダーを開く。端末でなければ何も奪わない
+        if (latestKeys.current.openFiles()) stop();
       } else if (key === 'b') {
         stop();
         setSidebarOpen((v) => !v);
@@ -1188,7 +1218,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [altKeys, active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, focusedLeaf, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
+  }, [altKeys, active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, tabOrder, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
   /** あるペインに効く操作。入力先のペインのほか、メニューを開いたタブのペインにも使う */
   const paneActions = (pane: Pane | null) => ({
@@ -1232,6 +1262,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       launchingAgent: launchingAgent,
       onSplitNewWindow: splitIntoNewWindow,
       onOpenNewMenu: () => openNewMenuAtStrip(),
+      waitingCount: waitingIds.length,
+      onNextWaiting: () => goNextWaiting(),
       onToggle: onToggle,
       screenTab: focusedScreen,
       ...paneActions(activePane),
@@ -1285,8 +1317,25 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     openNewMenu(r ? { x: r.left, y: r.bottom } : { x: window.innerWidth / 2 - 120, y: 80 }, focusedIdRef.current);
   };
 
+  /** Alt+J：次の入力待ちの端末へ移る。開いていなければ入力先のパネルにタブで開く */
+  const goNextWaiting = () => {
+    const id = nextWaiting(waitingIds, currentWindow?.id ?? null);
+    const win = id ? windows.find(w => w.id === id) : null;
+    if (win) { openWindow(win); return; }
+    toast(waitingIds.length ? 'ほかに入力待ちの端末はありません' : '入力待ちの端末はありません', 'info');
+  };
+
   /** キー操作から呼ぶ、毎回作り直される関数の最新版 */
-  latestKeys.current = { openNewMenuAtStrip, launchAgent };
+  latestKeys.current = {
+    openNewMenuAtStrip,
+    launchAgent,
+    goNextWaiting,
+    openFiles: () => {
+      if (!activePane) return false;
+      setFilesPaneId(activePane.id);
+      return true;
+    },
+  };
 
   /** パレットの『タブ』：このワークスペースのタブをパネル別に。パネルは表示中のタブ名で示す */
   const paletteTabGroups = useMemo<PaletteTabGroup[]>(() => {
@@ -1450,6 +1499,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                 focusMode={panelFocus}
                 onToggleFocus={() => setPanelFocus(v => !v)}
                 onOverview={() => setPalette('tab')}
+                onSingleChange={setSinglePanel}
                 focusedId={focusedId}
                 devices={devices}
                 onNewMenu={(leafId, x, y) => openNewMenu({ x, y }, leafId)}

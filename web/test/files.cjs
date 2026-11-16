@@ -43,7 +43,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
   });
   const openBrowser = async () => {
     await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
-    await page.getByRole('menuitem', { name: '作業フォルダーを開く', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^作業フォルダーを開く/ }).click();
     await page.locator('.file-row').first().waitFor();
   };
   const dialog = page.getByRole('dialog', { name: 'ファイル一覧とプレビュー' });

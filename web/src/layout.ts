@@ -402,6 +402,38 @@ export function undoLayout(
   return { layout: snap.before, focusedId: snap.focusedId };
 }
 
+/**
+ * Alt+1..9 / Alt+0 / Alt+[ ] が数えるタブの並び。見えているタブ列の順と同じにする。
+ *
+ * 分割表示では入力先のパネルのタブ列だけを数える（パネルごとにタブ列があるため）。
+ * 1 パネル表示（最大化中・狭くて自動）では、タブ列がワークスペース全体のタブを
+ * パネル順に並べて出すので、それと同じくワークスペース全体の順で数える。
+ */
+export function visibleTabOrder(
+  layout: LayoutNode | null,
+  focusedLeaf: LeafNode | null,
+  singlePanel: boolean,
+): TabRef[] {
+  if (!layout) return [];
+  const leaves = allLeaves(layout);
+  if (singlePanel && leaves.length > 1) return leaves.flatMap((leaf) => leaf.tabs);
+  const leaf = (focusedLeaf && leaves.find((l) => l.id === focusedLeaf.id)) ?? focusedLeaf;
+  return leaf ? leaf.tabs : [];
+}
+
+/**
+ * 並び order の中で、いま前面のタブ currentId から delta 枚ぶん送った先（端は反対側へ回る）。
+ * currentId が並びに無ければ、先頭（delta > 0）か末尾（delta < 0）を返す。
+ */
+export function stepInOrder(order: TabRef[], currentId: string | null, delta: number): TabRef | null {
+  if (!order.length) return null;
+  const at = order.findIndex((t) => t.id === currentId);
+  if (at < 0) return delta < 0 ? order[order.length - 1] : order[0];
+  if (order.length < 2) return null;
+  const n = order.length;
+  return order[(((at + delta) % n) + n) % n];
+}
+
 // -------------------------------------------------------------- 矩形を求める
 
 /** 各タイルの矩形を % で返す */
