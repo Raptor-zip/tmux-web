@@ -50,10 +50,12 @@ function Choice<T extends string>({ label, hint, value, options, onChange }: {
       onKeyDown={e => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
         e.preventDefault();
+        // React は処理のあとで currentTarget を外すので、次のフレームで使う要素を先に取っておく
+        const group = e.currentTarget;
         const index = options.findIndex(o => o.value === value);
         const next = options[(index + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1) + options.length) % options.length];
         onChange(next.value);
-        requestAnimationFrame(() => e.currentTarget.querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
+        requestAnimationFrame(() => group.querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
       }}>
       {options.map(o => <button key={o.value} type="button" role="radio" aria-checked={o.value === value}
         tabIndex={o.value === value ? 0 : -1} className={o.value === value ? 'on' : ''}
@@ -103,7 +105,7 @@ export function Settings({ versions, onOpenShortcuts, onClose }: {
           </div>
         } />
         <Row id={lineId} label="行間" control={
-          <div className="settings-slider">
+          <div className="settings-slider" role="group" aria-labelledby={lineId}>
             <input type="range" aria-labelledby={lineId} min={LINE_HEIGHT.min} max={LINE_HEIGHT.max} step={0.01}
               value={lineValue} aria-valuetext={lineHeight.toFixed(2)}
               onChange={e => setLineHeight(Math.round(Number(e.target.value) * 100) / 100)} />

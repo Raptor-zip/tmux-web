@@ -40,6 +40,13 @@ module.exports = async (page, { scene, terminalTransports, out }) => {
   const visibleInput = () => page.locator('.mobile-input:visible').count();
   const autoVisible = await visibleInput();
   assert.equal(autoVisible, scene.touch ? 1 : 0, '自動 shows the input bar only on touch or narrow screens');
+  // Arrow keys move the choice and keep focus on the checked radio
+  await inputBar.getByRole('radio', { name: '自動', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await stored('tw.inputBar'), '"always"');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-checked') === 'true' && document.activeElement.textContent === '常に表示');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await stored('tw.inputBar'), '"auto"');
   await inputBar.getByRole('radio', { name: '隠す', exact: true }).click();
   assert.equal(await stored('tw.inputBar'), '"hidden"');
   assert.equal(await page.locator('.mobile-input').count(), 0, '隠す removes the input bar');
@@ -100,5 +107,6 @@ module.exports = async (page, { scene, terminalTransports, out }) => {
   await help.waitFor({ state: 'detached' });
   await page.keyboard.press('Escape');
   await settings.waitFor({ state: 'detached' });
+  assert.ok(await page.locator('.conn-status').evaluate(el => el === document.activeElement), 'focus returns to the connection chip');
   console.log(`settings: ${scene.name} passed`);
 };

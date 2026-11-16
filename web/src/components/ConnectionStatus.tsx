@@ -72,8 +72,8 @@ export function ConnectionStatus({ label, devices, syncError, authUrl, version, 
       <div className="conn-actions">
         <button className="btn" onClick={() => { onReconnect(); close(); }}><Icon name="refresh" />再接続</button>
         {authUrl && <a className="btn" href={authUrl}>接続先を開く</a>}
-        <button className="btn" onClick={() => { setOpen(false); onManageDevices(); }}>デバイス接続を管理…</button>
-        <button className="btn" onClick={() => { setOpen(false); onOpenSettings(); }}>表示と接続…</button>
+        <button className="btn" onClick={() => { close(); onManageDevices(); }}>デバイス接続を管理…</button>
+        <button className="btn" onClick={() => { close(); onOpenSettings(); }}>表示と接続…</button>
       </div>
       {version && <p className="conn-note">バージョン {version}</p>}
     </div>}
