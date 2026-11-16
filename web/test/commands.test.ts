@@ -254,6 +254,7 @@ test('shortcut list is generated from command hints', () => {
   for (const k of keys) assert.ok(rows.includes(k), `${k} is in the shortcut list`);
   assert.equal(new Set(rows).size, rows.length, 'each key is listed once');
   assert.equal(shortcutRows().find(s => s.keys === 'Alt+B')?.label, '一覧を開く / 閉じる', 'Alt+B toggles the list');
+  assert.equal(shortcutRows().find(s => s.keys === 'Alt+P')?.label, '探す・操作（端末）', 'Alt+P and Alt+Shift+P name their palette scope');
   for (const k of ['Alt+Shift+C', 'Alt+Shift+X', 'Alt+Shift+T', 'Alt+Shift+P', 'Alt+J', 'Alt+O', 'Alt+/', 'Alt+B', 'Alt+Shift+N']) assert.ok(rows.includes(k), `${k} is in the shortcut list`);
 });
 

@@ -418,7 +418,7 @@ export const COMMANDS: Command[] = [
 
   // ---- 移動・表示
   define({
-    id: 'navigate.switcher', scope: 'app', group: 'navigate', label: '探す・操作', hint: 'Alt+P',
+    id: 'navigate.switcher', scope: 'app', group: 'navigate', label: '探す・操作', hint: 'Alt+P', shortcutLabel: '探す・操作（端末）',
     aliases: ['ウィンドウを切り替える…', 'パレット', 'タブ・パネルの一覧'],
     run: c => c.onOpenSwitcher(),
   }),
