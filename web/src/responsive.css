@@ -108,7 +108,7 @@
 @media (max-width:760px), (pointer:coarse) {
  .tab-close { width:44px; min-width:44px; height:44px; min-height:44px; }
  .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; min-width:44px; height:44px; min-height:44px; }
- .desktop-close,.desktop-add,.desktop-rename { min-width:44px; }
+ .desktop-add { min-width:44px; }
  .editorbar { min-height:48px; }
 }
 /* Keep project confirmation reachable when a short viewport or keyboard reduces height. */
@@ -181,7 +181,7 @@
 :root input[type="range"] { appearance: none; height: 4px; background: var(--border-strong); accent-color: var(--accent); }
 :root input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; height: 16px; border: 0; border-radius: 0; background: var(--accent); }
 :root input[type="range"]::-moz-range-thumb { width: 12px; height: 16px; border: 0; border-radius: 0; background: var(--accent); }
-.desktop-add, .desktop-rename, .desktop-close { display: grid; place-items: center; }
+.desktop-add { display: grid; place-items: center; }
 .mobile-input-toggle-row .input-toggle { display: flex; align-items: center; gap: 8px; }
 :root .tab-picker { min-height: 28px; padding-top: 3px; padding-bottom: 3px; font-size: 11px; }
 @media (max-width: 1024px) {
@@ -252,9 +252,9 @@
 }
 
 /* Keep the remote screen edge-to-edge; secondary controls overlay it on demand. */
-.desktop-tabs { flex:1; }
-.remote-desktop-launch { display:flex; align-items:center; justify-content:center; flex:none; width:36px; min-height:32px; margin:3px 6px; padding:0; border:0; background:transparent; color:var(--fg-dim); font:inherit; font-size:12px; cursor:pointer; }
-.remote-desktop-launch:hover { background:var(--bg-3); color:var(--fg); }
+/* ⊞ はワークスペースタブのすぐ右に置き、右側の状態チップ以降を右端へ寄せる */
+.desktop-tabs { flex:0 1 auto; }
+.desktop-bar .desktop-add { margin-right:auto; }
 .desktop-viewer { --desktop-head-height:44px; position:relative; width:100%; height:var(--app-height,100dvh); border:0; }
 .desktop-viewer .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; white-space:nowrap; }
 .desktop-viewer .desktop-compact-head { flex:none; box-sizing:border-box; height:calc(var(--desktop-head-height) + var(--safe-top)); padding:4px max(6px,var(--safe-right)) 4px max(10px,var(--safe-left)); padding-top:calc(4px + var(--safe-top)); gap:8px; background:var(--bg-1); }
@@ -291,7 +291,7 @@
 .desktop-popover details p { margin:8px 0; line-height:1.6; }
 .desktop-notification { position:absolute; bottom:max(12px,var(--safe-bottom)); left:max(12px,var(--safe-left)); z-index:4; max-width:min(520px,calc(100% - 24px)); pointer-events:none; }
 .desktop-notice { margin:0; padding:10px 14px; background:var(--bg-1); border:1px solid var(--border-strong); box-shadow:0 4px 20px #0008; font-size:12px; overflow-wrap:anywhere; }
-.remote-desktop-launch:focus-visible,.desktop-viewer summary:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.desktop-viewer summary:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 @media (max-width:760px), (any-pointer:coarse) {
  .desktop-viewer { --desktop-head-height:52px; }
  .desktop-viewer .btn,.desktop-viewer select { min-height:44px; }
@@ -311,7 +311,6 @@
  .desktop-popover summary { min-height:44px; box-sizing:border-box; padding:12px 0; }
 }
 @media (max-width:760px) {
- .remote-desktop-launch { margin:2px; width:44px; min-height:44px; }
  .desktop-bar .desktop-tab { max-width:110px; }
 }
 

@@ -2,7 +2,9 @@ import { activateTab, addTab, allLeaves, closeTab, findSameTarget, findLeaf, fin
 
 export interface Desktop { id: string; name: string }
 export interface Desktops { activeId: string; items: Desktop[] }
-export const INITIAL_DESKTOPS: Desktops = { activeId: 'main', items: [{ id: 'main', name: 'デスクトップ1' }] };
+/** 新しく作るワークスペースの既定名。保存済みの名前（『デスクトップ1』など）はそのまま使う */
+export const workspaceName = (number: number) => `ワークスペース ${number}`;
+export const INITIAL_DESKTOPS: Desktops = { activeId: 'main', items: [{ id: 'main', name: workspaceName(1) }] };
 
 /** 最初の画面は以前からの保存キーを使い、既存の配置をそのまま引き継ぐ。 */
 export function desktopKey(id: string, key: string): string {
@@ -23,8 +25,17 @@ export function addDesktop(state: Desktops, id: string): Desktops {
   if (state.items.some(item => item.id === id)) return state;
   const names = new Set(state.items.map(item => item.name));
   let number = 1;
-  while (names.has(`デスクトップ${number}`)) number++;
-  return { activeId: id, items: [...state.items, { id, name: `デスクトップ${number}` }] };
+  while (names.has(workspaceName(number))) number++;
+  return { activeId: id, items: [...state.items, { id, name: workspaceName(number) }] };
+}
+/** ワークスペースを並びの中で 1 つ左（-1）か右（+1）へ移す。端では何もしない */
+export function moveDesktop(state: Desktops, id: string, delta: -1 | 1): Desktops {
+  const index = state.items.findIndex(item => item.id === id);
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= state.items.length) return state;
+  const items = [...state.items];
+  [items[index], items[target]] = [items[target], items[index]];
+  return { ...state, items };
 }
 export function removeDesktop(state: Desktops, id: string): Desktops {
   if (state.items.length <= 1) return state;

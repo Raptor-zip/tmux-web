@@ -2095,15 +2095,14 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .desktop-bar { display: flex; flex: none; min-height: 34px; padding: var(--safe-top) var(--safe-right) 0 var(--safe-left); gap: 2px; align-items: stretch; background: #181818; border-bottom: 1px solid var(--border-strong); }
 .desktop-tabs { display: flex; align-items: stretch; min-width: 0; overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain; }
 .desktop-slot { display: flex; flex: none; align-items: stretch; position: relative; }
-.desktop-tab, .desktop-add, .desktop-rename, .desktop-close { border: 0; color: var(--fg-dim); background: transparent; cursor: pointer; }
+.desktop-tab, .desktop-add { border: 0; color: var(--fg-dim); background: transparent; cursor: pointer; }
 .desktop-tab { display: flex; gap: 7px; align-items: center; min-height: 33px; padding: 0 12px; border-bottom: 2px solid transparent; max-width: 220px; }
 .desktop-tab > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .desktop-tab.on { color: #fff; background: var(--bg-1); border-bottom-color: var(--accent); }
 .desktop-tab.drop-target { color: #fff; background: var(--bg-3); outline: 2px solid var(--accent); outline-offset: -2px; border-bottom-color: var(--accent); }
 .desktop-number { font-size: 10px; color: var(--fg-dim); }
-.desktop-close { width: 25px; font-size: 16px; }
-.desktop-close:hover, .desktop-add:hover, .desktop-rename:hover { color: #fff; background: var(--bg-3); }
-.desktop-add, .desktop-rename { flex: none; min-width: 34px; font-size: 17px; }
+.desktop-add:hover { color: #fff; background: var(--bg-3); }
+.desktop-add { flex: none; min-width: 34px; font-size: 17px; }
 .desktop-panels { flex: 1; min-height: 0; position: relative; }
 .desktop-panel { width: 100%; height: 100%; }
 .desktop-panel[hidden] { display: none; }
@@ -2111,7 +2110,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 @media (max-width: 760px) {
   .desktop-bar { min-height: 44px; }
   .desktop-tab { min-height: 44px; max-width: 170px; padding: 0 9px; }
-  .desktop-close, .desktop-add, .desktop-rename { min-width: 36px; min-height: 44px; }
+  .desktop-add { min-width: 36px; min-height: 44px; }
   .desktop-panel .sidebar { top: calc(44px + var(--safe-top)); }
 }
 

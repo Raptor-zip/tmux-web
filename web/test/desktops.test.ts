@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDesktop, desktopKey, INITIAL_DESKTOPS, removeDesktop, restoreDesktops, transferDesktopTab } from '../src/desktops';
+import { addDesktop, desktopKey, INITIAL_DESKTOPS, moveDesktop, removeDesktop, restoreDesktops, transferDesktopTab } from '../src/desktops';
 
 import { allLeaves, allTabs, makeLeaf, makeTab, moveTab, splitWithTab } from '../src/layout';
 
@@ -10,8 +10,26 @@ test('legacy terminal layout stays on the first desktop and new desktops use ind
   assert.equal(desktopKey('second', 'tw.serverPid'), 'tw.serverPid.second');
   const next = addDesktop(INITIAL_DESKTOPS, 'second');
   assert.equal(next.activeId, 'second'); assert.equal(next.items.length, 2);
-  assert.deepEqual(INITIAL_DESKTOPS.items, [{ id: 'main', name: 'デスクトップ1' }]);
+  assert.deepEqual(INITIAL_DESKTOPS.items, [{ id: 'main', name: 'ワークスペース 1' }]);
+  assert.equal(next.items[1].name, 'ワークスペース 2');
   assert.equal(addDesktop(next, 'second'), next);
+});
+
+test('saved names are kept and new workspaces get the next free default name', () => {
+  const saved = { activeId: 'main', items: [{ id: 'main', name: 'デスクトップ1' }, { id: 'b', name: 'ワークスペース 1' }] };
+  const next = addDesktop(saved, 'c');
+  assert.deepEqual(next.items.map(item => item.name), ['デスクトップ1', 'ワークスペース 1', 'ワークスペース 2']);
+});
+
+test('moving a workspace swaps it with its neighbour and stops at the ends', () => {
+  const state = addDesktop(addDesktop(INITIAL_DESKTOPS, 'second'), 'third');
+  const right = moveDesktop(state, 'main', 1);
+  assert.deepEqual(right.items.map(item => item.id), ['second', 'main', 'third']);
+  assert.equal(right.activeId, state.activeId);
+  assert.deepEqual(moveDesktop(right, 'third', -1).items.map(item => item.id), ['second', 'third', 'main']);
+  assert.equal(moveDesktop(state, 'main', -1), state);
+  assert.equal(moveDesktop(state, 'third', 1), state);
+  assert.equal(moveDesktop(state, 'missing', 1), state);
 });
 
 test('removing a desktop selects a neighbour, retains other names and never removes the last desktop', () => {

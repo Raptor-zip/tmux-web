@@ -17,7 +17,7 @@ import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedPr
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { tabMenuItems, NEW_MENU } from './menus';
-import { buildMenu, paletteCommands, type AppContext, type CreateContext, type PanelContext, type SelectionContext, type TabContext } from './commands';
+import { buildMenu, paletteCommands, type AppContext, type CreateContext, type DesktopContext, type PanelContext, type SelectionContext, type TabContext } from './commands';
 import { KeyBar } from './components/KeyBar';
 import { nextInputBar, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLineHeight, useStatusLine } from './shared-setting';
 import { requestInstall, takeInstallHint, useInstallState } from './pwa';
@@ -125,11 +125,13 @@ export interface BarSlots {
   trailing: HTMLElement | null;
 }
 
-export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab, barSlots, onOpenSettings }: {
+export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab, barSlots, onOpenSettings, workspace }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
   barSlots?: BarSlots;
   /** 『表示と接続』を開く（Desktops.tsx が持つ。設定は全ワークスペースで共通） */
   onOpenSettings?(): void;
+  /** 表示中のワークスペースの操作（名前を変更・追加・並べ替え・削除）。パレットの『操作』に出す */
+  workspace?: DesktopContext;
   desktopLayouts: DesktopLayoutRegistry;
   desktopTargets: { id: string; name: string }[];
   onMoveDesktopTab(sourceId: string, tabId: string, destinationId: string): void;
@@ -1411,6 +1413,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     tab: focusedTab ? tabContext(focusedTab.id) : undefined,
     view: { fontSize, lineHeight, setFontSize, setLineHeight, stepLineHeight: onLineHeightStep },
     create: createContext(),
+    desktop: workspace,
   }, new Set(['navigate.switcher']));
 
   /**

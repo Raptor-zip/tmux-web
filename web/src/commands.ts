@@ -5,7 +5,7 @@ import { INPUT_BAR_LABEL, nextInputBar, type InputBarMode } from './shared-setti
 /**
  * 操作の登録表。
  *
- * メニュー（ワークスペース・端末の右クリック・タブ・パネル・新規・デスクトップ・文字サイズ／行間）は
+ * メニュー（ワークスペース・端末の右クリック・タブ・パネル・新規・文字サイズ／行間）は
  * すべてここに並べた操作から組み立てる。ラベル・ヒント・押せない理由・実行内容を 1 か所に置き、
  * メニューごとに同じ操作を書き直さない。どのメニューに何を出すかは menus.ts が決める。
  *
@@ -91,7 +91,7 @@ export interface TabContext {
   hasWindow: boolean;
   others: number;
   right: number;
-  /** 移せる先のデスクトップ（自分以外） */
+  /** 移せる先のワークスペース（自分以外） */
   desktops: { id: string; name: string }[];
   /** 移せる先のパネル（自分以外）。name はそのパネルで表示中のタブ名 */
   panels: { id: string; name: string; tabs: number }[];
@@ -137,9 +137,15 @@ export interface CreateContext {
   newSession?(): void;
 }
 
-/** 仮想デスクトップのタブ */
+/** ワークスペース（コード上は desktop）。タブのメニューと、パレットの『操作』（表示中のワークスペース）で使う */
 export interface DesktopContext {
+  /** 並びの中の位置（0 始まり）と数 */
+  index: number;
+  count: number;
   rename(): void;
+  create(): void;
+  move(delta: -1 | 1): void;
+  remove(): void;
 }
 
 /** 文字サイズと行間 */
@@ -483,10 +489,32 @@ export const COMMANDS: Command[] = [
     disabledReason: c => (c.closable ? null : ONE_PANEL), run: c => c.closePanel(),
   }),
 
-  // ---- 仮想デスクトップ
+  // ---- ワークスペース（コード上は desktop）
   define({
-    id: 'desktop.rename', scope: 'desktop', group: 'workspace', label: 'デスクトップの名前を変更…', menuLabel: '名前を変更…',
+    id: 'desktop.rename', scope: 'desktop', group: 'workspace', label: 'ワークスペースの名前を変更…', menuLabel: '名前を変更…',
+    aliases: ['デスクトップの名前を変更…', '現在のデスクトップの名前を変更'],
     run: c => c.rename(),
+  }),
+  define({
+    id: 'desktop.new', scope: 'desktop', group: 'workspace', label: '新しいワークスペース', hint: 'Alt+Shift+N',
+    aliases: ['デスクトップを追加', 'ワークスペースを追加'],
+    run: c => c.create(),
+  }),
+  define({
+    id: 'desktop.moveLeft', scope: 'desktop', group: 'workspace', label: 'ワークスペースを左へ移す', menuLabel: '左へ移す',
+    disabledReason: c => (c.index <= 0 ? 'いちばん左にあります' : null),
+    run: c => c.move(-1),
+  }),
+  define({
+    id: 'desktop.moveRight', scope: 'desktop', group: 'workspace', label: 'ワークスペースを右へ移す', menuLabel: '右へ移す',
+    disabledReason: c => (c.index >= c.count - 1 ? 'いちばん右にあります' : null),
+    run: c => c.move(1),
+  }),
+  define({
+    id: 'desktop.remove', scope: 'desktop', group: 'workspace', label: 'ワークスペースを削除…', danger: true,
+    aliases: ['デスクトップを削除', 'デスクトップの配置を削除'],
+    disabledReason: c => (c.count <= 1 ? 'ワークスペースが 1 つだけのときは削除できません' : null),
+    run: c => c.remove(),
   }),
 
   // ---- 文字サイズ

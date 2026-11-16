@@ -3,7 +3,8 @@ type Values = Record<string, string>;
 type Change = { before: string | null; after: string | null };
 type Patch = { id: string; changes: Record<string, Change>; seed?: boolean; sent?: boolean };
 export interface WorkspaceStatus { ready: boolean; connected: boolean; error: string; remoteAt: number }
-const initialDesktops = JSON.stringify({ activeId: 'main', items: [{ id: 'main', name: 'デスクトップ1' }] });
+// desktops.ts の INITIAL_DESKTOPS と同じ（このファイルは他を読み込まない）
+const initialDesktops = JSON.stringify({ activeId: 'main', items: [{ id: 'main', name: 'ワークスペース 1' }] });
 const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? null) === (b ?? null);
 const apply = (values: Values, changes: Record<string, Change>) => {
   for (const [key, { after }] of Object.entries(changes)) {

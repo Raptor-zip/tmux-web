@@ -18,7 +18,7 @@ const deviceState = (device: Device) => device.connected ? '接続済み' : devi
 interface Props {
   label: string | null;
   devices: Device[];
-  /** 配置の同期のエラー（あれば） */
+  /** ワークスペースの同期のエラー（あれば） */
   syncError?: string;
   authUrl?: string;
   version?: string;
@@ -68,7 +68,7 @@ export function ConnectionStatus({ label, devices, syncError, authUrl, version, 
           {device.server?.version && <span className="conn-device-version">{device.server.version}</span>}
         </li>)}
       </ul>
-      {syncError && <p className="conn-note">配置の同期：{syncError}</p>}
+      {syncError && <p className="conn-note">ワークスペースの同期：{syncError}</p>}
       <div className="conn-actions">
         <button className="btn" onClick={() => { onReconnect(); close(); }}><Icon name="refresh" />再接続</button>
         {authUrl && <a className="btn" href={authUrl}>接続先を開く</a>}

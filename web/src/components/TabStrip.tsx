@@ -10,7 +10,7 @@ import { distinguishTitles, whereWithSession, type WindowView } from '../windows
 interface Props {
   leaf: LeafNode;
   focused: boolean;
-  /** 1画面表示では、同じデスクトップの全パネルからタブを並べる。 */
+  /** 1画面表示では、同じワークスペースの全パネルからタブを並べる。 */
   desktopTabs?: { tab: TabRef; leafId: string }[];
   /** タブ id → 表示に使う情報。tmux 側に無いタブは undefined になる */
   viewOf(tab: TabRef): { view: WindowView | null; session: Session | null; device?: Device };
@@ -189,7 +189,7 @@ export function TabStrip({
         className={`tablist ${overflow.left ? 'fade-left' : ''} ${overflow.right ? 'fade-right' : ''}`}
         onScroll={measure}
         role="tablist"
-        aria-label={desktopTabs ? "このデスクトップのタブ" : "このパネルのタブ"}
+        aria-label={desktopTabs ? "このワークスペースのタブ" : "このパネルのタブ"}
         ref={listRef}
         // 横に長いタブ列は、縦ホイールでも送れたほうが早い
         onWheel={(e) => {

@@ -1,7 +1,6 @@
 import { ContextMenu } from './components/ContextMenu';
-import { buildMenu } from './commands';
+import { buildMenu, type DesktopContext } from './commands';
 import { DESKTOP_MENU } from './menus';
-import { ScreenViewer } from './components/ScreenViewer';
 import { InstallHelp } from './components/InstallApp';
 import { Settings } from './components/Settings';
 import { Shortcuts } from './components/Shortcuts';
@@ -18,7 +17,7 @@ import { useAltKeys } from './shared-setting';
 import { useLongPress } from './hooks/useLongPress';
 import { ConnectionStatus, connectionLabel } from './components/ConnectionStatus';
 import { Devices } from './components/Devices';
-import { addDesktop, desktopKey, INITIAL_DESKTOPS, openScreenTab, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
+import { addDesktop, desktopKey, INITIAL_DESKTOPS, moveDesktop, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
 
 export default function Desktops() {
   const connection = useTmuxState();
@@ -35,7 +34,7 @@ export default function Desktops() {
     };
   }, []);
   if (!sync.ready) return <div className="workspace-loading" role="status">
-    <p>{connection.unauthorized ? 'Tailscale認証を確認してください。' : 'デスクトップの配置を同期しています…'}</p>
+    <p>{connection.unauthorized ? 'Tailscale認証を確認してください。' : 'ワークスペースの配置を同期しています…'}</p>
     <p>{sync.error}</p>
     {connection.unauthorized && connection.authUrl && <a href={connection.authUrl}>接続先を開く</a>}
     <button onClick={() => workspaceStore.reconnect()}>再接続</button>
@@ -45,7 +44,6 @@ export default function Desktops() {
 
 function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxState> }) {
   const sync = useWorkspaceStatus();
-  const [remoteOpen, setRemoteOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
   /** 『表示と接続』。設定はワークスペースに依らないので、ここで 1 つだけ持つ */
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -154,16 +152,28 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
     setVisited(prev => new Set([...prev, id]));
     setState(prev => addDesktop(prev, id));
   };
-  const rename = (desktop: DesktopState['items'][number]) => setDialog({ kind: 'prompt', title: 'デスクトップの名前を変更', defaultValue: desktop.name, confirmLabel: '変更', onSubmit: name => {
+  const rename = (desktop: DesktopState['items'][number]) => setDialog({ kind: 'prompt', title: 'ワークスペースの名前を変更', defaultValue: desktop.name, confirmLabel: '変更', onSubmit: name => {
     if (name.trim()) setState(prev => ({ ...prev, items: prev.items.map(item => item.id === desktop.id ? { ...item, name: name.trim().slice(0, 60) } : item) }));
   } });
   const remove = (id: string) => {
     const item = state.items.find(item => item.id === id);
     if (!item || state.items.length === 1) return;
-    setDialog({ kind: 'confirm', title: `「${item.name}」を削除しますか？`, detail: 'このデスクトップのタブ・分割配置を削除します。tmuxと実行中の処理は継続し、他のデスクトップから再び開けます。', confirmLabel: '配置を削除', danger: false, onSubmit: () => {
+    // 削除…：保存している配置を消す。元に戻せないので、確認の最初のフォーカスはキャンセルに置く（danger）
+    setDialog({ kind: 'confirm', title: `ワークスペース「${item.name}」を削除しますか？`, detail: 'このワークスペースのタブと分割配置を削除します。tmux の端末と実行中の処理はそのまま残り、他のワークスペースから開き直せます。', confirmLabel: '削除する', danger: true, onSubmit: () => {
       setState(prev => removeDesktop(prev, id));
       for (const key of ['tw.layout', 'tw.serverPid', 'tw.device', 'tw.focusedLeaf']) workspaceStore.set(desktopKey(id, key), null);
     } });
+  };
+  /** ワークスペースのメニューとパレットの『操作』に渡す文脈 */
+  const workspaceContext = (id: string): DesktopContext => {
+    const index = state.items.findIndex(item => item.id === id);
+    return {
+      index, count: state.items.length,
+      rename: () => { const desktop = state.items.find(item => item.id === id); if (desktop) rename(desktop); },
+      create,
+      move: delta => setState(prev => moveDesktop(prev, id, delta)),
+      remove: () => remove(id),
+    };
   };
   useEffect(() => {
     const button = list.current?.querySelector<HTMLElement>('[aria-selected="true"]');
@@ -190,11 +200,11 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
   return <div className="desktop-shell">
     <header className="desktop-bar">
       <span className="bar-slot" ref={setLeadSlot} />
-      <div className="desktop-tabs" role="tablist" aria-label="仮想デスクトップ" ref={list} onScroll={cancelPress}>
+      <div className="desktop-tabs" role="tablist" aria-label="ワークスペース" ref={list} onScroll={cancelPress}>
         {state.items.map((desktop, index) => <div className="desktop-slot" key={desktop.id}>
           <button id={`desktop-tab-${desktop.id}`} data-desktop-id={desktop.id} className={`desktop-tab ${desktop.id === state.activeId ? 'on' : ''} ${dropDesktopId === desktop.id ? 'drop-target' : ''}`} role="tab" aria-selected={desktop.id === state.activeId}
             aria-controls={`desktop-panel-${desktop.id}`} tabIndex={desktop.id === state.activeId ? 0 : -1}
-            title={`${desktop.name}（右クリック・長押しで名前変更）`} aria-haspopup="menu" aria-expanded={tabMenu?.id === desktop.id}
+            title={`${desktop.name}（右クリック・長押しでメニュー、ダブルクリックで名前を変更）`} aria-haspopup="menu" aria-expanded={tabMenu?.id === desktop.id}
             {...longPress.bind(desktop.id)}
             onClick={() => select(desktop.id)}
             onContextMenu={e => {
@@ -219,11 +229,9 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
               e.preventDefault(); select(state.items[next].id);
               list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
             }}><span className="desktop-number">{index + 1}</span><span>{desktop.name}</span></button>
-          {state.items.length > 1 && <button className="desktop-close" aria-label={`${desktop.name} を削除`} title="デスクトップの配置を削除" onClick={() => remove(desktop.id)}><Icon name="close" /></button>}
         </div>)}
       </div>
-      <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
-      <button className="remote-desktop-launch" aria-label="リモートデスクトップ" title="リモートデスクトップ" onClick={() => setRemoteOpen(true)}><Icon name="screen" /></button>
+      <button className="desktop-add" aria-label="新しいワークスペース" title={altKeys ? '新しいワークスペース (Alt+Shift+N)' : '新しいワークスペース'} onClick={create}><Icon name="plus-square" /></button>
       <span className="bar-slot bar-status" ref={setStatusSlot} />
       <ConnectionStatus
         label={connectionLabel({ connected: connection.connected, unauthorized: connection.unauthorized, hasState: !!connection.state, syncOk: sync.connected && !sync.error })}
@@ -241,22 +249,11 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
         {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab}
           barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot } : undefined}
+          workspace={desktop.id === state.activeId ? workspaceContext(desktop.id) : undefined}
           onOpenSettings={() => setSettingsOpen(true)} />}
       </section>)}
     </div>
-    {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} title={state.items.find(item => item.id === tabMenu.id)?.name} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: { rename: () => {
-      const desktop = state.items.find(item => item.id === tabMenu.id);
-      if (desktop) rename(desktop);
-    } } })} />}
-    {remoteOpen && <ScreenViewer devices={connection.devices} deviceId="local" onClose={() => setRemoteOpen(false)} onOpenAsTab={deviceId => {
-      // 同じ画面を二重に繋がないよう、ダイアログを閉じてから今のデスクトップのタブに開く
-      setRemoteOpen(false);
-      const handle = desktopLayouts.current.get(state.activeId);
-      if (!handle) return;
-      const current = handle.read();
-      const next = openScreenTab(current.layout, deviceId, current.focusedId);
-      handle.write(next.layout, next.focusedId);
-    }} />}
+    {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} title={state.items.find(item => item.id === tabMenu.id)?.name} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: workspaceContext(tabMenu.id) })} />}
     {devicesOpen && <Devices devices={connection.devices} onChanged={connection.reloadDevices} onClose={() => setDevicesOpen(false)} />}
     {settingsOpen && <Settings
       versions={connection.devices.filter(d => d.server?.version).map(d => ({ name: d.name, version: d.server?.version }))}

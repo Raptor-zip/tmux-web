@@ -179,11 +179,12 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices'){await page.locator('.desktop-bar .conn-status').click();await page.getByRole('dialog',{name:'接続状態',exact:true}).getByRole('button',{name:'デバイス接続を管理…',exact:true}).click();}
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
-  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
+  if(scene.action==='desktop'){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
   if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^作業フォルダーを開く/}).click();}
   if(checkFiles) await checkFiles();
   if(scene.name.startsWith('remote-') && scene.action==='desktop'){
-   if(phase==='after')await page.getByRole('button',{name:'リモートデスクトップ',exact:true}).click();
+   // 上バーのモニタアイコンは無くなった。リモートデスクトップは新規メニューの『リモートデスクトップ ▸』→『ダイアログで開く』から開く（上の desktop の操作）
+   if(phase==='after')assert.equal(await page.locator('.desktop-bar').getByRole('button',{name:'リモートデスクトップ',exact:true}).count(),0,'no monitor icon in the workspace bar');
    await page.getByRole('dialog',{name:'リモートデスクトップ',exact:true}).waitFor();
    if(scene.remotePanel){
     if(phase==='before')await page.locator('.desktop-more summary').click();
@@ -317,8 +318,9 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(await page.locator('.tile:visible .tab:not(.active) .tab-close:visible').count(),0,'inactive tabs hide their close button');
    const close=page.locator('.tab[aria-selected=true] .tab-close');await close.focus();await page.keyboard.press('Enter');
    assert.equal(await page.locator('[data-tab-id=tab-local-2]').count(),0,'close button works with keyboard');
-   await page.getByRole('button',{name:'現在のデスクトップの名前を変更',exact:true}).click();
-   const prompt=page.getByRole('dialog',{name:'デスクトップの名前を変更',exact:true});
+   // ワークスペースの名前の変更は、ワークスペースタブの右クリックメニューの『名前を変更…』から
+   await page.locator('.desktop-tab').first().click({button:'right'});await page.getByRole('menuitem',{name:'名前を変更…',exact:true}).click();
+   const prompt=page.getByRole('dialog',{name:'ワークスペースの名前を変更',exact:true});
    await prompt.getByRole('textbox').fill('開発用');await page.keyboard.press('Enter');
    assert.equal(await page.getByRole('tab',{name:'1 開発用',exact:true}).count(),1,'native prompt submits from keyboard');
   }
@@ -335,10 +337,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()),'#7aa2f7','device selection preserves Tokyo Night accent');
    if(process.env.CONNECTION_CHECK){
     assert.equal(activeTerminals,4);
-    await page.getByRole('button',{name:'デスクトップを追加',exact:true}).click();
+    await page.getByRole('button',{name:'新しいワークスペース',exact:true}).click();
     await page.waitForTimeout(250);
     assert.equal(activeTerminals,4,'hidden desktop retains every terminal connection');
-    await page.getByRole('tab',{name:'1 デスクトップ1',exact:true}).click();
+    await page.getByRole('tab',{name:'1 ワークスペース 1',exact:true}).click();
     await page.waitForTimeout(250);
     assert.equal(activeTerminals,4,'returning to desktop reuses its terminals');
     await page.evaluate(()=>{Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});document.dispatchEvent(new Event('visibilitychange'));});

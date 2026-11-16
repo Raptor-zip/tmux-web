@@ -61,8 +61,16 @@ export const NEW_MENU: readonly MenuSlot[] = [
   'create.session',
 ];
 
-/** 仮想デスクトップのタブを右クリック・長押ししたときのメニュー */
-export const DESKTOP_MENU: readonly MenuSlot[] = ['desktop.rename'];
+/** ワークスペースのタブを右クリック・長押し・Shift+F10 したときのメニュー */
+export const DESKTOP_MENU: readonly MenuSlot[] = [
+  'desktop.rename',
+  'desktop.new',
+  SEP,
+  'desktop.moveLeft',
+  'desktop.moveRight',
+  SEP,
+  'desktop.remove',
+];
 
 export const MENUS = {
   tab: TAB_MENU,

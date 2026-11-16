@@ -21,6 +21,7 @@ const paths = {
   download: 'M12 3v13 M7 11l5 5 5-5 M3 16v5h18v-5',
   folder: 'M3 7V5a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v2H6l-3 11h15l3-11 M3 7v13',
   plus: 'M12 5v14 M5 12h14',
+  'plus-square': 'M4 4h16v16H4z M12 8v8 M8 12h8',
   'chevron-left': 'M15 6l-6 6 6 6',
   'chevron-right': 'M9 6l6 6-6 6',
   'chevron-down': 'M6 9l6 6 6-6',

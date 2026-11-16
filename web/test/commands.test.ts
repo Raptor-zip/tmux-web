@@ -187,7 +187,15 @@ test('font size and line height commands keep their short labels and limits', ()
   assert.equal(font, 7);
   (buildMenu(LINE_HEIGHT_MENU, { view })[3] as MenuItem).run();
   assert.equal(line, 1.15);
-  assert.deepEqual(names(DESKTOP_MENU, { desktop: { rename() {} } }), ['名前を変更…']);
+  const calls: string[] = [];
+  const desktop = (index: number, count: number) => ({ index, count, rename: () => calls.push('rename'), create: () => calls.push('create'), move: (d: number) => calls.push(`move${d}`), remove: () => calls.push('remove') });
+  assert.deepEqual(names(DESKTOP_MENU, { desktop: desktop(0, 2) }), ['名前を変更…', '新しいワークスペース', '---', '左へ移す', '右へ移す', '---', 'ワークスペースを削除…']);
+  const first = buildMenu(DESKTOP_MENU, { desktop: desktop(0, 1) }).filter((e): e is MenuItem => !!e && 'run' in e);
+  assert.deepEqual(first.filter(e => e.disabled).map(e => e.label), ['左へ移す', '右へ移す', 'ワークスペースを削除…'], 'the only workspace cannot move or be deleted');
+  assert.equal(first.find(e => e.label === 'ワークスペースを削除…')?.danger, true);
+  const middle = buildMenu(DESKTOP_MENU, { desktop: desktop(1, 3) }).filter((e): e is MenuItem => !!e && 'run' in e);
+  for (const item of middle) { assert.ok(!item.disabled); item.run(); }
+  assert.deepEqual(calls, ['rename', 'create', 'move-1', 'move1', 'remove']);
 });
 
 test('renamed commands keep their old names as search aliases', () => {

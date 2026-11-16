@@ -2,9 +2,13 @@ const assert = require('node:assert/strict');
 const { join } = require('node:path');
 module.exports = async function checkDesktopContext(page, { scene, out, screenshots }) {
   assert.equal(await page.locator('.desktop-rename').count(), 0);
-  const remote = page.getByRole('button', { name:'リモートデスクトップ', exact:true });
-  assert.deepEqual(await remote.evaluate(el => ({ border:getComputedStyle(el).borderTopWidth, background:getComputedStyle(el).backgroundColor })), { border:'0px', background:'rgba(0, 0, 0, 0)' });
-  await page.getByRole('button',{name:'デスクトップを追加',exact:true}).click();
+  // ワークスペースバー：タブごとの × とモニタアイコンは無い。追加は ⊞『新しいワークスペース』
+  const bar = page.locator('.desktop-bar');
+  assert.equal(await bar.getByRole('button', { name:'リモートデスクトップ', exact:true }).count(), 0, 'no monitor icon in the workspace bar');
+  assert.equal(await page.getByRole('tablist',{name:'ワークスペース',exact:true}).count(), 1);
+  await bar.getByRole('button',{name:'新しいワークスペース',exact:true}).click();
+  assert.equal(await page.locator('.desktop-close').count(), 0, 'workspace tabs have no close button');
+  assert.equal(await page.locator('.desktop-tab').nth(1).textContent(), '2ワークスペース 2', 'new workspaces get the default name ワークスペース N');
   const first = page.locator('.desktop-tab').first();
   const second = page.locator('.desktop-tab').nth(1);
   const activeId = await second.getAttribute('data-desktop-id');
@@ -29,7 +33,9 @@ module.exports = async function checkDesktopContext(page, { scene, out, screensh
   assert.equal(await second.getAttribute('aria-selected'),'true','opening menu on inactive tab keeps active desktop');
   assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('role')),'menuitem','the menu focuses its first item, not the close button');
   assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'名前を変更…');
-  assert.equal(await page.getByRole('menu').getAttribute('aria-label'),'デスクトップ1','the menu is titled with its target');
+  assert.equal(await page.getByRole('menu').getAttribute('aria-label'),'ワークスペース 1','the menu is titled with its target');
+  assert.deepEqual(await page.getByRole('menu').getByRole('menuitem').evaluateAll(items=>items.map(el=>[el.getAttribute('aria-label')||el.querySelector('.ctx-label')?.textContent||el.textContent,el.disabled])).then(rows=>rows.map(([name,disabled])=>[name.replace(/Alt\+Shift\+N$/,'').trim(),disabled])),
+    [['名前を変更…',false],['新しいワークスペース',false],['左へ移す',true],['右へ移す',false],['ワークスペースを削除…',false]], 'the workspace menu lists rename, new, move and delete');
   if (scene.touch) {
     // タッチのシートでは、右上の × で閉じる（先頭の『閉じる』項目は無い）
     assert.equal(await page.getByRole('menuitem',{name:'閉じる',exact:true}).count(),0);
@@ -40,7 +46,7 @@ module.exports = async function checkDesktopContext(page, { scene, out, screensh
   }
   if (screenshots) await page.screenshot({path:join(out,scene.name+'-menu.png'),animations:'disabled'});
   await edit.click();
-  assert.equal(await page.locator('.dialog-input').inputValue(),'デスクトップ1');
+  assert.equal(await page.locator('.dialog-input').inputValue(),'ワークスペース 1');
   await page.locator('.dialog-input').fill('編集した作業');
   await page.getByRole('button',{name:'変更',exact:true}).click();
   await first.filter({hasText:'編集した作業'}).waitFor();
@@ -63,10 +69,34 @@ module.exports = async function checkDesktopContext(page, { scene, out, screensh
   await first.focus();
   await page.keyboard.press('ArrowRight');
   assert.equal(await second.getAttribute('aria-selected'),'true','arrow-key tab switching remains available');
-  await remote.click();
-  await page.getByRole('dialog',{name:'リモートデスクトップ',exact:true}).waitFor();
-  await page.getByRole('button',{name:'デスクトップを閉じる',exact:true}).click();
+  // 右へ移す：並びが入れ替わり、表示中のワークスペースは変わらない
+  const openMenu = async tab => { await tab.focus(); await page.keyboard.press('Shift+F10'); await page.getByRole('menu').waitFor(); };
+  await openMenu(first);
+  await page.getByRole('menuitem',{name:'右へ移す',exact:true}).click();
+  await page.waitForFunction(id => JSON.parse(localStorage.getItem('tw.desktops')).items[1].id === 'main' && JSON.parse(localStorage.getItem('tw.desktops')).activeId === id, activeId);
+  assert.match(await page.locator('.desktop-tab').nth(1).textContent(), /^2編集した作業$/);
+  // 削除…は確認付き。最初のフォーカスはキャンセルで、Enter だけでは消えない
+  const moved = page.locator('.desktop-tab').nth(1);
+  await openMenu(moved);
+  await page.getByRole('menuitem',{name:'ワークスペースを削除…',exact:true}).click();
+  const confirm = page.getByRole('dialog',{name:'ワークスペース「編集した作業」を削除しますか？',exact:true});
+  await confirm.waitFor();
+  assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'キャンセル','delete confirmation focuses Cancel first');
+  await page.keyboard.press('Enter');
+  await confirm.waitFor({state:'detached'});
+  assert.equal(await page.locator('.desktop-tab').count(), 2, 'Enter on Cancel keeps the workspace');
+  await openMenu(moved);
+  await page.getByRole('menuitem',{name:'左へ移す',exact:true}).click();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('tw.desktops')).items[0].id === 'main');
   await page.reload();
   await page.locator('.desktop-tab').first().filter({hasText:'編集した作業'}).waitFor();
-  console.log('desktop context: target rename, active desktop, gesture cancellation, keyboard menu, persistence and remote launch passed');
+  const kept = page.locator('.desktop-tab').nth(1);
+  await openMenu(kept);
+  await page.getByRole('menuitem',{name:'ワークスペースを削除…',exact:true}).click();
+  await page.getByRole('dialog',{name:'ワークスペース「ワークスペース 2」を削除しますか？',exact:true}).getByRole('button',{name:'削除する',exact:true}).click();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('tw.desktops')).items.length === 1);
+  await openMenu(page.locator('.desktop-tab').first());
+  assert.equal(await page.getByRole('menuitem',{name:'ワークスペースを削除…',exact:true}).isDisabled(), true, 'the last workspace cannot be deleted');
+  await page.keyboard.press('Escape');
+  console.log('desktop context: workspace menu (rename, new, move, delete with confirmation), active workspace, gesture cancellation, keyboard menu and persistence passed');
 };
