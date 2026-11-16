@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchCapture } from '../api';
+import { Modal } from './Modal';
 
 /** ホバーしてからプレビューを出すまでの待ち時間。通りすがりで出さないための間 */
 const OPEN_DELAY = 320;
@@ -29,13 +30,10 @@ function trimTail(text: string): string {
  * ウィンドウを開かずに「いまそのペインに何が出ているか」を確かめるためのもので、
  * 操作はできない。ANSI エスケープは落として素のテキストだけを出す。
  */
-export function HoverPreview({ target }: { target: PreviewTarget | null }) {
+/** ペインの末尾を一定間隔で取り直す。paneId が null のあいだは何もしない */
+function useCapture(paneId: string | null, delay: number) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const boxRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  const paneId = target?.paneId ?? null;
 
   useEffect(() => {
     if (!paneId) {
@@ -61,13 +59,27 @@ export function HoverPreview({ target }: { target: PreviewTarget | null }) {
     // 対象が変わったら前の中身は捨てる（別のペインの内容が一瞬残らないように）
     setText(null);
     setError(null);
-    timer = setTimeout(load, OPEN_DELAY);
+    timer = setTimeout(load, delay);
 
     return () => {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [paneId]);
+  }, [paneId, delay]);
+
+  return { text, error };
+}
+
+/**
+ * サイドバーの行にホバーしたときに出す、ペインの中身のプレビュー。
+ *
+ * ウィンドウを開かずに「いまそのペインに何が出ているか」を確かめるためのもので、
+ * 操作はできない。ANSI エスケープは落として素のテキストだけを出す。
+ */
+export function HoverPreview({ target }: { target: PreviewTarget | null }) {
+  const { text, error } = useCapture(target?.paneId ?? null, OPEN_DELAY);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   // 行の右側に置く。画面からはみ出すぶんは上下だけ寄せる
   useEffect(() => {
@@ -104,5 +116,25 @@ export function HoverPreview({ target }: { target: PreviewTarget | null }) {
         <pre className="hp-body">{text}</pre>
       )}
     </div>
+  );
+}
+
+/**
+ * 行メニューの『のぞく』。ホバーのプレビューと同じ中身を、シート（狭い画面では下端）で出す。
+ * タッチではホバーが無いので、こちらが唯一の入口になる。
+ */
+export function PeekSheet({ target, onClose }: { target: Omit<PreviewTarget, 'anchor'>; onClose(): void }) {
+  const { text, error } = useCapture(target.paneId, 0);
+  return (
+    <Modal title={`のぞく · ${target.title}`} className="peek-modal" onClose={onClose}>
+      {target.subtitle && <p className="peek-sub">{target.subtitle}</p>}
+      {error ? (
+        <p className="hp-error" role="alert">プレビューを取得できません: {error}</p>
+      ) : text === null ? (
+        <p className="field-hint" role="status">読み込んでいます…</p>
+      ) : (
+        <pre className="hp-body peek-body">{text}</pre>
+      )}
+    </Modal>
   );
 }

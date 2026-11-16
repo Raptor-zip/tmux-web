@@ -197,11 +197,6 @@
 .sidebar-resize { position:absolute; top:0; bottom:0; right:-5px; width:10px; z-index:5; cursor:col-resize; touch-action:none; }
 .sidebar-resize:hover,.sidebar-resize:focus-visible { background:var(--accent); outline:none; }
 .app.sidebar-hidden .sidebar { visibility:hidden; }
-.sidebar-foot { position:relative; flex-wrap:wrap; gap:6px; }
-.sidebar-more { width:100%; }
-.sidebar-more summary { cursor:pointer; padding:8px 0; }
-.sidebar-more-content { display:flex; flex-direction:column; gap:8px; padding-bottom:8px; }
-.sidebar-more-content .filter-wrap { width:100%; }
 @media (max-width:760px) {
   .sidebar { position:fixed; width:min(var(--sidebar-w),calc(100vw - 32px)); max-width:none; }
 }

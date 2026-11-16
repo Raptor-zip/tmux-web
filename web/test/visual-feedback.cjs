@@ -46,6 +46,10 @@ function state(device){
  const sessions=[{id:'$1',name:'development',windows:12,created:now-3600000,activity:now,attached:1,group:null,groupSize:1,path:'/home/demo/projects'}];
  const windows=Array.from({length:12},(_,i)=>({id:'@'+(i+1),sessionId:'$1',sessionName:'development',index:i,name:['UIの調整','APIと認証を実装','テストとビルド','データの解析'][i%4],active:i===0,panes:1,layout:'',zoomed:false,activity:false,lastActivity:now,bell:false,width:120,height:32}));
  const panes=windows.map((w,i)=>({id:'%'+(i+1),sessionId:'$1',windowId:w.id,index:0,active:true,title:w.name,busy:i%3===0,command:'node',path:'/home/demo/projects/'+projects[i%projects.length],pid:1000+i,width:120,height:32,left:0,top:0,dead:false,inMode:false,proc:{kind:'agent',agent:i%2?'Claude':'Codex',command:i%2?'claude':'codex',ports:[],since:now-1800000},project:{root:'/home/demo/projects/'+projects[i%projects.length],name:projects[i%projects.length]}}));
+ // SIDEBAR_CHECK：一覧の『別のセッションへ移す / まとめる』を試すため、2 つ目のセッションを足す
+ if(process.env.SIDEBAR_CHECK){sessions.push({id:'$2',name:'notes',windows:2,created:now-3600000,activity:now,attached:0,group:null,groupSize:1,path:'/home/demo/notes'});
+  for(const n of [13,14]){windows.push({id:'@'+n,sessionId:'$2',sessionName:'notes',index:n-13,name:'メモ'+(n-12),active:n===13,panes:1,layout:'',zoomed:false,activity:false,lastActivity:now,bell:false,width:120,height:32});
+   panes.push({id:'%'+n,sessionId:'$2',windowId:'@'+n,index:0,active:true,title:'メモ'+(n-12),busy:false,command:'vim',path:'/home/demo/notes',pid:1000+n,width:120,height:32,left:0,top:0,dead:false,inMode:false,proc:{kind:'run',command:'vim',ports:[],since:now-1800000},project:{root:'/home/demo/notes',name:'notes'}});}}
  return{sessions,windows,panes,serverPid:device==='local'?501:502,ts:now,server:{version:'tmux 3.4',prefix:'C-b',socketName:'default',home:'/home/demo',device:{name:deviceNames[device],color:device==='local'?'#205683':'#266c5b',accent:device==='local'?'#70b8ff':'#69d3b5',fingerprint:device==='local'?'10000001':'20000002'}}};
 }
 function tab(n,device='local'){return{id:'tab-'+device+'-'+n,sessionId:device==='local'?'$1':'spark~$1',windowId:(device==='local'?'':'spark~')+'@'+n,sessionName:'development',windowIndex:n-1,windowName:state(device).windows[n-1].name};}
@@ -109,7 +113,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    if(process.env.THROTTLE_KBPS){const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});await cdp.send('Network.emulateNetworkConditions',{offline:false,downloadThroughput:Number(process.env.THROTTLE_KBPS)*1000/8,uploadThroughput:100000,latency:Number(process.env.THROTTLE_RTT_MS||0)});}
   }
   await page.route('**/api/**',async route=>{
-   const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;apiRequests.push({method:route.request().method(),path:url.pathname});
+   const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;apiRequests.push({method:route.request().method(),path:url.pathname,body:route.request().postData()});
    let body={};let status=200;
    if(path==='/api/devices')body={devices:[{id:'local',name:'ThinkPad',local:true},{id:'spark',name:'DGX Spark',local:false,url:'https://spark.example.ts.net:8443'}]};
    else if(path==='/api/state'){body=state(remote?'spark':'local');if(remote&&scene.offline){body={error:'デバイスに接続できません'};status=502;}}
@@ -121,6 +125,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    else if(path==='/api/files')body={root:'/home/demo/projects/atlas-web',path:'',items:[{name:'src',path:'src',directory:true,size:0,modified:now,mime:''},{name:'responsive-workspace-review.md',path:'responsive-workspace-review.md',directory:false,size:2840,modified:now,mime:'text/plain'},{name:'package.json',path:'package.json',directory:false,size:960,modified:now,mime:'text/plain'}]};
    else if(path==='/api/keys')body={keys:[]};
    else if(path==='/api/action')body={ok:true,result:null};
+   else if(path==='/api/capture'&&process.env.SIDEBAR_CHECK)body={target:url.searchParams.get('target'),text:'$ make\nsidebar-capture: ok\n$ '};
    else if(path==='/api/capture'&&process.env.TAB_MENU_CHECK)body={target:url.searchParams.get('target'),text:'$ npm test\ntab-menu-capture: 76 passed\n$ '};
    await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
   });
@@ -182,7 +187,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(checkSwitcher) await checkSwitcher();
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices'){await phone.openConnection(page);await page.getByRole('dialog',{name:'接続状態',exact:true}).getByRole('button',{name:'デバイス接続を管理…',exact:true}).click();}
-  if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
+  // 『その他・検索…』は無くなった。プロジェクトの作成は一覧の見出しの『＋ 新規 ▾』（選択中のデバイスの新規メニュー）から
+  if(scene.action==='project'){if(phase==='before'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}else{await page.locator('.sidebar').getByRole('button',{name:'新規',exact:true}).click();await page.getByRole('menuitem',{name:'プロジェクトを作る…',exact:true}).click();}}
   if(scene.action==='desktop'){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await phone.focusedHead(page).getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
   if(scene.action==='files'){await phone.focusedHead(page).getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^作業フォルダーを開く/}).click();}
   if(checkFiles) await checkFiles();
@@ -245,6 +251,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.deepEqual(errors,[],'no runtime errors after form and font interactions');
   }
 
+  if(phase==='after' && process.env.SIDEBAR_CHECK && (scene.name==='desktop-controls' || scene.name==='tablet-two')){
+   await require('./sidebar.cjs')(page,{scene,out,requests:apiRequests,screenshots:!process.env.NO_SCREENSHOTS});
+   assert.deepEqual(errors,[],'sidebar runtime errors');
+  }
   if(phase==='after' && process.env.SETTINGS_CHECK && (scene.name==='desktop-controls' || scene.name==='mobile-panels')){
    await require('./settings.cjs')(page,{scene,terminalTransports,out});
    assert.deepEqual(errors,[],'settings runtime errors');

@@ -187,6 +187,60 @@ export interface ScreenContext {
   openText(): void;
 }
 
+/** 一覧（サイドバー）全体。見出しの ⋯ と、パレットの『操作』で使う */
+export interface ListContext {
+  groupBy: 'project' | 'session';
+  setGroupBy(next: 'project' | 'session'): void;
+  /** まとめて片付けられる未使用の端末の数 */
+  closable: number;
+  cleanUp(): void;
+  /** 一覧の中でだけ使える（パレットからは出さない） */
+  collapseAll?(): void;
+  expandAll?(): void;
+  /** 畳んでいるグループ・デバイスがある */
+  anyCollapsed?: boolean;
+  manageDevices(): void;
+  /** 一覧が開いているときだけ */
+  close?(): void;
+}
+
+/** 一覧のデバイス見出し */
+export interface DeviceContext {
+  id: string;
+  name: string;
+  connected: boolean;
+  /** 新規・プロジェクト・リモートデスクトップの対象として選んでいる */
+  selected: boolean;
+  select(): void;
+  openScreen(): void;
+  manage(): void;
+}
+
+/** 一覧の 1 行（端末の行、またはグループの行） */
+export interface RowContext {
+  /** window = 端末、session = tmux セッション（セッション別）、project = プロジェクト（プロジェクト別） */
+  kind: 'window' | 'session' | 'project';
+  name: string;
+  open(): void;
+  /** 端末の行だけ。ドラッグで端末の端に落としたときと同じ */
+  openSide?(side: 'right' | 'bottom'): void;
+  /** 中身をシートで見る（タッチではホバーのプレビューが出ないため） */
+  peek?(): void;
+  /** グループの行だけ。そのグループで新しい端末を開く */
+  newTerminal?(): void;
+  rename?(): void;
+  /** 移す先・まとめる先（同じデバイスの、自分以外のセッション） */
+  sessions: { id: string; name: string }[];
+  /** 端末の行だけ。ドラッグで別のセッション行に落としたときと同じ */
+  moveTo?(sessionId: string): void;
+  /** セッションの行だけ。ドラッグで別のセッション行に重ねたときと同じ */
+  mergeInto?(sessionId: string): void;
+  /** グループの中の、まとめて片付けられる未使用の端末の数 */
+  closable: number;
+  cleanUp?(): void;
+  kill?(): void;
+}
+
 /** 文字サイズと行間 */
 export interface ViewContext {
   fontSize: number;
@@ -206,6 +260,9 @@ export interface Sections {
   desktop: DesktopContext;
   view: ViewContext;
   screen: ScreenContext;
+  list: ListContext;
+  device: DeviceContext;
+  row: RowContext;
 }
 
 export type Scope = keyof Sections;
@@ -226,7 +283,8 @@ export type CommandGroup =
   | 'window'
   | 'workspace'
   | 'font'
-  | 'lineHeight';
+  | 'lineHeight'
+  | 'list';
 
 export interface Command<S extends Scope = Scope> {
   id: string;
@@ -617,6 +675,95 @@ export const COMMANDS: Command[] = [
     run: c => c.remove(),
   }),
 
+  // ---- 一覧（サイドバー）
+  define({
+    id: 'list.byProject', scope: 'list', group: 'list', label: 'プロジェクト別に並べる', menuLabel: 'プロジェクト別',
+    aliases: ['並べ方', 'プロジェクト別'],
+    hint: c => (c.groupBy === 'project' ? '選択中' : undefined), run: c => c.setGroupBy('project'),
+  }),
+  define({
+    id: 'list.bySession', scope: 'list', group: 'list', label: 'セッション別に並べる', menuLabel: 'セッション別',
+    aliases: ['並べ方', 'セッション別', 'tmux の構造'],
+    hint: c => (c.groupBy === 'session' ? '選択中' : undefined), run: c => c.setGroupBy('session'),
+  }),
+  define({
+    id: 'list.cleanUp', scope: 'list', group: 'list', label: '未使用の端末を片付ける…', danger: true,
+    aliases: ['片付ける', '未使用のウィンドウを閉じる'],
+    hint: c => (c.closable ? `${c.closable} 枚` : undefined),
+    disabledReason: c => (c.closable ? null : '片付けられる未使用の端末はありません'), run: c => c.cleanUp(),
+  }),
+  define({
+    id: 'list.collapseAll', scope: 'list', group: 'list', label: 'すべて折りたたむ',
+    when: c => !!c.collapseAll, run: c => c.collapseAll?.(),
+  }),
+  define({
+    id: 'list.expandAll', scope: 'list', group: 'list', label: 'すべて広げる',
+    when: c => !!c.expandAll && !!c.anyCollapsed, run: c => c.expandAll?.(),
+  }),
+  define({
+    id: 'list.manageDevices', scope: 'list', group: 'list', label: 'デバイス接続を管理…',
+    aliases: ['デバイスを追加', '接続先'], run: c => c.manageDevices(),
+  }),
+  define({
+    id: 'list.close', scope: 'list', group: 'list', label: '一覧を閉じる', hint: 'Alt+B',
+    aliases: ['サイドバーを閉じる', 'セッション一覧'], when: c => !!c.close, run: c => c.close?.(),
+  }),
+
+  // ---- 一覧のデバイス見出し
+  define({
+    id: 'device.screen', scope: 'device', group: 'screen', label: 'このデバイスのリモートデスクトップを開く', menuLabel: 'リモートデスクトップを開く',
+    disabledReason: c => (c.connected ? null : 'このデバイスは接続していません'), run: c => c.openScreen(),
+  }),
+  define({
+    id: 'device.select', scope: 'device', group: 'list', label: 'このデバイスを選ぶ',
+    disabledReason: c => (c.selected ? '選択中です' : null), run: c => c.select(),
+  }),
+  define({
+    id: 'device.manage', scope: 'device', group: 'list', label: 'デバイスの接続設定…', menuLabel: '接続設定…',
+    run: c => c.manage(),
+  }),
+
+  // ---- 一覧の行（端末・セッション・プロジェクト）
+  define({
+    id: 'row.open', scope: 'row', group: 'list', label: 'タブで開く', run: c => c.open(),
+  }),
+  define({
+    id: 'row.openRight', scope: 'row', group: 'list', label: '右に並べて開く',
+    when: c => !!c.openSide, run: c => c.openSide?.('right'),
+  }),
+  define({
+    id: 'row.openBottom', scope: 'row', group: 'list', label: '下に並べて開く',
+    when: c => !!c.openSide, run: c => c.openSide?.('bottom'),
+  }),
+  define({
+    id: 'row.peek', scope: 'row', group: 'list', label: 'のぞく', aliases: ['プレビュー'],
+    when: c => !!c.peek, run: c => c.peek?.(),
+  }),
+  define({
+    id: 'row.newTerminal', scope: 'row', group: 'list', label: 'このグループで新しい端末を開く', menuLabel: 'ここに新しい端末',
+    aliases: ['ウィンドウを追加'], when: c => !!c.newTerminal, run: c => c.newTerminal?.(),
+  }),
+  define({
+    id: 'row.rename', scope: 'row', group: 'list', label: '一覧の項目の名前を変更…', menuLabel: '名前を変更…',
+    when: c => !!c.rename, run: c => c.rename?.(),
+  }),
+  define({
+    id: 'row.cleanUp', scope: 'row', group: 'list', label: 'このグループの未使用の端末を片付ける…', menuLabel: '未使用の端末を片付ける…',
+    danger: true, hint: c => (c.closable ? `${c.closable} 枚` : undefined),
+    when: c => c.kind !== 'window' && !!c.cleanUp,
+    disabledReason: c => (c.closable ? null : '片付けられる未使用の端末はありません'), run: c => c.cleanUp?.(),
+  }),
+  define({
+    id: 'row.killWindow', scope: 'row', group: 'window', label: 'この端末を終了…', menuLabel: '端末を終了…',
+    aliases: ['ウィンドウを閉じる'], danger: true,
+    when: c => c.kind === 'window' && !!c.kill, run: c => c.kill?.(),
+  }),
+  define({
+    id: 'row.killSession', scope: 'row', group: 'window', label: 'tmux セッションを終了…',
+    aliases: ['セッションを削除'], danger: true,
+    when: c => c.kind === 'session' && !!c.kill, run: c => c.kill?.(),
+  }),
+
   // ---- 文字サイズ
   define({
     id: 'font.larger', scope: 'view', group: 'font', label: '文字を大きく', menuLabel: '大きく', hint: '+1px',
@@ -680,6 +827,18 @@ export const FAMILIES: CommandFamily[] = [
     itemLabel: (_c, d) => `${d.name} の画面に切り替え`, itemMenuLabel: (_c, d) => d.name,
     disabledReason: (_c, d) => (d.connected === false ? 'このデバイスは接続していません' : null),
     run: (c, d) => c.switchDevice(d.id),
+  }),
+  family({
+    id: 'row.moveTo', scope: 'row', group: 'list', label: 'セッション「{名前}」へ移す',
+    items: c => (c.moveTo ? c.sessions : []),
+    itemLabel: (_c, s) => `セッション「${s.name}」へ移す`, itemMenuLabel: (_c, s) => s.name,
+    run: (c, s) => c.moveTo?.(s.id),
+  }),
+  family({
+    id: 'row.mergeInto', scope: 'row', group: 'list', label: 'セッション「{名前}」とまとめる…',
+    items: c => (c.mergeInto ? c.sessions : []),
+    itemLabel: (_c, s) => `セッション「${s.name}」とまとめる…`, itemMenuLabel: (_c, s) => `${s.name}…`,
+    run: (c, s) => c.mergeInto?.(s.id),
   }),
   family({
     id: 'tab.moveToDesktop', scope: 'tab', group: 'tab', label: 'ワークスペース「{名前}」へ移す',

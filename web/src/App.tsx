@@ -15,9 +15,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { quotePath } from './attachments';
-import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
+import { Sidebar, confirmCleanUp, isClosable, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { tabMenuItems, screenMenuItems, NEW_MENU } from './menus';
-import { buildMenu, paletteCommands, type AppContext, type CreateContext, type DesktopContext, type PanelContext, type ScreenContext, type SelectionContext, type TabContext } from './commands';
+import { buildMenu, paletteCommands, type AppContext, type CommandContext, type CreateContext, type ListContext, type DesktopContext, type PanelContext, type ScreenContext, type SelectionContext, type TabContext } from './commands';
 import { nextInputBar, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLineHeight, useStatusLine } from './shared-setting';
 import { requestInstall, takeInstallHint, useInstallState } from './pwa';
 import { Dialog, type DialogSpec } from './components/Dialog';
@@ -780,11 +780,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [focusedTerminalTab, sessions, panes, activePane, activeDevice.id, setLayout, refresh, toast],
   );
 
-  const launchAgent = async (agent: 'claude' | 'codex') => {
+  /** deviceId を渡すと、そのデバイスで起動する（一覧のデバイス見出しの『ここで新規 ▸』） */
+  const launchAgent = async (agent: 'claude' | 'codex', deviceId?: string) => {
     if (launchInFlight.current) return;
     launchInFlight.current = true;
     setLaunchingAgent(agent);
-    try { await newTerminal(focusedIdRef.current, agent); }
+    try { await newTerminal(focusedIdRef.current, agent, deviceId); }
     finally { launchInFlight.current = false; setLaunchingAgent(null); }
   };
 
@@ -793,11 +794,15 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    * Terminator と同じ考え方で、1 ウィンドウ 1 ペインのまま画面だけを割る。
    */
   const splitIntoNewWindow = useCallback(
-    async (side: 'right' | 'bottom', agent?: 'claude' | 'codex') => {
+    async (side: 'right' | 'bottom', agent?: 'claude' | 'codex', deviceId?: string) => {
+      // deviceId を渡されたら、そのデバイスの端末を開く（入力先とは別のデバイスなら作業フォルダーは引き継がない）
+      const other = !!deviceId && deviceId !== focusedDevice;
       // リモートデスクトップを見ているときは、そのデバイスの端末を隣に開く
-      const session = focusedTerminalTab?.sessionId
-        ?? (focusedDevice ? sessions.find(s => deviceOf(s.id) === focusedDevice)?.id : undefined)
-        ?? sessions[0]?.id;
+      const session = other
+        ? sessions.find(s => deviceOf(s.id) === deviceId)?.id
+        : focusedTerminalTab?.sessionId
+          ?? (focusedDevice ? sessions.find(s => deviceOf(s.id) === focusedDevice)?.id : undefined)
+          ?? sessions[0]?.id;
       if (!session) return;
       if (agent) {
         if (launchInFlight.current) return;
@@ -809,7 +814,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         const { result } = await runAction(agent ? 'launchAgent' : 'newWindow', {
           target: session,
           after: true,
-          cwd: activePane?.path,
+          cwd: other ? undefined : activePane?.path,
           ...(agent ? { agent } : {}),
         });
         if (!result) return;
@@ -1345,13 +1350,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onPaste: pasteClipboard,
   };
 
-  const openNewSession = () => setDialog({
+  const openNewSession = (deviceId: string = activeDevice.id) => setDialog({
     kind: 'prompt',
     title: '新しいセッションを作る',
     detail: '名前は省略できます（tmux が番号を振ります）。',
     placeholder: 'セッション名',
     confirmLabel: '作成',
-    onSubmit: (name) => doAction('newSession', { deviceId: activeDevice.id, ...(name.trim() ? { name: name.trim() } : {}) }),
+    onSubmit: (name) => doAction('newSession', { deviceId, ...(name.trim() ? { name: name.trim() } : {}) }),
   });
 
   /** 新規メニューとパレットの『作る』に渡す文脈。leafId のパネルに開く */
@@ -1363,19 +1368,56 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     newProject: () => setProjectMode('new'),
     openFolder: () => setProjectMode('existing'),
     resume: () => setResumeOpen(true),
-    newSession: openNewSession,
+    newSession: () => openNewSession(),
   });
+
+  /**
+   * そのデバイスを対象にした新規メニューの文脈（一覧の『＋ 新規 ▾』とデバイス見出しの『ここで新規 ▸』）。
+   * 入力先のパネルに開く。プロジェクト・会話の再開・セッション作成は、そのデバイスを選んでから開く。
+   */
+  const deviceMenuContext = (deviceId: string, leafId?: string | null): CommandContext => {
+    const base = createContext(leafId);
+    const hasSession = sessions.some(s => deviceOf(s.id) === deviceId);
+    const choose = (run: () => void) => () => { setSelectedDevice(deviceId); run(); };
+    return {
+      app: {
+        ...appContext,
+        canOpenTerminal: hasSession,
+        onNewTab: () => newTerminal(leafId ?? focusedIdRef.current, undefined, deviceId),
+        onLaunchAgent: (agent) => void launchAgent(agent, deviceId),
+        onSplitNewWindow: (side, agent) => void splitIntoNewWindow(side, agent, deviceId),
+      },
+      create: {
+        ...base,
+        current: deviceId,
+        newProject: choose(() => setProjectMode('new')),
+        openFolder: choose(() => setProjectMode('existing')),
+        resume: choose(() => setResumeOpen(true)),
+        newSession: () => openNewSession(deviceId),
+      },
+    };
+  };
 
   /**
    * 新規メニュー（＋▾）。先頭の 3 行（端末・Claude・Codex）は T・C・X、リモートデスクトップ ▸ は R で選べる。
    * 中身は入力先のパネル（leafId）に開く。
    */
-  const openNewMenu = (anchor: { x: number; y: number }, leafId?: string | null) => {
-    const items = buildMenu(NEW_MENU, {
+  const openNewMenu = (anchor: { x: number; y: number }, leafId?: string | null, deviceId?: string) => {
+    const items = buildMenu(NEW_MENU, deviceId ? deviceMenuContext(deviceId, leafId) : {
       app: { ...appContext, onNewTab: () => newTerminal(leafId ?? focusedIdRef.current) },
       create: createContext(leafId),
     });
-    setMenu({ x: anchor.x, y: anchor.y, items, title: '新規' });
+    const device = deviceId ? devices.find(d => d.id === deviceId) : null;
+    setMenu({ x: anchor.x, y: anchor.y, items, title: device ? `新規 · ${device.name}` : '新規' });
+  };
+
+  /** 一覧の行の『右に並べて開く / 下に並べて開く』。端末の端にドラッグしたときと同じ */
+  const openWindowSide = (win: TmuxWindow, side: 'right' | 'bottom') => {
+    const tree = layoutRef.current;
+    const leaf = tree ? anchorLeaf(tree) : null;
+    if (isNarrow()) setSidebarOpen(false);
+    if (!leaf) { openWindow(win); return; }
+    onDrop({ kind: 'split', leafId: leaf.id, side }, { kind: 'window', sessionId: win.sessionId, windowId: win.id, label: win.name });
   };
 
   /** Alt+Shift+T とパレットから：入力先のパネルの ▾ の下に新規メニューを開く */
@@ -1470,6 +1512,21 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     };
   };
 
+  /** 一覧（サイドバー）全体の操作。パレットの『操作』から使う（一覧の ⋯ は Sidebar が同じものを作る） */
+  const listContext = (): ListContext => {
+    const unique = [...new Map(windows.map(w => [w.id, w])).values()];
+    const open = new Set(tabs.map(({ tab }) => (isTerminalTab(tab) ? tab.windowId : null)).filter(Boolean));
+    const pinned = (w: TmuxWindow) => w.id === focusedTerminalTab?.windowId || open.has(w.id);
+    return {
+      groupBy,
+      setGroupBy,
+      closable: unique.filter(w => isClosable(w, views, pinned(w))).length,
+      cleanUp: () => confirmCleanUp(unique, '', views, pinned, confirmThen, doAction),
+      manageDevices: () => setDevicesOpen(true),
+      close: sidebarOpen ? () => setSidebarOpen(false) : undefined,
+    };
+  };
+
   /** パレットの『操作』。パレット自身を開く操作は出さない */
   const paletteCommandList = () => paletteCommands({
     app: appContext,
@@ -1479,6 +1536,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     create: createContext(),
     desktop: workspace,
     screen: focusedTab && isScreenTab(focusedTab) ? screenContextFor(focusedTab.id) : undefined,
+    list: listContext(),
   }, new Set(['navigate.switcher']));
 
   /**
@@ -1642,7 +1700,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         openWindowIds={tabs.map(({ tab }) => isTerminalTab(tab) ? tab.windowId : null)}
         connected={connected}
         unauthorized={unauthorized}
-        serverVersion={state?.server?.version}
         onChangeGroupBy={setGroupBy}
         onSelectSession={(id) => {
           const first =
@@ -1651,13 +1708,16 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           if (first) openWindow(first);
         }}
         onSelectWindow={openWindow}
+        onOpenWindowSide={openWindowSide}
         onAction={doAction}
+        onKillWindow={killWindow}
         onClose={() => setSidebarOpen(false)}
-        onNewProject={() => setProjectMode('new')}
-        onOpenFolder={() => setProjectMode('existing')}
-        onResume={() => setResumeOpen(true)}
-        onNewSession={openNewSession}
         onConfirm={confirmThen}
+        onOpenMenu={(items, anchor, title) => setMenu({ x: anchor.x, y: anchor.y, items, title })}
+        menuContext={(deviceId) => deviceMenuContext(deviceId)}
+        onNewMenu={(deviceId, anchor) => openNewMenu(anchor, null, deviceId)}
+        onOpenScreen={(deviceId) => openScreen(deviceId)}
+        onManageDevices={() => setDevicesOpen(true)}
         onStartDrag={startDrag}
         onDropInTree={dropInTree}
         drag={drag}

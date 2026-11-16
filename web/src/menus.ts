@@ -94,11 +94,74 @@ export const DESKTOP_MENU: readonly MenuSlot[] = [
   'desktop.remove',
 ];
 
+/**
+ * 一覧（サイドバー）の見出しの ⋯。めったに変えない並べ方と、まとめて消す片付けはここに置く。
+ * 『表示と接続…』は app の文脈があるときだけ出る。
+ */
+export const LIST_MENU: readonly MenuSlot[] = [
+  { submenu: '並べ方', items: ['list.byProject', 'list.bySession'] },
+  SEP,
+  'list.cleanUp',
+  'list.collapseAll',
+  'list.expandAll',
+  SEP,
+  'list.manageDevices',
+  'view.settings',
+  SEP,
+  'list.close',
+];
+
+/**
+ * 一覧のデバイス見出しの ⋯。『ここで新規 ▸』はそのデバイスを対象にした新規メニューの中身
+ * （app と create の文脈を、そのデバイス向けに作り直して渡す）。
+ */
+export const DEVICE_MENU: readonly MenuSlot[] = [
+  { submenu: 'ここで新規', items: [
+    { id: 'terminal.newTab', label: '端末' },
+    { id: 'agent.claude', label: 'Claude' },
+    { id: 'agent.codex', label: 'Codex' },
+    SEP,
+    'create.project',
+    'create.folder',
+    'create.resume',
+    'create.session',
+  ] },
+  'device.screen',
+  SEP,
+  'device.select',
+  'device.manage',
+];
+
+/**
+ * 一覧の行の ⋯・右クリック・長押し。端末の行とグループ（セッション・プロジェクト）の行で同じ並びを使い、
+ * 対象に合わない項目は when で消える。『別のセッションへ移す ▸』『別のセッションとまとめる ▸』は
+ * ドラッグで別のセッション行に落としたときと同じ処理を呼ぶ。
+ */
+export const ROW_MENU: readonly MenuSlot[] = [
+  'row.open',
+  'row.openRight',
+  'row.openBottom',
+  'row.peek',
+  'row.newTerminal',
+  SEP,
+  'row.rename',
+  { submenu: '別のセッションへ移す', items: ['row.moveTo'] },
+  { submenu: '別のセッションとまとめる', items: ['row.mergeInto'] },
+  SEP,
+  'row.cleanUp',
+  SEP,
+  'row.killWindow',
+  'row.killSession',
+];
+
 export const MENUS = {
   tab: TAB_MENU,
   screen: SCREEN_MENU,
   new: NEW_MENU,
   desktop: DESKTOP_MENU,
+  list: LIST_MENU,
+  device: DEVICE_MENU,
+  row: ROW_MENU,
 } as const;
 
 export const tabMenuItems = (ctx: CommandContext): MenuEntry[] => buildMenu(TAB_MENU, ctx);

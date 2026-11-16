@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type MenuSlot, type ScreenContext, type TabContext } from '../src/commands';
-import { DESKTOP_MENU, MENUS, NEW_MENU, SCREEN_MENU, TAB_MENU } from '../src/menus';
+import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type ListContext, type RowContext, type MenuSlot, type ScreenContext, type TabContext } from '../src/commands';
+import { DESKTOP_MENU, DEVICE_MENU, LIST_MENU, MENUS, NEW_MENU, ROW_MENU, SCREEN_MENU, TAB_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
 const all = [...COMMANDS, ...FAMILIES];
@@ -317,4 +317,85 @@ test('screen menu follows the state of the screen and the place it is shown', ()
   for (const old of ['この端末へコピー', 'もう一度接続する', 'ダイアログで大きく開く', '画質・遅延設定', '文字入力・コピー']) {
     assert.ok(palette.some(c => matchesCommand(c, old)), old);
   }
+});
+
+test('the list menu holds the view switch, clean-up and device management', () => {
+  const calls: string[] = [];
+  const list = (over: Partial<ListContext> = {}): ListContext => ({
+    groupBy: 'project', setGroupBy: g => calls.push(`group:${g}`), closable: 0, cleanUp: () => calls.push('clean'),
+    collapseAll: () => calls.push('collapse'), expandAll: () => calls.push('expand'), anyCollapsed: false,
+    manageDevices: () => calls.push('devices'), close: () => calls.push('close'), ...over,
+  });
+  const items = buildMenu(LIST_MENU, { app: app({ onOpenSettings: () => calls.push('settings') }), list: list() });
+  assert.deepEqual(items.map(e => (e ? e.label : '---')), [
+    '並べ方', '---', '未使用の端末を片付ける…', 'すべて折りたたむ', '---', 'デバイス接続を管理…', '表示と接続…', '---', '一覧を閉じる',
+  ]);
+  const order = sub(items, '並べ方') as MenuItem[];
+  assert.deepEqual(order.map(e => `${e.label}${e.hint ? ` [${e.hint}]` : ''}`), ['プロジェクト別 [選択中]', 'セッション別']);
+  order[1].run();
+  // 片付けられる端末が無いときは理由つきで押せない。あるときは件数を出し、取り消せない操作として扱う
+  const clean = items.find(e => e?.label === '未使用の端末を片付ける…') as MenuItem;
+  assert.equal(clean.disabledReason, '片付けられる未使用の端末はありません');
+  const some = buildMenu(LIST_MENU, { list: list({ closable: 3, anyCollapsed: true, close: undefined }) });
+  const ready = some.find(e => e?.label === '未使用の端末を片付ける…') as MenuItem;
+  assert.equal(ready.disabled, false);
+  assert.equal(ready.hint, '3 枚');
+  assert.equal(ready.danger, true);
+  ready.run();
+  assert.ok(some.some(e => e?.label === 'すべて広げる'));
+  assert.ok(!some.some(e => e?.label === '一覧を閉じる'), 'close is only offered while the list is open');
+  // パレットからは折りたたみ（一覧の中の状態）を出さず、片付けと並べ方は旧名でも引ける
+  const palette = paletteCommands({ list: list({ collapseAll: undefined, expandAll: undefined }) });
+  assert.ok(!palette.some(c => c.id === 'list.collapseAll'));
+  for (const old of ['片付ける', 'セッション別', 'プロジェクト別']) assert.ok(palette.some(c => matchesCommand(c, old)), old);
+  assert.deepEqual(calls, ['group:session', 'clean']);
+});
+
+test('the device menu creates on that device and selects it', () => {
+  const calls: string[] = [];
+  const device = (selected: boolean, connected = true) => ({
+    id: 'spark', name: 'DGX Spark', connected, selected,
+    select: () => calls.push('select'), openScreen: () => calls.push('screen'), manage: () => calls.push('manage'),
+  });
+  const create = { devices: [], current: 'spark', newTerminal() {}, openScreen() {}, newProject: () => calls.push('project'), openFolder() {}, resume() {}, newSession() {} };
+  const items = buildMenu(DEVICE_MENU, { app: app({ onNewTab: () => calls.push('term'), canOpenTerminal: true }), create, device: device(false) });
+  assert.deepEqual(items.map(e => (e ? e.label : '---')), ['ここで新規', 'リモートデスクトップを開く', '---', 'このデバイスを選ぶ', '接続設定…']);
+  const here = sub(items, 'ここで新規') as MenuItem[];
+  assert.deepEqual(here.map(e => (e ? e.label : '---')), ['端末', 'Claude', 'Codex', '---', 'プロジェクトを作る…', 'フォルダーを開く…', '過去の会話を再開…', 'tmux セッションを作る…']);
+  here[0].run();
+  (here.find(e => e?.label === 'プロジェクトを作る…') as MenuItem).run();
+  (items.find(e => e?.label === 'このデバイスを選ぶ') as MenuItem).run();
+  const chosen = buildMenu(DEVICE_MENU, { device: device(true, false) });
+  assert.equal((chosen.find(e => e?.label === 'このデバイスを選ぶ') as MenuItem).disabledReason, '選択中です');
+  assert.equal((chosen.find(e => e?.label === 'リモートデスクトップを開く') as MenuItem).disabledReason, 'このデバイスは接続していません');
+  assert.deepEqual(calls, ['term', 'project', 'select']);
+});
+
+test('row menus offer the drag operations for terminals, sessions and projects', () => {
+  const calls: string[] = [];
+  const row = (over: Partial<RowContext>): RowContext => ({
+    kind: 'window', name: 'api', open: () => calls.push('open'), sessions: [{ id: '$2', name: 'notes' }], closable: 0, ...over,
+  });
+  const win = buildMenu(ROW_MENU, { row: row({
+    openSide: side => calls.push(`side:${side}`), peek: () => calls.push('peek'), rename() {},
+    moveTo: id => calls.push(`move:${id}`), kill: () => calls.push('kill'),
+  }) });
+  assert.deepEqual(win.map(e => (e ? e.label : '---')), [
+    'タブで開く', '右に並べて開く', '下に並べて開く', 'のぞく', '---', '名前を変更…', '別のセッションへ移す', '---', '端末を終了…',
+  ]);
+  (sub(win, '別のセッションへ移す') as MenuItem[])[0].run();
+  assert.equal((win.find(e => e?.label === '端末を終了…') as MenuItem).danger, true);
+  // セッションの行：ここに新しい端末・まとめる・片付け・セッションの終了
+  const session = buildMenu(ROW_MENU, { row: row({
+    kind: 'session', newTerminal() {}, rename() {}, mergeInto: id => calls.push(`merge:${id}`), closable: 2, cleanUp: () => calls.push('clean'), kill() {},
+  }) });
+  assert.deepEqual(session.map(e => (e ? e.label : '---')), [
+    'タブで開く', 'ここに新しい端末', '---', '名前を変更…', '別のセッションとまとめる', '---', '未使用の端末を片付ける…', '---', 'tmux セッションを終了…',
+  ]);
+  (sub(session, '別のセッションとまとめる') as MenuItem[])[0].run();
+  // ほかのセッションが無ければ、移す・まとめるのサブメニューごと出さない
+  const alone = buildMenu(ROW_MENU, { row: row({ kind: 'project', sessions: [], newTerminal() {}, cleanUp() {} }) });
+  assert.deepEqual(alone.map(e => (e ? e.label : '---')), ['タブで開く', 'ここに新しい端末', '---', '未使用の端末を片付ける…']);
+  assert.equal((alone.at(-1) as MenuItem).disabled, true);
+  assert.deepEqual(calls, ['move:$2', 'merge:$2']);
 });
