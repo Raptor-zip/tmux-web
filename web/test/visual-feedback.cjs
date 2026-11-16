@@ -192,8 +192,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await page.getByRole('dialog',{name:'リモートデスクトップ',exact:true}).waitFor();
    if(scene.remotePanel){
     if(phase==='before')await page.locator('.desktop-more summary').click();
-    if(scene.remotePanel==='settings' && await page.getByRole('button',{name:'操作・設定',exact:true}).count())await page.getByRole('button',{name:'操作・設定',exact:true}).click();
-    await page.getByRole('button',{name:scene.remotePanel==='clipboard'?(phase==='before'?'文字・クリップボード':'文字入力・コピー'):'画質・遅延設定',exact:true}).click();
+    // 画質は画面メニュー（ダイアログの ⋯）→『画質…』のモーダル、文字入力は見出しの ⌨
+    if(phase==='before')await page.getByRole('button',{name:scene.remotePanel==='clipboard'?'文字・クリップボード':'画質・遅延設定',exact:true}).click();
+    else if(scene.remotePanel==='settings'){await page.getByRole('button',{name:'画面の操作',exact:true}).click();await page.getByRole('menuitem',{name:'画質…',exact:true}).click();await page.getByRole('dialog',{name:'画質',exact:true}).waitFor();}
+    else await page.getByRole('button',{name:'文字入力',exact:true}).click();
    }
   }
   await page.waitForTimeout(120);if(!(process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection'))await page.screenshot({path:join(out,scene.name+'.png'),animations:'disabled'});

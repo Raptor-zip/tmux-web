@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
-import { DESKTOP_MENU, MENUS, NEW_MENU, TAB_MENU } from '../src/menus';
+import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type MenuSlot, type ScreenContext, type TabContext } from '../src/commands';
+import { DESKTOP_MENU, MENUS, NEW_MENU, SCREEN_MENU, TAB_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
 const all = [...COMMANDS, ...FAMILIES];
@@ -93,7 +93,6 @@ test('tab menu shows selection and agent items only when they apply', () => {
 
 test('tab menu switches screen/terminal items and runs with its context', () => {
   const screen = buildMenu(TAB_MENU, full({ tab: { screen: true } }));
-  assert.ok(screen.some(e => e?.label === 'ダイアログで大きく開く'));
   assert.ok(!screen.some(e => e?.label === 'tmux' || e?.label === '全文をコピー（履歴込み）'), 'tmux and pane actions are hidden on a screen tab');
   const moved: string[] = [];
   const items = buildMenu(TAB_MENU, full({ tab: { moveToPanel: id => moved.push(id), moveToDesktop: id => moved.push(id) } }));
@@ -260,7 +259,7 @@ test('menus can carry headings, one-level submenus and accelerator keys', () => 
     null,
     { heading: '空の段' },
     null,
-    { submenu: '出ない段', items: ['screen.tabAsDialog'] },
+    { submenu: '出ない段', items: ['create.terminalOnDevice'] },
   ], ctx);
   // 中身の無いサブメニューと、直後が区切りの見出しは出さない
   assert.deepEqual(items.map(e => (e ? e.label : '---')), ['配置', '配置']);
@@ -272,4 +271,47 @@ test('menus can carry headings, one-level submenus and accelerator keys', () => 
   (sub.submenu![0] as MenuItem).run();
   assert.deepEqual(ran, ['left']);
   assert.throws(() => buildMenu([{ submenu: 'a', items: [{ submenu: 'b', items: [] }] }], ctx), /nested submenu/);
+});
+
+const screenCtx = (over: Partial<ScreenContext> = {}): ScreenContext => ({
+  ready: true, modal: false, connected: true, viewOnly: false, fit: true, copying: false, full: false, canFullscreen: true, narrow: false,
+  devices: [{ id: 'local', name: 'ThinkPad', connected: true }, { id: 'spark', name: 'DGX Spark', connected: true }, { id: 'off', name: 'Off', connected: false }],
+  current: 'local', setViewOnly() {}, setFit() {}, copy() {}, reconnect() {}, sendEscape() {}, toggleFullscreen() {},
+  openAsDialog() {}, switchDevice() {}, openQuality() {}, sendCtrlAltDel() {}, openGuide() {}, ...over,
+});
+
+test('screen menu follows the state of the screen and the place it is shown', () => {
+  assert.deepEqual(names(SCREEN_MENU, { screen: screenCtx() }), [
+    '見るだけ', '原寸で表示', '---', '接続先からコピー', '再接続', '---', '全画面', 'ダイアログで大きく表示', '別のデバイスに切り替え', '---',
+    '画質…', 'Ctrl+Alt+Del を送る…', '操作ガイドと接続情報',
+  ]);
+  // 見るだけ・原寸・全画面中は、戻す側の名前になる。Fullscreen API が無ければ全画面は出ない
+  const flipped = names(SCREEN_MENU, { screen: screenCtx({ viewOnly: true, fit: false, full: true }) });
+  assert.ok(flipped.includes('操作する') && flipped.includes('画面に合わせる') && flipped.includes('全画面を終了'));
+  assert.ok(!names(SCREEN_MENU, { screen: screenCtx({ canFullscreen: false }) }).some(l => l.startsWith('全画面')));
+  // 見るだけのときはキーを送れない
+  const cad = buildMenu(SCREEN_MENU, { screen: screenCtx({ viewOnly: true }) }).find(e => e?.label === 'Ctrl+Alt+Del を送る…') as MenuItem;
+  assert.equal(cad.disabled, true);
+  assert.equal(cad.danger, true);
+  // 狭いタイルでは Esc をメニューに入れる
+  assert.ok(names(SCREEN_MENU, { screen: screenCtx({ narrow: true }) }).includes('Esc を送る'));
+  // ダイアログでは『タブに戻す』。ダイアログで大きく表示は出さない
+  const dialog = names(SCREEN_MENU, { screen: screenCtx({ modal: true, openAsDialog: undefined, backToTab() {} }) });
+  assert.ok(dialog.includes('タブに戻す') && !dialog.includes('ダイアログで大きく表示'));
+  // 別のデバイスは今のデバイスを除いて並び、未接続は押せない
+  const switched: string[] = [];
+  const items = buildMenu(SCREEN_MENU, { screen: screenCtx({ switchDevice: id => switched.push(id) }) });
+  const devices = sub(items, '別のデバイスに切り替え') as MenuItem[];
+  assert.deepEqual(devices.map(d => `${d.label}${d.disabled ? ' (x)' : ''}`), ['DGX Spark', 'Off (x)']);
+  devices[0].run();
+  assert.deepEqual(switched, ['spark']);
+  // 裏のタブ：状態を見られないので画面の操作は押せない。ダイアログ表示と切り替えはできる
+  const back = buildMenu(SCREEN_MENU, { screen: screenCtx({ ready: false }) });
+  assert.equal((back.find(e => e?.label === '見るだけ') as MenuItem).disabledReason, 'このタブを前面に出してから使えます');
+  assert.equal((back.find(e => e?.label === 'ダイアログで大きく表示') as MenuItem).disabled, false);
+  // 旧名でもパレットから引ける
+  const palette = paletteCommands({ screen: screenCtx() });
+  for (const old of ['この端末へコピー', 'もう一度接続する', 'ダイアログで大きく開く', '画質・遅延設定']) {
+    assert.ok(palette.some(c => matchesCommand(c, old)), old);
+  }
 });

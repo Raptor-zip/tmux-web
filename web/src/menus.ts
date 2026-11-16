@@ -25,7 +25,6 @@ export const TAB_MENU: readonly MenuSlot[] = [
   SEP,
   'agent.remoteControl',
   'agent.exitClaude',
-  'screen.tabAsDialog',
   SEP,
   { submenu: '配置', items: [
     'panel.toggleFocus',
@@ -40,6 +39,28 @@ export const TAB_MENU: readonly MenuSlot[] = [
   SEP,
   'tab.close',
   { submenu: 'まとめて閉じる', items: ['tab.closeOthers', 'tab.closeRight', 'panel.close'] },
+];
+
+/**
+ * 画面メニュー。画面タブではタブメニューの先頭の段に入れ、ダイアログでは見出しの ⋯ で開く。
+ * 『Esc を送る』は見出しに入りきらない狭いタイルのときだけ出る。全画面は Fullscreen API があるときだけ。
+ */
+export const SCREEN_MENU: readonly MenuSlot[] = [
+  'screen.viewOnly',
+  'screen.fit',
+  SEP,
+  'screen.copy',
+  'screen.sendEscape',
+  'screen.reconnect',
+  SEP,
+  'screen.fullscreen',
+  'screen.asDialog',
+  'screen.toTab',
+  { submenu: '別のデバイスに切り替え', items: ['screen.switchDevice'] },
+  SEP,
+  'screen.quality',
+  'screen.ctrlAltDel',
+  'screen.guide',
 ];
 
 /**
@@ -74,8 +95,11 @@ export const DESKTOP_MENU: readonly MenuSlot[] = [
 
 export const MENUS = {
   tab: TAB_MENU,
+  screen: SCREEN_MENU,
   new: NEW_MENU,
   desktop: DESKTOP_MENU,
 } as const;
 
 export const tabMenuItems = (ctx: CommandContext): MenuEntry[] => buildMenu(TAB_MENU, ctx);
+
+export const screenMenuItems = (ctx: CommandContext): MenuEntry[] => buildMenu(SCREEN_MENU, ctx);

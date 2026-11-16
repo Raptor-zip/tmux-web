@@ -165,6 +165,17 @@ export function SplitView({
   const [forceSplit, setForceSplit] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [size, setSize] = useState({width: 0, height: 0});
+  /** タイル見出しの差し込み口（パネルごと）。画面タブの見出しの部品をここへ描く */
+  const [slots, setSlots] = useState<Record<string, HTMLElement | null>>({});
+  const slotRefs = useRef(new Map<string, (el: HTMLElement | null) => void>());
+  const slotRef = (leafId: string) => {
+    let bind = slotRefs.current.get(leafId);
+    if (!bind) {
+      bind = (el: HTMLElement | null) => setSlots(prev => (prev[leafId] === el ? prev : { ...prev, [leafId]: el }));
+      slotRefs.current.set(leafId, bind);
+    }
+    return bind;
+  };
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -340,6 +351,7 @@ export function SplitView({
               onNewTab={() => onNewTab(leaf.id)}
               onNewMenu={(x, y) => { onFocus(leaf.id); onNewMenu(leaf.id, x, y); }}
               onStartDrag={onStartDrag}
+              slotRef={slotRef(leaf.id)}
               onContextMenu={(tabId, x, y) => {
                 const owner = tiles.find(({ leaf }) => leaf.tabs.some(tab => tab.id === tabId))?.leaf.id ?? leaf.id;
                 onTabContextMenu(tabId, x, y, panelFor(owner));
@@ -363,6 +375,7 @@ export function SplitView({
                 onCopied={onCopied}
                 onNotice={onNotice}
                 registerTerm={registerTerm}
+                headSlot={slots[leaf.id] ?? null}
               />
             </div>
           </div>

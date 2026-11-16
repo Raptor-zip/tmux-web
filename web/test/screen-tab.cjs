@@ -11,7 +11,9 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
     assert.fail(message);
   };
   const shown = page.locator('.screen-tab-view:not([hidden])');
-  const connected = () => shown.locator('.desktop-connection-status.is-connected').waitFor({ timeout: 8000 }).catch(async error => {
+  // 画面タブの状態は、タイル見出しの差し込み口（.strip-screen）に出る。スマホでは見出しごと隠れるので attached で待つ
+  const head = page.locator('.tile .strip-screen');
+  const connected = () => head.locator('.desktop-connection-status.is-connected').waitFor({ state: 'attached', timeout: 8000 }).catch(async error => {
     console.error('screen state:', await page.locator('.screen-tab-view, .desktop-viewer').evaluateAll(views => views.map(v => ({ hidden: v.hidden, text: v.innerText.slice(0, 600).replace(/\n/g,' / ') }))));
     console.error('transports:', screenTransports.map(t => ({ closed: t.closed, framed: !!t.framed, keys: t.keys.length })));
     throw error;
@@ -45,6 +47,59 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   assert.equal(await page.locator('.panel-connection:visible').count(), 0, 'the terminal reconnect overlay is not stacked on the screen');
   await waitFor(() => (workspace().values['tw.layout'] || '').includes('"kind":"screen"'), 'the screen tab is saved to the synced layout');
   assert.equal(await page.locator('.input-bar:visible').count(), 0, 'terminal input bar is hidden for a screen tab');
+
+  // 見出しは 1 段：状態・⌨・Esc はタイル見出しに入り、画面の上に 2 段目のツールバーは無い
+  assert.equal(await shown.locator('.desktop-compact-head').count(), 0, 'no second toolbar row above the screen');
+  assert.equal(await head.getByRole('button', { name: '文字入力', exact: true }).count(), 1);
+  const stripBox = await page.locator('.tile.focused .tabstrip').boundingBox();
+  const stageBox = await shown.locator('.desktop-stage').boundingBox();
+  assert.ok(stageBox.y - (stripBox.y + stripBox.height) <= 1, 'the screen starts right below the tile header');
+  const sentKeys = () => open()[0].keys;
+  const before16 = sentKeys().length;
+  await head.getByRole('button', { name: 'Esc を送る', exact: true }).click();
+  await waitFor(() => sentKeys().slice(before16).some(k => k.key === 0xff1b && k.down), 'Esc in the header reaches the remote');
+  // 画面メニューはタブメニューの先頭の段
+  await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+  const menuNames = await page.getByRole('menu').first().getByRole('menuitem').allTextContents();
+  assert.match(menuNames[0], /^見るだけ/, 'the screen menu comes first: ' + menuNames.join(','));
+  for (const name of ['原寸で表示', '接続先からコピー', '再接続', 'ダイアログで大きく表示', '画質…', '操作ガイドと接続情報']) {
+    assert.ok(menuNames.some(t => t.startsWith(name)), `screen menu has ${name}: ${menuNames.join(',')}`);
+  }
+  await page.getByRole('menuitem', { name: '見るだけ', exact: true }).click();
+  await head.getByText('見るだけ', { exact: true }).waitFor();
+  assert.equal(await head.getByRole('button', { name: 'Esc を送る', exact: true }).isDisabled(), true, 'view-only does not send keys');
+  await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '操作する', exact: true }).click();
+  assert.equal(await head.getByText('見るだけ', { exact: true }).count(), 0);
+  // 画質はモーダル。プリセットはラジオで、今の設定に印が付く
+  await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '画質…', exact: true }).click();
+  const quality = page.getByRole('dialog', { name: '画質', exact: true });
+  await quality.waitFor();
+  assert.equal(await quality.getByRole('radio', { name: /バランス/ }).isChecked(), true);
+  assert.match(await quality.locator('.screen-preset', { hasText: 'バランス' }).textContent(), /使用中/);
+  await quality.getByRole('radio', { name: /低遅延/ }).check();
+  await quality.getByRole('button', { name: 'キャンセル', exact: true }).click();
+  assert.equal(await quality.count(), 0);
+  assert.equal(screenTransports.length, 1, 'cancelling the quality dialog does not reconnect');
+  // 文字入力：Esc で閉じて ⌨ へ戻る。キーとして送ると 1 文字ずつ届く。お知らせは × で閉じられる
+  await head.getByRole('button', { name: '文字入力', exact: true }).click();
+  const draft = shown.locator('.desktop-clipboard textarea');
+  await draft.fill('ab');
+  await page.keyboard.press('Escape');
+  assert.equal(await draft.count(), 0, 'Escape closes the text input first');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '文字入力');
+  assert.equal(await shown.count(), 1, 'Escape did not leave the screen tab');
+  await head.getByRole('button', { name: '文字入力', exact: true }).click();
+  assert.equal(await draft.inputValue(), 'ab', 'the draft survives closing');
+  const before17 = sentKeys().length;
+  await shown.getByRole('button', { name: 'キーとして送る', exact: true }).click();
+  await waitFor(() => { const ks = sentKeys().slice(before17).filter(k => k.down).map(k => k.key); return ks.includes(0x61) && ks.includes(0x62); }, 'typed text reaches the remote as keys');
+  const notice = shown.locator('.desktop-notice');
+  await notice.filter({ hasText: 'キーとして送りました' }).waitFor();
+  await shown.getByRole('button', { name: 'お知らせを閉じる', exact: true }).click();
+  assert.equal(await notice.count(), 0, 'the notice closes with ×');
+  await shown.getByRole('button', { name: '文字入力を閉じる', exact: true }).click();
 
   // 同じデバイスをもう一度開いても 2 枚目は作らず、接続も増やさない
   await plusMenu();
@@ -84,15 +139,16 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   await dialog.locator('.desktop-connection-status.is-connected').waitFor({ timeout: 8000 });
   await waitFor(() => open().length === 1 && screenTransports[0].closed, 'the dialog takes over the only connection');
   await shown.getByText('別の場所で表示中', { exact: true }).first().waitFor();
-  await dialog.getByRole('button', { name: 'デスクトップを閉じる', exact: true }).click();
+  await dialog.getByRole('button', { name: 'リモートデスクトップを閉じる', exact: true }).click();
   await connected();
   await waitFor(() => open().length === 1, 'closing the dialog hands the connection back to the visible tab');
 
-  // ダイアログの「タブで開く」は、既存のタブを前に出してダイアログを閉じる
+  // ダイアログの ⋯ →『タブに戻す』は、既存のタブを前に出してダイアログを閉じる
   await page.locator('.tab:not(.tab-screen)').first().click();
   await plusMenu();
   await page.getByRole('menuitem', { name: 'ダイアログで開く', exact: true }).click();
-  await dialog.getByRole('button', { name: 'タブで開く', exact: true }).click();
+  await dialog.getByRole('button', { name: '画面の操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'タブに戻す', exact: true }).click();
   assert.equal(await dialog.count(), 0);
   assert.equal(await page.locator('.tab.tab-screen').count(), 1);
   await connected();
@@ -131,5 +187,21 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   await page.waitForTimeout(400);
   await connected();
   await page.screenshot({ path: join(out, 'screen-tab-mobile.png') });
-  console.log('screen tab: open from tab strip, dedupe, synced layout, Ctrl+wheel, Alt release, grace period, dialog handover, open-as-tab, split view and idle disconnect passed');
+  // スマホでは入力行が画面用のキーになる。Ctrl を押したままにして Esc を押すと、Ctrl+Esc が届いて Ctrl は離れる
+  const bar = page.locator('.screen-input-bar');
+  await bar.waitFor();
+  assert.deepEqual(await bar.locator('.input-keys button').allTextContents(), ['Esc', 'Tab', '↑', '↓', '←', '→', 'Enter', 'Ctrl', 'Alt']);
+  const live = open().at(-1);
+  const from = live.keys.length;
+  await bar.getByRole('button', { name: 'Ctrl', exact: true }).click();
+  assert.equal(await bar.getByRole('button', { name: 'Ctrl', exact: true }).getAttribute('aria-pressed'), 'true');
+  await bar.getByRole('button', { name: 'Ctrl+Esc', exact: true }).click();
+  await waitFor(() => live.keys.slice(from).filter(k => !k.down).some(k => k.key === 0xffe3), 'Ctrl is released after the key');
+  assert.deepEqual(live.keys.slice(from).map(k => `${k.key.toString(16)}${k.down ? 'v' : '^'}`), ['ffe3v', 'ff1bv', 'ff1b^', 'ffe3^']);
+  assert.equal(await bar.getByRole('button', { name: 'Ctrl', exact: true }).getAttribute('aria-pressed'), 'false');
+  // ［⌨ 文字入力］で、画面の下端に文字入力が開く
+  await bar.getByRole('button', { name: '文字入力', exact: true }).click();
+  await shown.locator('.desktop-clipboard textarea').waitFor();
+  await page.keyboard.press('Escape');
+  console.log('screen tab: one-row header, Esc, screen menu, view-only badge, quality dialog, text input and notice, phone screen keys, open from tab strip, dedupe, synced layout, Ctrl+wheel, Alt release, grace period, dialog handover, open-as-tab, split view and idle disconnect passed');
 };

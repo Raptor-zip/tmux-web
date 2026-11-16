@@ -148,6 +148,43 @@ export interface DesktopContext {
   remove(): void;
 }
 
+/**
+ * リモートデスクトップの画面（画面タブ・ダイアログ）。RemoteScreen が作り、
+ * タブのときは App がタブに効く操作（ダイアログで大きく表示・別のデバイスに切り替え）を足す。
+ */
+export interface ScreenContext {
+  /** 画面が前面にあって操作できる（裏のタブでは false） */
+  ready: boolean;
+  /** ダイアログで大きく表示している */
+  modal: boolean;
+  connected: boolean;
+  viewOnly: boolean;
+  /** 画面に合わせて縮小している（false は原寸） */
+  fit: boolean;
+  copying: boolean;
+  /** 全画面表示中 */
+  full: boolean;
+  /** Fullscreen API が使える */
+  canFullscreen: boolean;
+  /** タイルが狭く、見出しから Esc を外している */
+  narrow: boolean;
+  devices: { id: string; name: string; connected?: boolean }[];
+  /** いま表示しているデバイス */
+  current: string;
+  setViewOnly(value: boolean): void;
+  setFit(value: boolean): void;
+  copy(): void;
+  reconnect(): void;
+  sendEscape(): void;
+  toggleFullscreen(): void;
+  openAsDialog?(): void;
+  backToTab?(): void;
+  switchDevice(id: string): void;
+  openQuality(): void;
+  sendCtrlAltDel(): void;
+  openGuide(): void;
+}
+
 /** 文字サイズと行間 */
 export interface ViewContext {
   fontSize: number;
@@ -166,6 +203,7 @@ export interface Sections {
   create: CreateContext;
   desktop: DesktopContext;
   view: ViewContext;
+  screen: ScreenContext;
 }
 
 export type Scope = keyof Sections;
@@ -234,6 +272,8 @@ const NO_PANE = '操作するペインがありません';
 const NO_WINDOW = 'tmux のウィンドウが見つかりません';
 const ONE_PANEL = 'パネルが1つのときは使えません';
 const NOT_FRONT = 'このタブを前面に出してから使えます';
+const SCREEN_OFFLINE = '画面に接続していません';
+const VIEW_ONLY = '見るだけのときは送れません';
 
 const canOpen = (c: AppContext) => !!c.window || !!c.canOpenTerminal;
 const canLaunch = (c: AppContext) => (!!c.session || !!c.canOpenTerminal) && c.launchingAgent === null;
@@ -393,9 +433,63 @@ export const COMMANDS: Command[] = [
     id: 'screen.openDialog', scope: 'app', group: 'screen', label: 'リモートデスクトップをダイアログで開く',
     run: c => c.onOpenScreen(),
   }),
+
+  // ---- 画面メニュー（画面タブのタブメニューの先頭の段と、ダイアログの ⋯）。画面を主語にし、相手の機器は『接続先』と呼ぶ
   define({
-    id: 'screen.tabAsDialog', scope: 'tab', group: 'screen', label: 'ダイアログで大きく開く',
-    when: c => c.screen, run: c => c.openAsDialog(),
+    id: 'screen.viewOnly', scope: 'screen', group: 'screen', label: '操作する / 見るだけを切り替える',
+    aliases: ['見るだけ', '操作する', '操作モード'],
+    menuLabel: c => (c.viewOnly ? '操作する' : '見るだけ'),
+    disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.setViewOnly(!c.viewOnly),
+  }),
+  define({
+    id: 'screen.fit', scope: 'screen', group: 'screen', label: '画面に合わせる / 原寸で表示',
+    aliases: ['表示サイズ', '原寸（100%）'],
+    menuLabel: c => (c.fit ? '原寸で表示' : '画面に合わせる'),
+    disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.setFit(!c.fit),
+  }),
+  define({
+    id: 'screen.copy', scope: 'screen', group: 'screen', label: '接続先からコピー', aliases: ['この端末へコピー'],
+    menuLabel: c => (c.copying ? 'コピー中…' : '接続先からコピー'),
+    disabledReason: c => (!c.ready ? NOT_FRONT : c.copying ? 'コピー中です' : null), run: c => c.copy(),
+  }),
+  define({
+    id: 'screen.reconnect', scope: 'screen', group: 'screen', label: '画面を再接続', menuLabel: '再接続',
+    aliases: ['もう一度接続する', '再接続'],
+    disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.reconnect(),
+  }),
+  define({
+    id: 'screen.sendEscape', scope: 'screen', group: 'screen', label: 'Esc を送る',
+    // 見出しに Esc が入りきらない狭いタイルでだけ、メニューに出す
+    when: c => c.narrow,
+    disabledReason: c => (!c.ready ? NOT_FRONT : !c.connected ? SCREEN_OFFLINE : c.viewOnly ? VIEW_ONLY : null), run: c => c.sendEscape(),
+  }),
+  define({
+    id: 'screen.fullscreen', scope: 'screen', group: 'screen', label: '全画面',
+    menuLabel: c => (c.full ? '全画面を終了' : '全画面'),
+    // iOS などでは Fullscreen API が無い。代わりは『パネルを最大化』
+    when: c => c.canFullscreen,
+    disabledReason: c => (c.ready ? null : NOT_FRONT), run: c => c.toggleFullscreen(),
+  }),
+  define({
+    id: 'screen.asDialog', scope: 'screen', group: 'screen', label: 'ダイアログで大きく表示',
+    aliases: ['ダイアログで大きく開く'],
+    when: c => !c.modal && !!c.openAsDialog, run: c => c.openAsDialog?.(),
+  }),
+  define({
+    id: 'screen.toTab', scope: 'screen', group: 'screen', label: 'タブに戻す', aliases: ['タブで開く'],
+    when: c => c.modal && !!c.backToTab, run: c => c.backToTab?.(),
+  }),
+  define({
+    id: 'screen.quality', scope: 'screen', group: 'screen', label: '画質…', aliases: ['画質・遅延設定', '画質と遅延'],
+    run: c => c.openQuality(),
+  }),
+  define({
+    id: 'screen.ctrlAltDel', scope: 'screen', group: 'screen', label: 'Ctrl+Alt+Del を送る…', danger: true,
+    disabledReason: c => (!c.ready ? NOT_FRONT : !c.connected ? SCREEN_OFFLINE : c.viewOnly ? VIEW_ONLY : null), run: c => c.sendCtrlAltDel(),
+  }),
+  define({
+    id: 'screen.guide', scope: 'screen', group: 'screen', label: '操作ガイドと接続情報', aliases: ['操作ガイド', '接続情報', '通信往復'],
+    run: c => c.openGuide(),
   }),
 
   // ---- 表示
@@ -573,6 +667,13 @@ export const FAMILIES: CommandFamily[] = [
     hint: (c, d) => (d.id === c.current ? '入力先' : undefined),
     disabledReason: (_c, d) => (d.connected ? null : 'このデバイスは接続していません'),
     run: (c, d) => c.openScreen(d.id),
+  }),
+  family({
+    id: 'screen.switchDevice', scope: 'screen', group: 'screen', label: '{デバイス} の画面に切り替え',
+    items: c => c.devices.filter(d => d.id !== c.current),
+    itemLabel: (_c, d) => `${d.name} の画面に切り替え`, itemMenuLabel: (_c, d) => d.name,
+    disabledReason: (_c, d) => (d.connected === false ? 'このデバイスは接続していません' : null),
+    run: (c, d) => c.switchDevice(d.id),
   }),
   family({
     id: 'tab.moveToDesktop', scope: 'tab', group: 'tab', label: 'ワークスペース「{名前}」へ移す',

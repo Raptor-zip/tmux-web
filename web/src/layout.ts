@@ -222,6 +222,21 @@ export function addTab(
   return next ?? tree;
 }
 
+/**
+ * 画面タブが映すデバイスを差し替える（画面メニューの『別のデバイスに切り替え』）。
+ * そのデバイスの画面を映すタブが既にあれば、二重に開かないよう差し替えずにそちらを前に出す。
+ */
+export function retargetScreenTab(tree: LayoutNode, tabId: string, deviceId: string): LayoutNode {
+  const existing = findScreenTab(tree, deviceId, tabId);
+  if (existing) return activateTab(tree, existing.tab.id);
+  const next = mapLeaves(tree, (leaf) =>
+    leaf.tabs.some((t) => t.id === tabId && isScreenTab(t))
+      ? { ...leaf, tabs: leaf.tabs.map((t) => (t.id === tabId && isScreenTab(t) ? { ...t, deviceId } : t)) }
+      : leaf,
+  );
+  return next ?? tree;
+}
+
 export function activateTab(tree: LayoutNode, tabId: string): LayoutNode {
   const next = mapLeaves(tree, (leaf) =>
     leaf.activeId !== tabId && leaf.tabs.some((t) => t.id === tabId)

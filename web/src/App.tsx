@@ -10,14 +10,14 @@ import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
 import { createPortal } from 'react-dom';
 import { FileBrowser } from './components/FileBrowser';
-import { InputBar } from './components/InputBar';
+import { InputBar, ScreenInputBar } from './components/InputBar';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
-import { tabMenuItems, NEW_MENU } from './menus';
-import { buildMenu, paletteCommands, type AppContext, type CreateContext, type DesktopContext, type PanelContext, type SelectionContext, type TabContext } from './commands';
+import { tabMenuItems, screenMenuItems, NEW_MENU } from './menus';
+import { buildMenu, paletteCommands, type AppContext, type CreateContext, type DesktopContext, type PanelContext, type ScreenContext, type SelectionContext, type TabContext } from './commands';
 import { nextInputBar, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLineHeight, useStatusLine } from './shared-setting';
 import { requestInstall, takeInstallHint, useInstallState } from './pwa';
 import { Dialog, type DialogSpec } from './components/Dialog';
@@ -43,6 +43,7 @@ import {
   findLeaf,
   findSameTarget,
   findScreenTab,
+  retargetScreenTab,
   isScreenTab,
   isTerminalTab,
   makeScreenTab,
@@ -595,6 +596,11 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const focusedTerm = () => {
     const handle = focusedIdRef.current ? termRefs.current.get(focusedIdRef.current) : undefined;
     return isTerminalHandle(handle) ? handle : undefined;
+  };
+  /** 前面のタブのリモートデスクトップ。入力行の画面用キーと ⌨ はここへ送る */
+  const focusedScreenHandle = () => {
+    const handle = focusedIdRef.current ? termRefs.current.get(focusedIdRef.current) : undefined;
+    return handle && !isTerminalHandle(handle) ? handle : undefined;
   };
   /** 新しく開いたタイルはこの時点ではまだ描かれていないので、次のフレームで掴む */
   const focusSoon = (leafId: string) =>
@@ -1429,6 +1435,41 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     });
   }, [leaves, focusedLeaf, devices, windows, views]);
 
+  /** 画面タブのデバイスを差し替える。そのデバイスの画面タブが既にあれば、そちらを前に出す */
+  const switchScreenDevice = (tabId: string, deviceId: string) => {
+    const tree = layoutRef.current;
+    if (!tree) return;
+    const existing = findScreenTab(tree, deviceId, tabId);
+    setLayout(retargetScreenTab(tree, tabId, deviceId));
+    const leafId = existing?.leaf.id ?? findTab(tree, tabId)?.leaf.id;
+    if (leafId) { setFocusedId(leafId); focusSoon(leafId); }
+  };
+
+  /**
+   * 画面メニューの文脈。前面の画面タブは RemoteScreen から状態を受け取り、
+   * 裏のタブ（まだ描いていない）は『ダイアログで大きく表示』と『別のデバイスに切り替え』だけを押せるようにする。
+   */
+  const screenContextFor = (tabId: string): ScreenContext | undefined => {
+    const tree = layoutRef.current;
+    const found = tree ? findTab(tree, tabId) : null;
+    if (!found || !isScreenTab(found.tab)) return undefined;
+    const { leaf, tab } = found;
+    const handle = leaf.activeId === tabId ? termRefs.current.get(leaf.id) : undefined;
+    const noop = () => {};
+    const base: ScreenContext = handle && !isTerminalHandle(handle) ? handle.context() : {
+      ready: false, modal: false, connected: false, viewOnly: false, fit: true, copying: false, full: false,
+      canFullscreen: false, narrow: false, current: tab.deviceId,
+      devices: devices.map(d => ({ id: d.id, name: d.name, connected: d.connected })),
+      setViewOnly: noop, setFit: noop, copy: noop, reconnect: noop, sendEscape: noop, toggleFullscreen: noop,
+      switchDevice: noop, openQuality: noop, sendCtrlAltDel: noop, openGuide: noop,
+    };
+    return {
+      ...base,
+      openAsDialog: () => tabContext(tabId)?.openAsDialog(),
+      switchDevice: (id) => switchScreenDevice(tabId, id),
+    };
+  };
+
   /** パレットの『操作』。パレット自身を開く操作は出さない */
   const paletteCommandList = () => paletteCommands({
     app: appContext,
@@ -1437,6 +1478,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     view: { fontSize, lineHeight, setFontSize, setLineHeight, stepLineHeight: onLineHeightStep },
     create: createContext(),
     desktop: workspace,
+    screen: focusedTab && isScreenTab(focusedTab) ? screenContextFor(focusedTab.id) : undefined,
   }, new Set(['navigate.switcher']));
 
   /**
@@ -1500,7 +1542,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     const title = isScreenTab(ref)
       ? devices.find(d => d.id === ref.deviceId)?.name ?? 'リモートデスクトップ'
       : (win && views.get(win.id)?.project) || ref.sessionName || '端末';
-    setMenu({ x: anchor.x, y: anchor.y, items: [...lead, ...items], title });
+    // 画面タブでは、画面メニューを先頭の段に入れる
+    const screen = isScreenTab(ref) ? screenContextFor(tabId) : undefined;
+    const screenItems = screen ? [...screenMenuItems({ screen }), SEP] : [];
+    setMenu({ x: anchor.x, y: anchor.y, items: [...lead, ...screenItems, ...items], title });
   };
 
   // ---------------------------------------------------------------- スマホの見出し 1 行
@@ -1694,7 +1739,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           </div>
         </div>
 
-        {/* リモートデスクトップの文字入力は画面側の「文字入力」から送る */}
+        {/* 画面タブでは、入力行を画面用のキーと［⌨ 文字入力］に切り替える */}
+        {focusedScreen && inputBar !== 'hidden' && <ScreenInputBar
+          always={inputBar === 'always'}
+          connected={!!focusedId && !!termStatuses[focusedId]?.connected}
+          onKey={(keysym, code, mods) => focusedScreenHandle()?.pressKey(keysym, code, mods)}
+          onText={() => focusedScreenHandle()?.openText()}
+        />}
         {!focusedScreen && inputBar !== 'hidden' && <InputBar
           always={inputBar === 'always'}
           prefix={prefix}

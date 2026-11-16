@@ -37,6 +37,8 @@ interface Props {
   onStartDrag(payload: DragPayload): void;
   /** タブメニューを開く（タブの右クリック・長押し・Shift+F10、見出しの ⋯） */
   onContextMenu(tabId: string, x: number, y: number): void;
+  /** 画面タブの見出しの部品（状態・見るだけ・⌨・Esc）を差し込む口。RemoteScreen が createPortal で描く */
+  slotRef?(el: HTMLElement | null): void;
 }
 
 /**
@@ -61,6 +63,7 @@ export function TabStrip({
   onNewMenu,
   onStartDrag,
   onContextMenu,
+  slotRef,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const tabs = desktopTabs ?? leaf.tabs.map(tab => ({ tab, leafId: leaf.id }));
@@ -299,6 +302,8 @@ export function TabStrip({
         <button className="strip-btn strip-scroll" aria-label="タブ列を右へ送る" title="タブ列を右へ送る" tabIndex={-1}
           disabled={!overflow.right} onClick={() => scrollBy(1)}><Icon name="chevron-right" /></button>
       )}
+
+      <span className="strip-screen" ref={slotRef} />
 
       <div className="strip-tools">
         <div className="split-new" role="group" aria-label="新しく開く">

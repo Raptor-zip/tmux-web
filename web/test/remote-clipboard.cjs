@@ -26,12 +26,11 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
       },
     }});
   });
-  const copy = () => page.getByRole('button', {name:'この端末へコピー',exact:true});
-  const openControls = async () => {
-    const toggle = page.getByRole('button', {name:'操作・設定',exact:true});
-    if (await toggle.count() && await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
-  };
-  const copyClick = async () => { await openControls(); await copy().click(); };
+  // 『接続先からコピー』は画面メニュー（ダイアログの ⋯）から。文字入力の小窓にも同じボタンがある
+  const dialog = page.getByRole('dialog', {name:'リモートデスクトップ',exact:true});
+  const menu = async name => { await dialog.getByRole('button', {name:'画面の操作',exact:true}).click(); await page.getByRole('menuitem', {name, exact:true}).click(); };
+  const copy = () => page.locator('.desktop-clipboard').getByRole('button', {name:'接続先からコピー',exact:true});
+  const copyClick = () => menu('接続先からコピー');
   const notice = page.locator('.desktop-notice');
   const writes = () => page.evaluate(() => window.__clipboardWrites);
   await copyClick();
@@ -40,8 +39,8 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
   assert.equal(await page.locator('.desktop-clipboard textarea').count(), 0, 'direct copy needs no input panel');
   assert.equal(requests.at(-1), '/api/desktop/clipboard');
 
-  await page.getByRole('button', {name:'見るだけ',exact:true}).click();
-  await page.getByLabel('デスクトップのデバイス', {exact:true}).selectOption('spark');
+  await menu('見るだけ');
+  await page.getByLabel('接続先', {exact:true}).selectOption('spark');
   value = 'Sparkの文字';
   await copyClick();
   await notice.filter({hasText:'この端末のクリップボードにコピーしました'}).waitFor();
@@ -85,21 +84,31 @@ module.exports = async function checkRemoteClipboard(page, { out, screenshot }) 
   let release;
   pending = new Promise(resolve => { release = resolve; });
   const previousRequests = requests.length;
-  await copyClick();
+  // 文字入力の小窓の『接続先からコピー』から（押している間は『コピー中…』）
+  if (!(await copy().count())) await dialog.getByRole('button', {name:'文字入力',exact:true}).click();
+  await copy().click();
   await page.getByRole('button', {name:'コピー中…',exact:true}).first().waitFor();
   // Wait until the request is held at the API boundary, then change device.
   for (let i = 0; requests.length === previousRequests && i < 50; i++) await page.waitForTimeout(10);
   assert.equal(requests.length, previousRequests + 1);
-  await page.getByLabel('デスクトップのデバイス', {exact:true}).selectOption('local');
-  await page.getByLabel('デスクトップのデバイス', {exact:true}).selectOption('spark');
+  await page.getByLabel('接続先', {exact:true}).selectOption('local');
+  await page.getByLabel('接続先', {exact:true}).selectOption('spark');
   release(); pending = null;
   await copy().waitFor();
   assert.equal((await writes()).length, beforeSwitch, 'stale response cannot copy even after switching back to the original device');
   assert.equal(await notice.count(), 0, 'stale response does not report success');
-  assert.equal(await page.getByRole('button',{name:'見るだけ',exact:true}).getAttribute('aria-pressed'), 'true');
-  await page.getByRole('button',{name:'操作する',exact:true}).click();
-  assert.equal(await page.getByRole('button',{name:'操作する',exact:true}).getAttribute('aria-pressed'), 'true');
-  await page.getByLabel('デスクトップの表示サイズ',{exact:true}).selectOption('actual');
-  assert.equal(await page.getByLabel('デスクトップの表示サイズ',{exact:true}).inputValue(), 'actual');
-  console.log('remote clipboard: Unicode, selected device, view-only, denial, empty, API error, writeText and stale response passed');
+  assert.equal(await dialog.locator('.screen-badge', {hasText:'見るだけ'}).count(), 1, 'view-only survives switching the device');
+  await menu('操作する');
+  assert.equal(await dialog.locator('.screen-badge').count(), 0);
+  await menu('原寸で表示');
+  await dialog.getByRole('button', {name:'画面の操作',exact:true}).click();
+  assert.equal(await page.getByRole('menuitem', {name:'画面に合わせる',exact:true}).count(), 1, 'the fit item flips after choosing actual size');
+  await page.keyboard.press('Escape');
+
+  // お知らせは 5 秒で消える
+  value = '消えるお知らせ';
+  await copyClick();
+  await notice.filter({hasText:'この端末のクリップボードにコピーしました'}).waitFor();
+  await notice.waitFor({state:'detached', timeout:7000});
+  console.log('remote clipboard: Unicode, selected device, view-only, denial, empty, API error, writeText, stale response and notice timeout passed');
 };

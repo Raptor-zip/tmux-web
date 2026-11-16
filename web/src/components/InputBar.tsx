@@ -252,3 +252,71 @@ export function InputBar({ connected, waiting, always, prefix, onPaste, onSend, 
     </div>
   );
 }
+
+/** 画面タブの入力行のキー（X11 の keysym と、KeyboardEvent.code） */
+const SCREEN_KEYS: { label: string; keysym: number; code: string; name?: string }[] = [
+  { label: 'Esc', keysym: 0xff1b, code: 'Escape' },
+  { label: 'Tab', keysym: 0xff09, code: 'Tab' },
+  { label: '↑', keysym: 0xff52, code: 'ArrowUp', name: '上' },
+  { label: '↓', keysym: 0xff54, code: 'ArrowDown', name: '下' },
+  { label: '←', keysym: 0xff51, code: 'ArrowLeft', name: '左' },
+  { label: '→', keysym: 0xff53, code: 'ArrowRight', name: '右' },
+  { label: 'Enter', keysym: 0xff0d, code: 'Enter' },
+];
+
+/**
+ * 画面タブ（リモートデスクトップ）の入力行。Esc Tab ↑ ↓ ← → Enter と、押したままにできる Ctrl・Alt、
+ * 右端に［⌨ 文字入力］。Ctrl・Alt は次に押したキーと一緒に送り、送ったら離す（押したまま残さない）。
+ */
+export function ScreenInputBar({ connected, always, onKey, onText }: {
+  /** 画面に接続している */
+  connected: boolean;
+  always?: boolean;
+  onKey(keysym: number, code: string, mods: { ctrl: boolean; alt: boolean }): void;
+  onText(): void;
+}) {
+  const [mods, setMods] = useState({ ctrl: false, alt: false });
+  // 切断したら押したままの印を消す
+  useEffect(() => { if (!connected) setMods({ ctrl: false, alt: false }); }, [connected]);
+  const keep = (e: React.PointerEvent) => e.preventDefault();
+  const held = [mods.ctrl && 'Ctrl', mods.alt && 'Alt'].filter(Boolean).join('+');
+  return (
+    <div className={`input-bar screen-input-bar${always ? ' input-always' : ''}`}>
+      <div className="input-row">
+        <div className="input-keys" role="group" aria-label="画面へ送るキー">
+          {SCREEN_KEYS.map(k => (
+            <button
+              key={k.label}
+              type="button"
+              className="key"
+              aria-label={held ? `${held}+${k.name ?? k.label}` : k.name}
+              title={held ? `${held}+${k.name ?? k.label}` : k.name ?? k.label}
+              disabled={!connected}
+              onPointerDown={keep}
+              onClick={() => { onKey(k.keysym, k.code, mods); setMods({ ctrl: false, alt: false }); }}
+            >
+              {k.label}
+            </button>
+          ))}
+          {(['ctrl', 'alt'] as const).map(m => (
+            <button
+              key={m}
+              type="button"
+              className="key modifier"
+              aria-pressed={mods[m]}
+              title={`${m === 'ctrl' ? 'Ctrl' : 'Alt'} を押したままにする（次のキーと一緒に送る）`}
+              disabled={!connected}
+              onPointerDown={keep}
+              onClick={() => setMods(v => ({ ...v, [m]: !v[m] }))}
+            >
+              {m === 'ctrl' ? 'Ctrl' : 'Alt'}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="input-toggle screen-text" aria-label="文字入力" title="文字入力（日本語・貼り付け）" onClick={onText}>
+          ⌨ 文字入力
+        </button>
+      </div>
+    </div>
+  );
+}

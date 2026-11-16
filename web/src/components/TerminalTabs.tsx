@@ -22,6 +22,8 @@ interface Props {
   showStatusBar: boolean;
   fontSize: number;
   lineHeight: number;
+  /** タイル見出しの差し込み口。前面の画面タブが状態・見るだけ・⌨・Esc をここへ出す */
+  headSlot?: HTMLElement | null;
   registerTerm(leafId: string, handle: TabHandle | null): void;
   onStatus(leafId: string, status: TerminalStatus): void;
   onContextMenu(x: number, y: number): void;
@@ -76,6 +78,7 @@ export function TerminalTabs(props: Props) {
       deviceId={tab.deviceId}
       devices={props.devices}
       visible={visible && selected?.id === tab.id}
+      headSlot={selected?.id === tab.id ? props.headSlot : null}
       onStatus={reportStatus(tab.id)}
     /> : <TerminalView
       key={tab.id}

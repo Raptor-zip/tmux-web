@@ -296,7 +296,6 @@
  .desktop-viewer .desktop-device-label { gap:0; }
  .desktop-compact-head .btn { padding:4px 8px; }
  .desktop-compact-head > .desktop-clipboard-toggle { width:44px; flex:none; padding:0; }
- .desktop-controls-toggle svg { display:none; }
  .desktop-viewer .desktop-settings-fields { gap:12px; padding:4px 0; }
  .desktop-settings-fields label { flex:1; }
  .desktop-tools { width:100%; }
@@ -383,11 +382,9 @@
 .screen-tab-view .desktop-message-content { padding:12px; }
 /* 狭いタイルでは、ボタンの文字を省いてアイコンだけにする */
 @container panel (max-width: 420px) {
-  .screen-tab-view .desktop-button-label,.screen-tab-view .desktop-controls-toggle span { display:none; }
+  .screen-tab-view .desktop-button-label { display:none; }
   /* 状態の文字は読み上げには残す（点だけ見せる） */
   .screen-tab-view .desktop-status-text { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
-  /* 文字を隠すぶん、スマホ向けに隠しているアイコンは出す */
-  .screen-tab-view .desktop-controls-toggle svg { display:inline-block; }
 }
 /* タブ列の画面タブ。状態の点の代わりにモニタのアイコンを出す */
 .tab-kind { display:inline-flex; flex:none; align-self:center; color:var(--fg-dim); }
@@ -542,3 +539,53 @@
 .desktop-shell.phone .sw-header .sw-input { border-bottom:0; }
 .desktop-shell.phone .sw-foot { order:4; }
 .desktop-shell.phone-head .desktop-bar :is(.phone-new .new-main,.phone-more) { color:var(--fg); }
+
+/* ------------------------------------------- 画面タブの見出し（1 段）と画面メニューまわり
+   状態・見るだけ・⌨・Esc は、タイル見出しの差し込み口（.strip-screen）へ RemoteScreen が描く。
+   幅 290px 以下のタイルでは Esc と状態の文字を外す（Esc は ⋯ の画面メニューへ）。 */
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.strip-screen { display:flex; flex:none; align-items:center; min-width:0; }
+.strip-screen:empty { display:none; }
+.screen-head-slot-parts { display:flex; align-items:center; gap:4px; padding:0 4px; }
+.screen-head-slot-parts .btn { display:inline-flex; align-items:center; justify-content:center; gap:4px; min-height:24px; padding:0 7px; font-size:12px; white-space:nowrap; }
+.screen-head-slot-parts .desktop-clipboard-toggle { width:28px; padding:0; }
+.screen-head-slot-parts .desktop-clipboard-toggle svg { width:15px; height:15px; }
+.screen-head-slot-parts .btn[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); }
+.screen-esc { font-family:var(--mono); }
+.screen-badge { flex:none; padding:1px 6px; border:1px solid var(--yellow); color:var(--yellow); font-size:11px; line-height:16px; white-space:nowrap; }
+@media (max-width:760px), (any-pointer:coarse) {
+  .screen-head-slot-parts .btn { min-height:36px; }
+  .screen-head-slot-parts .desktop-clipboard-toggle { width:40px; }
+}
+/* 見出しが画面の外（タイル見出し）にあるので、小窓は画面の上端から出す */
+.screen-tab-view:not(:fullscreen) .desktop-popover { top:6px; max-height:calc(100% - 12px); }
+.screen-tab-view:not(:fullscreen):has(.screen-inline-head) .desktop-popover { top:calc(var(--desktop-head-height) + 6px); max-height:calc(100% - var(--desktop-head-height) - 12px); }
+/* スマホでは文字入力を画面の下端のシートにする */
+@media (max-width:760px) {
+  .screen-tab-view:not(:fullscreen) .desktop-clipboard.desktop-popover { top:auto; bottom:0; left:0; right:0; width:100%; max-height:70%; border-width:1px 0 0; }
+}
+.desktop-clipboard .screen-controls { padding:8px 0 0; }
+.screen-received { display:flex; align-items:center; gap:8px; width:100%; margin:0 0 6px; padding:6px 10px; border:1px solid var(--accent); background:var(--bg-2); color:var(--accent); font:inherit; font-size:12px; text-align:left; cursor:pointer; }
+.screen-received span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg-dim); }
+/* お知らせ：5 秒で消える。× ですぐ閉じられる */
+.desktop-notification { display:flex; align-items:stretch; }
+.desktop-notice-close { pointer-events:auto; flex:none; display:grid; place-items:center; width:32px; border:1px solid var(--border-strong); border-left:0; background:var(--bg-1); color:var(--fg-dim); cursor:pointer; }
+.desktop-notice-close:hover { color:var(--fg); }
+@media (any-pointer:coarse) { .desktop-notice-close { width:44px; } }
+.desktop-message-note { font-size:12px !important; color:var(--fg-dim); }
+/* 画質 */
+.screen-quality-body,.screen-guide-body { padding:12px 16px 16px; display:flex; flex-direction:column; gap:12px; font-size:13px; }
+.screen-guide-body p { margin:0; line-height:1.6; color:var(--fg-dim); }
+.screen-presets { display:flex; flex-direction:column; gap:2px; margin:0; padding:8px 10px; border:1px solid var(--border); }
+.screen-presets legend { padding:0 4px; font-size:12px; color:var(--fg-dim); }
+.screen-preset { display:flex; align-items:center; gap:8px; min-height:32px; cursor:pointer; }
+.screen-preset-current { margin-left:auto; padding:0 6px; border:1px solid var(--accent); color:var(--accent); font-size:11px; }
+.screen-preset-custom { margin:4px 0 0; font-size:12px; color:var(--fg-dim); }
+.screen-quality-detail summary { cursor:pointer; padding:6px 0; }
+.screen-quality-detail .desktop-settings-fields { padding:4px 0; }
+.screen-quality-detail p,.screen-quality-help { margin:4px 0 0; font-size:12px; color:var(--fg-dim); }
+@media (any-pointer:coarse) { .screen-preset { min-height:44px; } .screen-quality-detail summary { min-height:44px; display:flex; align-items:center; } }
+/* 画面タブの入力行：Ctrl・Alt は押したままの間、押された見た目にする */
+.screen-input-bar .key.modifier { font-family:var(--sans); }
+.screen-input-bar .key.modifier[aria-pressed="true"] { border-color:var(--accent); background:var(--accent); color:#fff; }
+.screen-input-bar .screen-text { white-space:nowrap; }

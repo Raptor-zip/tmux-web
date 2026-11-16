@@ -1,14 +1,26 @@
 import type { Device } from '../devices';
-import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useReducer, useRef, useState } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { fetchDesktopStatus, measureDesktopRoundTrip, readDesktopClipboard, writeDesktopClipboard, wsUrl } from '../api';
+import type { ScreenContext } from '../commands';
+import { screenMenuItems } from '../menus';
 import { DESKTOP_SETTINGS_KEY, desktopPresets, loadDesktopSettings, type DesktopSettings } from '../desktop-settings';
 import { claimScreen, joinScreen, ownsScreen, releaseScreen, screenOwner, type ScreenLeaseEntry } from '../screen-lease';
 import type { LosslessRFB } from '../vendor/lossless-rfb';
 import { Icon } from './Icon';
 import { Dialog } from './Dialog';
+import { Modal } from './Modal';
+import { ContextMenu } from './ContextMenu';
 
 /** 隠れてからこの時間が経ったら切断する。すぐ戻ってきたときは繋いだまま見せる */
 export const SCREEN_IDLE_MS = 30_000;
+/** お知らせを出しておく時間 */
+export const SCREEN_NOTICE_MS = 5_000;
+/** タイルの幅がこれ以下なら、見出しから Esc と状態の文字を外す（Esc は ⋯ へ） */
+export const SCREEN_NARROW_PX = 290;
+
+/** 画面へ送る修飾キー（入力行の Ctrl / Alt） */
+export interface ScreenModifiers { ctrl?: boolean; alt?: boolean }
 
 /** タイルに置いた画面タブを、端末と同じ口で扱うための取っ手 */
 export interface ScreenHandle {
@@ -17,6 +29,12 @@ export interface ScreenHandle {
   focus(): void;
   /** 大きさは noVNC が自分で追従するので何もしない（端末と同じ呼び方をするため） */
   fit(): void;
+  /** 画面メニューの文脈（いまの状態と操作） */
+  context(): ScreenContext;
+  /** キーを 1 回押して離す。mods の修飾キーはその間だけ押す */
+  pressKey(keysym: number, code: string, mods?: ScreenModifiers): void;
+  /** 文字入力を開く */
+  openText(): void;
 }
 
 export interface ScreenStatus {
@@ -25,30 +43,98 @@ export interface ScreenStatus {
 }
 
 interface Props {
-  /** modal = 今までのダイアログ / tile = タブとしてタイルの中に置く */
+  /** modal = ダイアログで大きく表示 / tile = タブとしてタイルの中に置く */
   variant: 'modal' | 'tile';
   deviceId: string;
   devices?: Device[];
   deviceName?: string;
   /** タイルで前面に出ているか（隠れて SCREEN_IDLE_MS 経つと切断する） */
   visible?: boolean;
+  /** タイル見出しの差し込み口。状態・見るだけ・⌨・Esc をここに出す（無ければ画面の上に出す） */
+  headSlot?: HTMLElement | null;
   /** モーダルを閉じる */
   onClose?(): void;
-  /** モーダルで見ている画面をタブとして開く */
+  /** モーダルで見ている画面をタブとして開く（タブに戻す） */
   onOpenAsTab?(deviceId: string): void;
   onStatus?(status: ScreenStatus): void;
 }
 
 const ESCAPE = 0xff1b;
+const RETURN = 0xff0d;
+const CONTROL = 0xffe3;
+const ALT = 0xffe9;
+
+/** 文字を 1 文字ずつのキー（keysym）にする。X11 の決まりで Latin-1 以外は 0x01000000 + コードポイント */
+export function keysymFor(ch: string): number {
+  if (ch === '\n') return RETURN;
+  if (ch === '\t') return 0xff09;
+  const cp = ch.codePointAt(0) ?? 0;
+  if ((cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff)) return cp;
+  return 0x01000000 + cp;
+}
+
+const presetOrder = ['balanced', 'responsive', 'sharp', 'lan'] as const;
+type PresetId = typeof presetOrder[number];
+const presetOf = (value: DesktopSettings): PresetId | null =>
+  presetOrder.find(id => {
+    const p = desktopPresets[id];
+    return p.lossless === value.lossless && p.quality === value.quality && p.compression === value.compression && p.scale === value.scale && p.interval === value.interval;
+  }) ?? null;
+
+/** 画質モーダル。プリセットはラジオ、細かい値は『詳細』に畳む。保存は『適用して再接続』のときだけ */
+function ScreenQuality({ settings, onApply, onClose }: { settings: DesktopSettings; onApply(value: DesktopSettings): void; onClose(): void }) {
+  const [draft, setDraft] = useState(settings);
+  const current = presetOf(settings);
+  const chosen = presetOf(draft);
+  const name = useId();
+  const first = useRef<HTMLInputElement>(null);
+  useEffect(() => { first.current?.focus(); }, []);
+  return <Modal title="画質" onClose={onClose} className="screen-quality">
+    <div className="screen-quality-body">
+      <fieldset className="screen-presets">
+        <legend>プリセット</legend>
+        {presetOrder.map(id => <label key={id} className="screen-preset">
+          <input ref={id === (chosen ?? 'balanced') ? first : undefined} type="radio" name={name} checked={chosen === id}
+            onChange={() => { const { label: _label, ...values } = desktopPresets[id]; setDraft({ ...values }); }} />
+          <span>{desktopPresets[id].label}{id === 'balanced' ? '〈既定〉' : ''}</span>
+          {current === id && <span className="screen-preset-current">使用中</span>}
+        </label>)}
+        {!chosen && <p className="screen-preset-custom">いまは詳細で調整した値です{current === null ? '（使用中）' : ''}</p>}
+      </fieldset>
+      <details className="screen-quality-detail">
+        <summary>詳細</summary>
+        <div className="desktop-settings-fields">
+          <label>画質方式<select value={draft.lossless ? 'lossless' : 'jpeg'} onChange={e => setDraft(v => ({ ...v, lossless: e.target.value === 'lossless' }))}>
+            <option value="jpeg">JPEG（通信量を削減）</option><option value="lossless">可逆圧縮（文字を鮮明に）</option>
+          </select></label>
+          <label>配信サイズ<select value={draft.scale} onChange={e => setDraft(v => ({ ...v, scale: e.target.value as DesktopSettings['scale'] }))}>
+            <option value="1">100%（縮小なし）</option><option value="0.75">75%</option><option value="0.5">50%</option>
+          </select></label>
+          <label>更新間隔<select value={draft.interval} onChange={e => setDraft(v => ({ ...v, interval: e.target.value as DesktopSettings['interval'] }))}>
+            <option value="16">16 ms（滑らか・高負荷）</option><option value="33">33 ms（標準）</option><option value="66">66 ms（負荷を抑える）</option><option value="100">100 ms（省通信）</option>
+          </select></label>
+          <label>JPEG 品質：{draft.quality}<input type="range" min="0" max="9" value={draft.quality} disabled={draft.lossless} onChange={e => setDraft(v => ({ ...v, quality: Number(e.target.value) }))} /></label>
+          <label>圧縮レベル：{draft.compression}<input type="range" min="0" max="9" value={draft.compression} onChange={e => setDraft(v => ({ ...v, compression: Number(e.target.value) }))} /></label>
+        </div>
+        <p>圧縮を上げると通信量は減り、処理負荷は増えます。配信サイズはこの接続だけに適用します。更新間隔は目安で、FPS の保証ではありません。</p>
+      </details>
+      <p className="screen-quality-help">同じ LAN では「LAN 高画質」、回線が遅いときは「低遅延」、文字を読むときは「文字くっきり」。</p>
+      <div className="dialog-actions">
+        <button className="btn" onClick={onClose}>キャンセル</button>
+        <button className="btn primary" onClick={() => onApply(draft)}>適用して再接続</button>
+      </div>
+    </div>
+  </Modal>;
+}
 
 export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScreen(
-  { variant, deviceId, devices = [], deviceName, visible = true, onClose, onOpenAsTab, onStatus },
+  { variant, deviceId, devices = [], deviceName, visible = true, headSlot, onClose, onOpenAsTab, onStatus },
   ref,
 ) {
   const modal = variant === 'modal';
   const ids = useId();
-  const controlsId = `${ids}-controls`, settingsId = `${ids}-settings`, clipboardId = `${ids}-clipboard`, textId = `${ids}-text`;
-  // モーダルは中でデバイスを切り替えられる。タブはタブが指すデバイスに固定
+  const clipboardId = `${ids}-clipboard`, textId = `${ids}-text`;
+  // モーダルは中でデバイスを切り替えられる。タブはタブが指すデバイスに固定（切り替えは App がタブを差し替える）
   const [modalDeviceId, setModalDeviceId] = useState(deviceId);
   const selectedDeviceId = modal ? modalDeviceId : deviceId;
   const selectedDevice = devices.find(device => device.id === selectedDeviceId);
@@ -60,23 +146,30 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   /** Ctrl+Alt+Del はロック画面やタスクマネージャーを出すので、送る前に確認する */
   const [confirmCad, setConfirmCad] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [message, setMessage] = useState('デスクトップに接続中…');
+  const [message, setMessage] = useState('画面に接続中…');
   const [error, setError] = useState('');
   const [fit, setFit] = useState(true);
   const [viewOnly, setViewOnly] = useState(false);
-  const [clipboardOpen, setClipboardOpen] = useState(false);
-  const [controlsOpen, setControlsOpen] = useState(false);
+  const [textOpen, setTextOpen] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  /** ダイアログの ⋯ で開いた画面メニューの位置 */
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const [text, setText] = useState('');
+  const textRef = useRef(text); textRef.current = text;
+  /** 接続先から受け取ったクリップボード。書きかけの下書きは上書きせず、チップで知らせる */
+  const [received, setReceived] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [copying, setCopying] = useState(false);
   const copyLock = useRef(false);
   const clipboardText = useRef<HTMLTextAreaElement>(null);
+  const textToggle = useRef<HTMLButtonElement>(null);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const [full, setFull] = useState(false);
   const [settings, setSettings] = useState(loadDesktopSettings);
-  const [draft, setDraft] = useState(settings);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [roundTrip, setRoundTrip] = useState<number | null>(null);
   const [sourceSize, setSourceSize] = useState('');
+  const [narrow, setNarrow] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const client = useRef<LosslessRFB | null>(null);
@@ -84,16 +177,31 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   const viewRef = useRef(viewOnly); viewRef.current = viewOnly;
   const closeRef = useRef(onClose); closeRef.current = onClose;
   const statusRef = useRef(onStatus); statusRef.current = onStatus;
-  const popoverOpen = controlsOpen || clipboardOpen || settingsOpen;
+  const canFullscreen = typeof document !== 'undefined' && !!document.fullscreenEnabled;
+  const popoverOpen = textOpen || !!menuAt;
+  /** 画面へキー入力が届くようにする（接続前は枠にフォーカスを置く） */
+  const focusScreen = () => {
+    if (client.current && connected) client.current.focus();
+    else panel.current?.focus();
+  };
+  const closeText = () => {
+    setTextOpen(false);
+    requestAnimationFrame(() => (textToggle.current ?? panel.current)?.focus());
+  };
   const closePopovers = () => {
-    setControlsOpen(false); setClipboardOpen(false); setSettingsOpen(false);
-    panel.current?.querySelector<HTMLButtonElement>('.desktop-controls-toggle')?.focus();
+    if (menuAt) { setMenuAt(null); requestAnimationFrame(() => moreButton.current?.focus()); }
+    if (textOpen) closeText();
   };
   const dismissRef = useRef(() => {});
   dismissRef.current = () => {
     if (popoverOpen) closePopovers();
     else closeRef.current?.();
   };
+  /** 画質・ガイドを閉じたら、開いた場所（ダイアログの ⋯、タブでは画面）へ戻す */
+  const afterModal = () => requestAnimationFrame(() => {
+    if (modal && moreButton.current) moreButton.current.focus();
+    else focusScreen();
+  });
 
   // ---------------------------------------------------------- 表示と接続の持ち主
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible');
@@ -159,24 +267,34 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     return () => document.removeEventListener('fullscreenchange', fullscreen);
   }, []);
 
-  const lastPopover = useRef('');
+  // 狭いタイルでは、見出しから Esc と状態の文字を外す
   useEffect(() => {
-    const current = clipboardOpen ? 'clipboard' : settingsOpen ? 'settings' : controlsOpen ? 'controls' : '';
-    if (current) {
-      panel.current?.querySelector<HTMLElement>(current === 'clipboard' ? `#${CSS.escape(textId)}` : `#${CSS.escape(current === 'settings' ? settingsId : controlsId)} button`)?.focus();
-    } else if (lastPopover.current) {
-      const trigger = lastPopover.current === 'clipboard' ? `[aria-controls="${CSS.escape(clipboardId)}"]` : '.desktop-controls-toggle';
-      panel.current?.querySelector<HTMLButtonElement>(trigger)?.focus();
-    }
-    lastPopover.current = current;
-  }, [clipboardOpen, settingsOpen, controlsOpen, textId, settingsId, controlsId, clipboardId]);
+    const el = panel.current;
+    if (modal || !el) return;
+    const measure = () => { if (el.clientWidth > 0) setNarrow(el.clientWidth <= SCREEN_NARROW_PX); };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [modal]);
+
+  // 文字入力を開いたら入力欄へ
+  useEffect(() => {
+    if (textOpen) panel.current?.querySelector<HTMLElement>(`#${CSS.escape(textId)}`)?.focus();
+  }, [textOpen, textId]);
+
+  // お知らせは一定時間で消す（× でもすぐ消せる）
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), SCREEN_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   // 他の画面で設定を変えたら、次の接続から同じ設定を使う
   useEffect(() => {
     const sync = (event: StorageEvent) => {
       if (event.key !== DESKTOP_SETTINGS_KEY) return;
-      const next = loadDesktopSettings();
-      setSettings(next); setDraft(next);
+      setSettings(loadDesktopSettings());
     };
     window.addEventListener('storage', sync);
     return () => window.removeEventListener('storage', sync);
@@ -192,14 +310,14 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     const controller = new AbortController();
     let rfb: LosslessRFB | null = null;
     viewport.current?.replaceChildren();
-    setConnected(false); setError(''); setSourceSize(''); setMessage('デスクトップを確認中…');
+    setConnected(false); setError(''); setSourceSize(''); setMessage('画面を確認中…');
     void fetchDesktopStatus(controller.signal, selectedDeviceId).then(async status => {
       if (controller.signal.aborted) return;
-      if (!status.available) throw new Error(status.error || 'デスクトップに接続できません');
+      if (!status.available) throw new Error(status.error || '画面に接続できません');
       setSourceSize(`${status.width}×${status.height}`);
       const { LosslessRFB } = await import('../vendor/lossless-rfb');
       if (controller.signal.aborted) return;
-      setMessage('デスクトップに接続中…');
+      setMessage('画面に接続中…');
       rfb = new LosslessRFB(viewport.current!, wsUrl('/ws/desktop', { scale: settings.scale, interval: settings.interval }, selectedDeviceId));
       rfb.lossless = settings.lossless;
       client.current = rfb;
@@ -224,12 +342,15 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         setConnected(false); setError('接続が切れました。「再接続」で接続し直してください。');
       });
       rfb.addEventListener('securityfailure', () => {
-        if (!controller.signal.aborted) setError('デスクトップへの認証に失敗しました。');
+        if (!controller.signal.aborted) setError('画面への認証に失敗しました。');
       });
       rfb.addEventListener('clipboard', event => {
         if (controller.signal.aborted) return;
         const value = (event as CustomEvent<{ text: string }>).detail.text;
-        setText(value); setNotice('リモートのクリップボードを受信しました');
+        // 書きかけの下書きは上書きしない。空なら入れておく
+        if (!textRef.current) { setText(value); setReceived(null); }
+        else if (value !== textRef.current) setReceived(value);
+        setNotice('接続先のクリップボードを受信しました');
       });
     }).catch(err => { if (!controller.signal.aborted) setError(err.message); });
     return () => {
@@ -283,20 +404,11 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     return () => area.removeEventListener('focusout', release);
   }, []);
 
-  useImperativeHandle(ref, () => ({
-    kind: 'screen' as const,
-    focus() {
-      if (client.current && connected) client.current.focus();
-      else panel.current?.focus();
-    },
-    fit() {},
-  }), [connected]);
-
   const applySettings = (value: DesktopSettings) => {
     // Save only on apply: moving a slider must not repeatedly reconnect.
     const next = { lossless: value.lossless, quality: value.quality, compression: value.compression, scale: value.scale, interval: value.interval };
     try { localStorage.setItem(DESKTOP_SETTINGS_KEY, JSON.stringify(next)); } catch { /* Storage may be unavailable. */ }
-    setSettings(next); setDraft(next); setSettingsOpen(false);
+    setSettings(next); setQualityOpen(false); afterModal();
   };
 
   const fullscreen = async () => {
@@ -305,16 +417,27 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
       else await panel.current?.requestFullscreen();
     } catch { setNotice('このブラウザでは全画面表示を利用できません'); }
   };
-  const paste = async () => {
+  const sendEscape = () => { client.current?.sendKey(ESCAPE, 'Escape'); client.current?.focus(); };
+  /** 接続先のクリップボードに入れて Ctrl+V を送る。submit なら続けて Enter */
+  const paste = async (submit = false) => {
     const rfb = client.current;
     try { await writeDesktopClipboard(text, selectedDeviceId); }
     catch (err) { setNotice((err as Error).message); return; }
     if (selectedIdRef.current !== selectedDeviceId || client.current !== rfb || !rfb) return;
-    client.current?.sendKey(0xffe3, 'ControlLeft', true);
-    client.current?.sendKey(0x76, 'KeyV');
-    client.current?.sendKey(0xffe3, 'ControlLeft', false);
-    setNotice('リモートへ貼り付けました');
-    client.current?.focus();
+    rfb.sendKey(CONTROL, 'ControlLeft', true);
+    rfb.sendKey(0x76, 'KeyV');
+    rfb.sendKey(CONTROL, 'ControlLeft', false);
+    if (submit) rfb.sendKey(RETURN, 'Enter');
+    setNotice(submit ? '接続先へ貼り付けて Enter を送りました' : '接続先へ貼り付けました');
+    rfb.focus();
+  };
+  /** 貼り付けが効かないアプリ向けに、1 文字ずつキーとして打つ */
+  const typeText = () => {
+    const rfb = client.current;
+    if (!rfb || !text) return;
+    for (const ch of text.replace(/\r\n?/g, '\n')) rfb.sendKey(keysymFor(ch), ch === '\n' ? 'Enter' : ch === '\t' ? 'Tab' : 'Unidentified');
+    setNotice('キーとして送りました');
+    rfb.focus();
   };
   const copy = async () => {
     if (copyLock.current) return;
@@ -322,7 +445,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     const version = selectionVersion.current;
     const isCurrent = () => selectionVersion.current === version && selectedIdRef.current === selectedDeviceId && panel.current !== null;
     try {
-      const received = readDesktopClipboard(selectedDeviceId).then(({ text: value }) => {
+      const receivedText = readDesktopClipboard(selectedDeviceId).then(({ text: value }) => {
         if (!isCurrent()) throw new Error('接続先が変更されました');
         return value;
       });
@@ -331,7 +454,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
       // This preserves user activation in browsers that require it (e.g. Safari).
       if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
         try {
-          const data = received.then(value => {
+          const data = receivedText.then(value => {
             if (!value) throw new Error('クリップボードが空です');
             return new Blob([value], { type: 'text/plain' });
           });
@@ -341,10 +464,9 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
           written = true;
         } catch { /* Retry with writeText or offer the received text for manual copy. */ }
       }
-      const value = await received;
+      const value = await receivedText;
       if (!isCurrent()) return;
       if (!value) { setNotice('接続先のクリップボードに文字がありません'); return; }
-      setText(value);
       if (!written) {
         try { await navigator.clipboard.writeText(value); written = true; }
         catch { /* Some browsers deny clipboard access or require HTTPS. */ }
@@ -352,13 +474,83 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
       if (!isCurrent()) return;
       if (written) setNotice('接続先の文字を、この端末のクリップボードにコピーしました');
       else {
-        setClipboardOpen(true); setSettingsOpen(false); setControlsOpen(false);
+        // 手でコピーできるよう、取ってきた文字を入力欄に出して選ぶ（自分で頼んだコピーなので下書きを置き換える）
+        setText(value); setReceived(null);
+        setTextOpen(true); setMenuAt(null);
         setNotice('自動コピーが許可されていません。入力欄の文字を選択してコピーしてください');
         requestAnimationFrame(() => { if (isCurrent()) { clipboardText.current?.focus(); clipboardText.current?.select(); } });
       }
     } catch (err) { if (isCurrent()) setNotice((err as Error).message); }
     finally { copyLock.current = false; setCopying(false); }
   };
+  const switchModalDevice = (id: string) => {
+    selectionVersion.current++; selectedIdRef.current = id;
+    setText(''); setReceived(null); setNotice(''); setRoundTrip(null); setModalDeviceId(id);
+  };
+
+  /** 画面メニューの文脈。タブでは App がダイアログ表示とデバイスの切り替えを足す */
+  const context: ScreenContext = {
+    ready: true,
+    modal,
+    connected,
+    viewOnly,
+    fit,
+    copying,
+    full,
+    canFullscreen,
+    narrow: !modal && narrow,
+    devices: devices.map(d => ({ id: d.id, name: d.name, connected: d.connected })),
+    current: selectedDeviceId,
+    setViewOnly,
+    setFit,
+    copy: () => void copy(),
+    reconnect: () => setAttempt(v => v + 1),
+    sendEscape,
+    toggleFullscreen: () => void fullscreen(),
+    backToTab: modal && onOpenAsTab ? () => onOpenAsTab(selectedDeviceId) : undefined,
+    switchDevice: id => { if (modal) switchModalDevice(id); },
+    openQuality: () => { setMenuAt(null); setQualityOpen(true); },
+    sendCtrlAltDel: () => setConfirmCad(true),
+    openGuide: () => { setMenuAt(null); setGuideOpen(true); },
+  };
+  const contextRef = useRef(context); contextRef.current = context;
+  const focusRef = useRef(focusScreen); focusRef.current = focusScreen;
+
+  useImperativeHandle(ref, () => ({
+    kind: 'screen' as const,
+    focus() { focusRef.current(); },
+    fit() {},
+    context: () => contextRef.current,
+    pressKey(keysym, code, mods = {}) {
+      const rfb = client.current;
+      if (!rfb) return;
+      if (mods.ctrl) rfb.sendKey(CONTROL, 'ControlLeft', true);
+      if (mods.alt) rfb.sendKey(ALT, 'AltLeft', true);
+      rfb.sendKey(keysym, code);
+      if (mods.alt) rfb.sendKey(ALT, 'AltLeft', false);
+      if (mods.ctrl) rfb.sendKey(CONTROL, 'ControlLeft', false);
+    },
+    openText() { setMenuAt(null); setTextOpen(true); },
+  }), []);
+
+  const statusText = connected ? '接続済み' : error ? '未接続' : elsewhere ? '別の場所で表示中' : '接続中…';
+  const statusTitle = [`${selectedName} · ${statusText}`, connected ? `通信往復：${roundTrip === null ? '計測中' : `${roundTrip} ms`}` : ''].filter(Boolean).join('\n');
+  /** 見出しの部品：状態・見るだけ・⌨・Esc。タブではタイル見出しへ、ダイアログと全画面では画面の上に出す */
+  const headParts = (compact: boolean): ReactNode => <>
+    <span className={`desktop-connection-status ${connected ? 'is-connected' : ''}`} role="status" title={statusTitle}>
+      <span className={`dot ${connected ? 'ok' : error ? 'bad' : ''}`} />
+      <span className={`desktop-status-text${compact && narrow ? ' sr-only' : ''}`}>{statusText}</span>
+    </span>
+    {viewOnly && <span className="screen-badge" title="マウス・キー操作は送りません。画面メニューの『操作する』で戻せます">見るだけ</span>}
+    <button ref={textToggle} className="btn desktop-clipboard-toggle" aria-label="文字入力" title="文字入力（日本語・貼り付け）"
+      aria-expanded={textOpen} aria-controls={clipboardId}
+      onClick={() => { setMenuAt(null); setTextOpen(v => !v); }}>
+      <Icon name="keyboard" />{!compact && <span className="desktop-button-label">文字入力</span>}
+    </button>
+    {!(compact && narrow) && <button className="btn screen-esc" aria-label="Esc を送る" title="Esc を送る"
+      disabled={!connected || viewOnly} onClick={sendEscape}>Esc</button>}
+  </>;
+  const tileHead = !modal && !full && headSlot && visible;
 
   const view = <div
     className={`screen-viewer desktop-viewer ${modal ? '' : 'screen-tab-view'}`}
@@ -371,6 +563,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         'aria-label': `${selectedName} のリモートデスクトップ`,
         hidden: !visible,
         // タイルではアプリのショートカットを奪わない。Escape は開いている小窓を閉じるだけ
+        // （タイル見出しへ差し込んだ部品のキーも、React の木を通ってここへ届く）
         onKeyDown: (e: React.KeyboardEvent) => {
           if (e.key !== 'Escape' || viewport.current?.contains(e.target as Node) || !popoverOpen) return;
           e.stopPropagation();
@@ -378,102 +571,52 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         },
       })}
   >
-    <div className="screen-head desktop-compact-head">
+    {modal ? <div className="screen-head desktop-compact-head">
       <Icon name="screen" />
-      {modal ? <label className="desktop-device-label"><span className="desktop-device-caption">接続先</span>
-        {devices.length > 1 ? <select aria-label="デスクトップのデバイス" value={selectedDeviceId} onChange={event => {
-          selectionVersion.current++; selectedIdRef.current = event.target.value;
-          setText(''); setNotice(''); setRoundTrip(null); setModalDeviceId(event.target.value);
-        }}>
+      <label className="desktop-device-label"><span className="desktop-device-caption">接続先</span>
+        {devices.length > 1 ? <select aria-label="接続先" value={selectedDeviceId} onChange={event => switchModalDevice(event.target.value)}>
           {devices.map(device => <option key={device.id} value={device.id}>{device.name}</option>)}
         </select> : <strong>{selectedName}</strong>}
-      </label> : <strong className="desktop-device-label">{selectedName}</strong>}
-      <span className={`desktop-connection-status ${connected ? 'is-connected' : ''}`} role="status"><span className={`dot ${connected ? 'ok' : error ? 'bad' : ''}`} /><span className="desktop-status-text">{connected ? '接続済み' : error ? '未接続' : elsewhere ? '別の場所で表示中' : '接続中…'}</span></span>
-      <button className="btn desktop-clipboard-toggle" aria-label="文字入力・コピー" title="文字入力・コピー" aria-expanded={clipboardOpen} aria-controls={clipboardId} onClick={() => { setClipboardOpen(v => !v); setSettingsOpen(false); setControlsOpen(false); }}><Icon name="keyboard" /><span className="desktop-button-label">文字入力</span></button>
-      <button className="btn desktop-controls-toggle" aria-label="操作・設定" title={viewOnly ? '見るだけ（操作・設定）' : '操作・設定'} aria-expanded={controlsOpen} aria-controls={controlsId} onClick={() => { setControlsOpen(v => !v); setClipboardOpen(false); setSettingsOpen(false); }}><Icon name="more" /><span>{viewOnly ? '見るだけ' : '操作・設定'}</span></button>
-      {modal && onOpenAsTab && <button className="btn desktop-icon-button" aria-label="タブで開く" title="タブで開く（端末と並べて表示）" onClick={() => onOpenAsTab(selectedDeviceId)}><Icon name="grid" /></button>}
-      <button className="btn desktop-icon-button" aria-label={full ? '全画面を終了' : '全画面'} title={full ? '全画面を終了' : '全画面'} onClick={() => void fullscreen()}><Icon name="expand" /></button>
-      {modal && <button className="btn desktop-icon-button" aria-label="デスクトップを閉じる" title="デスクトップを閉じる" onClick={onClose}><Icon name="close" /></button>}
-    </div>
-    {controlsOpen && <div className="desktop-toolbar desktop-popover" id={controlsId} aria-label="リモートデスクトップの操作・設定">
-      <div className="desktop-popover-head"><strong>操作・設定</strong><button className="btn desktop-icon-button" aria-label="操作・設定を閉じる" onClick={() => setControlsOpen(false)}><Icon name="close" /></button></div>
-      <div className="desktop-action-row">
-        <div className="desktop-mode" role="group" aria-label="リモートの操作モード">
-          <button className="btn" aria-pressed={!viewOnly} onClick={() => setViewOnly(false)}>操作する</button>
-          <button className="btn" aria-pressed={viewOnly} onClick={() => setViewOnly(true)}>見るだけ</button>
-        </div>
-        <div className="desktop-display-controls">
-          <label className="desktop-display-label">表示<select aria-label="デスクトップの表示サイズ" value={fit ? 'fit' : 'actual'} onChange={e => setFit(e.target.value === 'fit')}>
-            <option value="fit">画面に合わせる</option><option value="actual">原寸（100%）</option>
-          </select></label>
-        </div>
-        <div className="desktop-tools">
-          <button className="btn desktop-copy-button" disabled={copying} onClick={() => void copy()} title="接続先のクリップボードの文字を、この端末にコピー"><Icon name="download" />{copying ? 'コピー中…' : 'この端末へコピー'}</button>
-          <button className="btn" aria-expanded={settingsOpen} aria-controls={settingsId} onClick={() => { setSettingsOpen(v => !v); setClipboardOpen(false); setControlsOpen(false); }}>画質・遅延設定</button>
-        </div>
-      </div>
-      <div className="desktop-input-row">
-        <span>{viewOnly ? '見るだけ：マウス・キー操作は送信しません' : '画面をクリックするとマウス・キーボードで操作できます'}</span>
-        <div role="group" aria-label="リモートへキーを送信">
-          <button className="btn" disabled={!connected || viewOnly} onClick={() => { client.current?.sendKey(ESCAPE, 'Escape'); client.current?.focus(); }}>Esc を送る</button>
-          <button className="btn" disabled={!connected || viewOnly} onClick={() => setConfirmCad(true)}>Ctrl+Alt+Del を送る…</button>
-        </div>
-      </div>
-      <button className="btn" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />再接続</button>
-      <details><summary>操作ガイド・接続情報</summary>
-        <p>スマホ：タップでクリック、2本指タップで右クリック、2本指ドラッグでスクロール。日本語は「文字入力・コピー」から送れます。</p>
-        {!modal && <p>Alt+数字などアプリのショートカットはアプリ側で使います。タブを隠して{SCREEN_IDLE_MS / 1000}秒経つと切断し、表示すると繋ぎ直します。</p>}
-        <p>{settings.lossless ? '可逆圧縮' : `JPEG 品質${settings.quality}`} · 配信{Math.round(Number(settings.scale) * 100)}%（元画面 {sourceSize || '確認中'}） · 更新{settings.interval}ms · 音声なし</p>
-        <p>通信往復：{roundTrip === null ? '未計測／応答なし' : `${roundTrip} ms`}。画面の取り込み・圧縮・描画時間は含みません。</p>
-      </details>
+      </label>
+      {headParts(false)}
+      <button ref={moreButton} className="btn desktop-icon-button screen-more" aria-label="画面の操作" title="画面の操作" aria-haspopup="menu" aria-expanded={!!menuAt}
+        onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setTextOpen(false); setMenuAt(menuAt ? null : { x: r.right - 220, y: r.bottom }); }}><Icon name="more" /></button>
+      <button className="btn desktop-icon-button" aria-label="リモートデスクトップを閉じる" title="リモートデスクトップを閉じる" onClick={onClose}><Icon name="close" /></button>
+    </div> : !tileHead && <div className="screen-head desktop-compact-head screen-inline-head">
+      <strong className="desktop-device-label">{selectedName}</strong>
+      {headParts(true)}
+      {full && <button className="btn desktop-icon-button" aria-label="全画面を終了" title="全画面を終了" onClick={() => void fullscreen()}><Icon name="shrink" /></button>}
     </div>}
-    {settingsOpen && <div className="desktop-settings desktop-popover" id={settingsId}>
-      <div className="desktop-popover-head"><strong>画質・遅延設定</strong><button className="btn desktop-icon-button" aria-label="画質・遅延設定を閉じる" onClick={() => setSettingsOpen(false)}><Icon name="close" /></button></div>
-      <div className="screen-controls" role="group" aria-label="配信プリセット">
-        {Object.entries(desktopPresets).map(([id, preset]) => <button key={id} className="btn" onClick={() => setDraft(preset)}>{preset.label}</button>)}
-      </div>
-      <div className="desktop-settings-fields">
-        <label>画質方式<select value={draft.lossless ? 'lossless' : 'jpeg'} onChange={e => setDraft(v => ({ ...v, lossless: e.target.value === 'lossless' }))}>
-          <option value="jpeg">JPEG（通信量を削減）</option><option value="lossless">可逆圧縮（文字を鮮明に）</option>
-        </select></label>
-        <label>配信サイズ<select value={draft.scale} onChange={e => setDraft(v => ({ ...v, scale: e.target.value as DesktopSettings['scale'] }))}>
-          <option value="1">100%（原寸）</option><option value="0.75">75%</option><option value="0.5">50%</option>
-        </select></label>
-        <label>更新間隔<select value={draft.interval} onChange={e => setDraft(v => ({ ...v, interval: e.target.value as DesktopSettings['interval'] }))}>
-          <option value="16">16 ms（滑らか・高負荷）</option><option value="33">33 ms（標準）</option><option value="66">66 ms（負荷を抑える）</option><option value="100">100 ms（省通信）</option>
-        </select></label>
-        <label>JPEG品質：{draft.quality}<input type="range" min="0" max="9" value={draft.quality} disabled={draft.lossless} onChange={e => setDraft(v => ({ ...v, quality: Number(e.target.value) }))} /></label>
-        <label>圧縮レベル：{draft.compression}<input type="range" min="0" max="9" value={draft.compression} onChange={e => setDraft(v => ({ ...v, compression: Number(e.target.value) }))} /></label>
-      </div>
-      <p>同じLANでは「LAN 高画質」で原寸・高画質に。回線が遅いときは「低遅延」、文字を読むときは「文字くっきり」。圧縮を上げると通信量は減り、処理負荷は増えます。配信サイズはこの接続だけに適用します。更新間隔は目安で、FPSの保証ではありません。</p>
+    {tileHead && createPortal(<span className="screen-head-slot-parts">{headParts(true)}</span>, headSlot)}
+    {textOpen && <div className="desktop-clipboard desktop-popover" id={clipboardId} role="group" aria-label="文字入力">
+      <div className="desktop-popover-head"><strong>文字入力</strong><button className="btn desktop-icon-button" aria-label="文字入力を閉じる" onClick={closeText}><Icon name="close" /></button></div>
+      <label htmlFor={textId}>{selectedName} へ送る文字（日本語入力可）</label>
+      {received !== null && <button className="screen-received" onClick={() => { setText(received); setReceived(null); clipboardText.current?.focus(); }}>
+        受信したテキストを使う<span>{received.length > 24 ? `${received.slice(0, 24)}…` : received}</span>
+      </button>}
+      <textarea ref={clipboardText} id={textId} value={text} onChange={e => setText(e.target.value)} placeholder="ここに入力して、接続先へ送る" />
       <div className="screen-controls">
-        <button className="btn" onClick={() => applySettings(draft)}>適用して再接続</button>
-        <button className="btn" onClick={() => { setDraft(settings); setSettingsOpen(false); }}>キャンセル</button>
-      </div>
-    </div>}
-    {clipboardOpen && <div className="desktop-clipboard desktop-popover" id={clipboardId}>
-      <div className="desktop-popover-head"><strong>文字入力・コピー</strong><button className="btn desktop-icon-button" aria-label="文字入力・コピーを閉じる" onClick={() => setClipboardOpen(false)}><Icon name="close" /></button></div>
-      <label htmlFor={textId}>文字入力・クリップボード（日本語入力可）</label>
-      <textarea ref={clipboardText} id={textId} value={text} onChange={e => setText(e.target.value)} placeholder="ここに入力して、リモートへ貼り付け" />
-      <div className="screen-controls">
-        <button className="btn primary" disabled={!connected || viewOnly} onClick={() => void paste()}>接続先へ貼り付け</button>
+        <button className="btn primary" disabled={!connected || viewOnly || !text} onClick={() => void paste()}>貼り付け（Ctrl+V）</button>
+        <button className="btn" disabled={!connected || viewOnly || !text} onClick={typeText}>キーとして送る</button>
+        <button className="btn" disabled={!connected || viewOnly || !text} onClick={() => void paste(true)}>送って Enter</button>
         <button className="btn" disabled={copying} onClick={() => void copy()}>{copying ? 'コピー中…' : '接続先からコピー'}</button>
       </div>
     </div>}
     <div className="desktop-stage">
-      <div className="desktop-viewport" ref={viewport} aria-label="デスクトップ操作領域" />
+      <div className="desktop-viewport" ref={viewport} aria-label="画面の操作領域" />
       {!connected && <div className="desktop-message"><div className="desktop-message-content">
         <Icon name="screen" width="32" height="32" />
         {elsewhere && !error
           ? <>
             <strong>別の場所で表示中</strong>
             <p role="status">{selectedName} の画面は、このページの別のタブかウィンドウで表示しています。同じ画面を二重に繋ぐと重くなるため、ここでは止めています。</p>
-            <button className="btn primary" onClick={() => claimScreen(selectedDeviceId, lease)}><Icon name="screen" />ここで表示</button>
+            <button className="btn primary" onClick={() => claimScreen(selectedDeviceId, lease)}><Icon name="screen" />ここで表示する</button>
+            <p className="desktop-message-note">ほかの場所の表示は止まります</p>
           </>
           : <>
-            <strong>{error ? 'デスクトップに接続できません' : message}</strong>
+            <strong>{error ? '画面に接続できません' : message}</strong>
             <p role={error ? 'alert' : 'status'}>{error || `${selectedName} の画面を準備しています。`}</p>
-            {error && <button className="btn primary" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />もう一度接続する</button>}
+            {error && <button className="btn primary" onClick={() => setAttempt(v => v + 1)}><Icon name="refresh" />再接続</button>}
           </>}
       </div></div>}
     </div>
@@ -489,7 +632,21 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         setTimeout(() => client.current?.focus(), 0);
       },
     }} onClose={() => setConfirmCad(false)} />}
-    {notice && <div className="desktop-notification"><p className="desktop-notice" role="status">{notice}</p></div>}
+    {qualityOpen && <ScreenQuality settings={settings} onApply={applySettings} onClose={() => { setQualityOpen(false); afterModal(); }} />}
+    {guideOpen && <Modal title="操作ガイドと接続情報" onClose={() => { setGuideOpen(false); afterModal(); }} className="screen-guide">
+      <div className="screen-guide-body">
+        <p>{viewOnly ? '見るだけ：マウス・キー操作は送りません。' : '画面をクリックするとマウス・キーボードで操作できます。'}</p>
+        <p>スマホ：タップでクリック、2本指タップで右クリック、2本指ドラッグでスクロール。日本語は「文字入力」から送れます。</p>
+        {!modal && <p>Alt+数字などアプリのショートカットはアプリ側で使います。タブを隠して{SCREEN_IDLE_MS / 1000}秒経つと切断し、表示すると繋ぎ直します。</p>}
+        <p>{settings.lossless ? '可逆圧縮' : `JPEG 品質${settings.quality}`} · 配信{Math.round(Number(settings.scale) * 100)}%（元画面 {sourceSize || '確認中'}） · 更新{settings.interval}ms · 音声なし</p>
+        <p>通信往復：{roundTrip === null ? '未計測／応答なし' : `${roundTrip} ms`}。画面の取り込み・圧縮・描画時間は含みません。</p>
+      </div>
+    </Modal>}
+    {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} title={selectedName} items={screenMenuItems({ screen: context })} onClose={() => setMenuAt(null)} />}
+    {notice && <div className="desktop-notification">
+      <p className="desktop-notice" role="status">{notice}</p>
+      <button className="desktop-notice-close" aria-label="お知らせを閉じる" title="お知らせを閉じる" onClick={() => setNotice('')}><Icon name="close" /></button>
+    </div>}
   </div>;
 
   return modal
