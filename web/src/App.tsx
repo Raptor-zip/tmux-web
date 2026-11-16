@@ -1512,6 +1512,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const headInfo = headTab ? paletteTabGroups.find(g => g.leafId === headLeaf?.id)?.tabs.find(t => t.id === headTab.id) : undefined;
   const headIndex = headTab ? tabs.findIndex(t => t.tab.id === headTab.id) : -1;
   const attentionCount = waitingIds.length + (approval.pending ? 1 : 0);
+  /** 見出しの『現在のタブ ▾ n/m』の名前。表示と同じ語を先に置く（aria-label と title は同じ文字列） */
+  const headLabel = headTab ? `${headInfo?.title ?? '端末'} ${headIndex + 1}/${tabs.length}（タブ一覧）` : 'タブなし（タブ一覧）';
   /** 見出しの ⋯ のシートの先頭：見出しに置かない ⌕ と接続状態 */
   const phoneLead = (): MenuEntry[] => phone ? [
     { label: '探す・操作', hint: altKeys ? 'Alt+P' : undefined, run: () => { setPaletteWaiting(false); setPalette('terminal'); } },
@@ -1536,12 +1538,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             onClick={() => { setPaletteWaiting(true); setPalette('terminal'); }}>
             <Icon name="diamond" /><span className="bar-chip-text">入力待ち</span> {waitingIds.length}
           </button>}
+          {/* スマホの見出しでは、入力待ちと承認待ちを『要対応 N』にまとめる（入力待ちのチップは隠れるので、ここで読み上げる） */}
+          {barSlots.phone && attentionCount > 0 && <button className="bar-chip needs" title={`要対応 ${attentionCount}（入力待ち ${waitingIds.length}${approval.pending ? '・承認待ち 1' : ''}）`}
+            onClick={() => { if (approval.pending && !waitingIds.length) setApprovalOpen(true); else { setPaletteWaiting(true); setPalette('terminal'); } }}>
+            <Icon name={approval.pending ? 'warning' : 'diamond'} /><span className="bar-chip-text">要対応</span> {attentionCount}
+          </button>}
         </span>
-        {/* スマホの見出しでは、入力待ちと承認待ちを『要対応 N』にまとめる */}
-        {barSlots.phone && attentionCount > 0 && <button className="bar-chip needs" title={`要対応 ${attentionCount}（入力待ち ${waitingIds.length}${approval.pending ? '・承認待ち 1' : ''}）`}
-          onClick={() => { if (approval.pending && !waitingIds.length) setApprovalOpen(true); else { setPaletteWaiting(true); setPalette('terminal'); } }}>
-          <Icon name={approval.pending ? 'warning' : 'diamond'} /><span className="bar-chip-text">要対応</span> {attentionCount}
-        </button>}
         {approval.pending && <button className="bar-chip approval" title={`承認待ち：${approval.pending.cmd}`}
           onClick={() => setApprovalOpen(true)}>
           <Icon name="warning" /><span className="bar-chip-text">承認待ち</span> 1
@@ -1549,8 +1551,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       </>, barSlots.status)}
       {active && barSlots?.phone && createPortal(
         <button className="bar-btn phone-tab" aria-haspopup="dialog" aria-expanded={tabSheetOpen}
-          aria-label={headTab ? `タブ一覧（${headInfo?.title ?? '端末'}、${headIndex + 1}/${tabs.length}）` : 'タブ一覧'}
-          title="タブ一覧（長押し・右クリックでタブの操作）"
+          aria-label={headLabel} title={headLabel}
           {...headTabPress.bind(null)}
           onContextMenu={e => { e.preventDefault(); headTabPress.cancel(); const r = e.currentTarget.getBoundingClientRect(); openHeadMenu(e.clientX || r.left, e.clientY || r.bottom); }}
           onKeyDown={e => { if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); openHeadMenu(r.left, r.bottom); } }}

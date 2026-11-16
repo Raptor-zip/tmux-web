@@ -469,6 +469,8 @@
 .bar-chip.needs { color:var(--yellow); padding:0 8px; }
 .desktop-shell.phone-head .conn-status.bad .bar-chip-text::before { content:'✕ '; }
 .desktop-shell.phone-head .bar-chip.needs .bar-chip-text { position:static; width:auto; height:auto; overflow:visible; clip-path:none; }
+/* タッチでは ▾ も 44px にする（幅に余裕があるとき。≤400px は 28px のまま、≤340px で省く） */
+@media (pointer:coarse) and (min-width:401px) { .desktop-bar .phone-new .new-more { width:44px; min-width:44px; } }
 @media (max-width:400px) {
   .desktop-shell.phone-head .bar-chip.needs .bar-chip-text { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
   .desktop-shell.phone-head .bar-chip.needs { padding:0 6px; min-width:44px; }
