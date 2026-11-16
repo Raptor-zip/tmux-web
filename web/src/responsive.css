@@ -311,7 +311,7 @@
  .desktop-popover summary { min-height:44px; box-sizing:border-box; padding:12px 0; }
 }
 @media (max-width:760px) {
- .desktop-bar .desktop-tab { max-width:110px; }
+ .desktop-bar .desktop-tab { max-width:150px; } /* 既定名『ワークスペース N』が省略されずに収まる幅 */
 }
 
 .desktop-tab { -webkit-touch-callout:none; user-select:none; }
