@@ -4,7 +4,7 @@ import { Devices } from './components/Devices';
 import { DeviceStart } from './components/DeviceStart';
 import { deviceOf } from './devices';
 import { ProjectStart, ResumeConversation } from './components/ProjectStart';
-import { ApprovalDialog, ApprovalNotice, useApproval } from './components/Approval';
+import { ApprovalDialog, useApproval } from './components/Approval';
 import { RemoteControl } from './components/RemoteControl';
 import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
@@ -16,7 +16,7 @@ import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
-import { tabMenuItems, FONT_SIZE_MENU, LINE_HEIGHT_MENU, NEW_MENU } from './menus';
+import { tabMenuItems, NEW_MENU } from './menus';
 import { buildMenu, paletteCommands, type AppContext, type CreateContext, type PanelContext, type SelectionContext, type TabContext, type ViewContext } from './commands';
 import { KeyBar } from './components/KeyBar';
 import { nextInputBar, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLineHeight, useStatusLine } from './shared-setting';
@@ -592,7 +592,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [],
   );
 
-  const termStatus = (focusedId && termStatuses[focusedId]) || { connected: false };
   useEffect(() => {
     if (!active) return;
     const frame = requestAnimationFrame(() => {
@@ -1119,21 +1118,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [setLineHeight],
   );
 
-  /**
-   * ステータスバーの数値をクリックしたときのメニュー。
-   * 押すたびに一方向へ動くだけだと小さくできないので、増減とリセットを並べて出す。
-   * メニューは上に開くよう、ボタンの上端を基準にする。
-   */
-  const openStatusMenu = useCallback(
-    (e: React.MouseEvent, kind: 'fontSize' | 'lineHeight') => {
-      const r = e.currentTarget.getBoundingClientRect();
-      const view: ViewContext = { fontSize, lineHeight, setFontSize, setLineHeight, stepLineHeight: onLineHeightStep };
-      const items: MenuEntry[] = buildMenu(kind === 'fontSize' ? FONT_SIZE_MENU : LINE_HEIGHT_MENU, { view });
-      setMenu({ x: r.left, y: r.top - 8 - items.length * 26, items });
-    },
-    [fontSize, lineHeight, setFontSize, setLineHeight, onLineHeightStep],
-  );
-
   const onToggle = useCallback(
     (key: 'mode' | 'showStatusBar' | 'inputBar' | 'altKeys') => {
       if (key === 'mode') {
@@ -1560,7 +1544,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       <main className={`main ${drag ? 'dragging' : ''}`}>
 
 
-        {approval.pending && <ApprovalNotice pending={approval.pending} onOpen={() => setApprovalOpen(true)} />}
 
         <div className="workspace">
           <div className="terminal-wrap">
@@ -1661,44 +1644,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
       {filesPaneId && <FileBrowser key={filesPaneId} deviceName={devices.find(d=>d.id===deviceOf(filesPaneId))?.name || activeDevice.name} paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
 
-      <footer className="statusbar">
-        <button className="sb-item device-name" title="デバイス接続を管理" onClick={() => setDevicesOpen(true)}>{activeDevice.name}</button>
-        <span className="sb-item">
-          {focusedScreen ? 'リモートデスクトップ' : currentSession ? currentSession.name : 'セッションなし'}
-          {currentWindow && ` / ${currentWindow.index}:${windowName(currentWindow, activePane)}`}
-        </span>
-        {!connected && <span className="sb-item sb-bad">サーバと切断</span>}
-        {termStatus.message && !termStatus.connected && (
-          <span className="sb-item">{termStatus.message}</span>
-        )}
-        <span className="sb-right">
-          <button
-            className="sb-item"
-            title="探す・操作 (Alt+P)"
-            onClick={() => setPalette('terminal')}
-          >
-            {tabs.length} タブ{leaves.length > 1 && ` / ${leaves.length} 分割`}
-          </button>
-          <button
-            className="sb-item"
-            title="行間を変える"
-            onClick={(e) => openStatusMenu(e, 'lineHeight')}
-          >
-            行間 {lineHeight.toFixed(2)}
-          </button>
-          <button
-            className="sb-item"
-            title="文字サイズを変える（端末上で Ctrl＋スクロールでも変更）"
-            onClick={(e) => openStatusMenu(e, 'fontSize')}
-          >
-            {fontSize}px
-          </button>
-          <button className="sb-item" title="接続モードを切り替える" onClick={() => onToggle('mode')}>
-            {mode === 'mirror' ? 'ミラー' : '直接'}
-          </button>
-          {state?.server?.version && <span className="sb-item">{state.server.version}</span>}
-        </span>
-      </footer>
 
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} title={menu.title} onClose={() => setMenu(null)} />}

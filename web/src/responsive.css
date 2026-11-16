@@ -49,9 +49,6 @@
 @container panel (max-width: 290px) { .tab-device,.tab .state-dot { display:none; } .tab { min-width:100px; } }
 .tabstrip .tablist:has(.tab-slot:only-child) .tab-slot { flex:1; }
 .tabstrip .tablist:has(.tab-slot:only-child) .tab { flex:1; max-width:none; }
-.statusbar { background:var(--bg-1); border-top:1px solid var(--border); color:var(--fg-dim); }
-.statusbar .sb-right > :nth-child(n+4) { display:none; }
-.sb-item.device-name { color:var(--accent); }
 .ctxmenu { border-radius: 0; border:1px solid var(--border-strong); box-shadow:0 12px 36px #0006; padding:5px; }
 .ctxmenu button { min-height:34px; border-radius: 0; }
 .ctxmenu button:focus-visible { outline:2px solid var(--accent); background:var(--bg-3); }
@@ -72,8 +69,6 @@
  .tab { min-width:150px; max-width:220px; }
  .strip-btn { width:44px; height:44px; }
  .tab-close { width:32px; min-width:32px; height:44px; }
- .statusbar .sb-right > :nth-child(n+2),.statusbar > .sb-item:not(.device-name) { display:none; }
- .statusbar .device-name { max-width:40vw; }
  .mobile-input { padding:4px 6px; gap:4px; }
  .ctxmenu button { min-height:44px; }
 }
@@ -204,9 +199,6 @@
 .project-actions[open] summary { margin-bottom:4px; }
 .project-actions .btn { font-size:11px; text-align:left; }
 
-/* Fill the standalone viewport; include the home indicator inside the status bar. */
-.app { padding-bottom:0; grid-template-rows:minmax(0,1fr) calc(22px + var(--safe-bottom)); }
-.statusbar { height:auto; padding-bottom:var(--safe-bottom); }
 .sidebar { position:relative; min-width:0; }
 .sidebar-close { display:inline-flex; margin-left:auto; flex:none; }
 .sidebar-resize { position:absolute; top:0; bottom:0; right:-5px; width:10px; z-index:5; cursor:col-resize; touch-action:none; }
@@ -224,7 +216,7 @@
 .touch-menu-close { display:none; }
 @media (any-pointer:coarse) {
   /* Browsing and scrolling the chrome must not start native text selection. */
-  .desktop-bar,.tabstrip,.sidebar,.workspace-actions,.statusbar,.keybar,.ctxmenu,.sw-list {
+  .desktop-bar,.tabstrip,.sidebar,.workspace-actions,.keybar,.ctxmenu,.sw-list {
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
   }
   .terminal-host { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
@@ -329,7 +321,7 @@
 @media (max-width:760px) {
   .app,.app.sidebar-hidden {
     grid-template-columns:var(--activity-w) minmax(0,1fr);
-    grid-template-areas:'activity main' 'status status';
+    grid-template-areas:'activity main';
   }
 }
 

@@ -12,7 +12,7 @@ module.exports = async function prepareSwitcher(page, { state, scene }) {
     const check = (condition, message) => { if (!condition) failures.push(message); };
     const dialog = page.getByRole('dialog', { name: '探す・操作', exact: true });
     const input = dialog.locator('.sw-input');
-    const trigger = page.locator('.statusbar button[title="探す・操作 (Alt+P)"]');
+    const trigger = page.locator('.desktop-bar .bar-palette');
     const dismiss = () => dialog.getByRole('button', { name: '探す・操作を閉じる', exact: true });
     const open = async () => { await trigger.click(); await dialog.waitFor(); };
     await dialog.waitFor();

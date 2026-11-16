@@ -84,12 +84,13 @@ module.exports = async function prepareStateConnection(page, { state, terminals 
     assert.equal((await chip.textContent()).trim(), '', 'the chip returns to a dot after reconnecting');
     console.log('connection chip shows 切断 while disconnected and recovers');
 
-    // ⚠ 承認待ち：チップと assertive のトーストが出て、チップから内容の確認を開ける。全幅のバナーもまだ残す
+    // ⚠ 承認待ち：チップと assertive のトーストが出て、チップから内容の確認を開ける。全幅のバナーはもう無い
     approvalPending = { id: 'a1', cmd: 'sudo apt install ripgrep', cwd: '/home/demo', detail: '', attempt: 1, expiresAt: Date.now() + 120000 };
     const approvalChip = page.locator('.desktop-bar').getByRole('button', { name: /^承認待ち 1$/ });
     await approvalChip.waitFor({ timeout: 8000 });
     assert.match(await page.locator('.toasts [role=alert]').textContent(), /sudo の承認待ち：sudo apt install ripgrep/, 'first detection is announced assertively');
-    assert.equal(await page.locator('.approval-notice').count(), 1, 'the full-width banner stays for now');
+    assert.equal(await page.locator('.approval-notice').count(), 0, 'the full-width banner is gone');
+    assert.equal(await page.locator('.statusbar').count(), 0, 'the status bar is gone');
     await approvalChip.click();
     const approvalDialog = page.getByRole('dialog', { name: '管理者権限での実行を確認', exact: true });
     await approvalDialog.waitFor();

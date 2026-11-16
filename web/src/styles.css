@@ -64,16 +64,14 @@ input {
 
 /* --------------------------------------------------------------- レイアウト */
 
-/* アクティビティバー / サイドバー / 本体、の 3 列。下にステータスバー */
+/* アクティビティバー / サイドバー / 本体、の 3 列 */
 .app {
   display: grid;
   /* grid-template-columns は transition を付けない。
      minmax() を含む値は補間できず、Chrome では切り替えが効かないまま止まる */
   grid-template-columns: var(--activity-w) var(--sidebar-w) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) 22px;
-  grid-template-areas:
-    'activity sidebar main'
-    'status   status  status';
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'activity sidebar main';
   height: 100dvh;
   /* ホーム画面起動時の Dynamic Island と、横向きの切り欠きを避ける。
      border-box の高さの内側に余白を取り、下の操作も画面内に収める。 */
@@ -120,50 +118,6 @@ input {
 .act-btn.on {
   color: #fff;
   border-left-color: #fff;
-}
-
-/* ---- ステータスバー（下の青い帯）---- */
-.statusbar {
-  grid-area: status;
-  background: var(--status);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 10px;
-  font-size: 12px;
-  user-select: none;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.statusbar .sb-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.statusbar .sb-right {
-  margin-left: auto;
-  display: flex;
-  gap: 14px;
-}
-.statusbar button.sb-item {
-  background: none;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  padding: 0 4px;
-  height: 22px;
-  cursor: pointer;
-}
-.statusbar button.sb-item:hover {
-  background: rgba(255, 255, 255, 0.16);
-}
-.statusbar .sb-bad {
-  background: var(--red);
-  padding: 0 6px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
 }
 
 .sidebar {
@@ -1342,16 +1296,14 @@ input {
   .app,
   .app.sidebar-hidden {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      'main'
-      'status';
+    grid-template-areas: 'main';
   }
   .activitybar {
     display: none;
   }
   .sidebar {
     position: fixed;
-    inset: var(--safe-top) auto calc(22px + var(--safe-bottom)) var(--safe-left);
+    inset: var(--safe-top) auto var(--safe-bottom) var(--safe-left);
     width: 84vw;
     max-width: 320px;
     z-index: 40;
@@ -2083,11 +2035,6 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .recent-row strong { font-size: 12px; font-weight: 500; }
 .recent-row small { color: var(--fg-dim); font-size: 11px; margin-top: 3px; }
 .recent-resume { color: var(--accent); font-size: 11px; flex: none; }
-.approval-notice { display: flex; align-items: center; gap: 10px; padding: 7px 12px; flex: none; background: #cca70014; border-bottom: 1px solid #cca70060; }
-.approval-notice > svg { color: var(--yellow); flex: none; }
-.approval-notice strong { font-size: 12px; white-space: nowrap; }
-.approval-notice > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-family: var(--mono); color: var(--fg-dim); }
-.approval-notice .btn { margin-left: auto; white-space: nowrap; }
 .approval-command, .approval-detail { margin: 14px 0 6px; padding: 12px; background: var(--bg); border: 1px solid var(--border-strong); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 var(--mono); max-height: 220px; overflow: auto; }
 .approval-directory { margin: 0 0 20px; color: var(--fg-dim); font: 11px/1.5 var(--mono); overflow-wrap: anywhere; }
 .approval-form details { margin-bottom: 20px; font-size: 12px; }
@@ -2112,9 +2059,6 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
   .project-check { min-height: 44px; }
   .app-modal-actions { flex-wrap: wrap; margin-top: 20px; }
   .app-modal-actions > .field-hint { width: 100%; margin-bottom: 4px; }
-  .approval-notice { gap: 8px; padding: 6px 10px; flex-wrap: wrap; }
-  .approval-notice > span { display: none; }
-  .approval-notice .btn { min-height: 36px; }
   .recent-row, .recent-heading, .open-folder-button { min-height: 44px; }
   .recent-filter input { font-size: 16px; }
 }

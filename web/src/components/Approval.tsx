@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { answerApproval, cancelApproval, fetchApproval, type Approval } from '../api';
 import { Modal } from './Modal';
-import { Icon } from './Icon';
 
 export function useApproval(active = true) {
   const [pending, setPending] = useState<Approval | null>(null);
@@ -24,10 +23,6 @@ export function useApproval(active = true) {
     return () => { controller.abort(); clearTimeout(timer); };
   }, [revision, active]);
   return { pending, secure, refresh: () => setRevision(v => v + 1) };
-}
-
-export function ApprovalNotice({ pending, onOpen }: { pending: Approval; onOpen(): void }) {
-  return <div className="approval-notice" role="status"><Icon name="lock" /><strong>sudo 承認待ち</strong><span title={pending.cmd}>{pending.cmd}</span><button className="btn" onClick={onOpen}>内容を確認</button></div>;
 }
 
 export function ApprovalDialog({ pending, secure, onClose, onDone }: { pending: Approval; secure: boolean; onClose(): void; onDone(): void }) {

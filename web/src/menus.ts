@@ -64,18 +64,10 @@ export const NEW_MENU: readonly MenuSlot[] = [
 /** 仮想デスクトップのタブを右クリック・長押ししたときのメニュー */
 export const DESKTOP_MENU: readonly MenuSlot[] = ['desktop.rename'];
 
-/** ステータスバーの文字サイズ */
-export const FONT_SIZE_MENU: readonly MenuSlot[] = ['font.larger', 'font.smaller', 'font.min', SEP, 'font.reset'];
-
-/** ステータスバーの行間 */
-export const LINE_HEIGHT_MENU: readonly MenuSlot[] = ['lineHeight.wider', 'lineHeight.narrower', 'lineHeight.min', SEP, 'lineHeight.reset'];
-
 export const MENUS = {
   tab: TAB_MENU,
   new: NEW_MENU,
   desktop: DESKTOP_MENU,
-  fontSize: FONT_SIZE_MENU,
-  lineHeight: LINE_HEIGHT_MENU,
 } as const;
 
 export const tabMenuItems = (ctx: CommandContext): MenuEntry[] => buildMenu(TAB_MENU, ctx);

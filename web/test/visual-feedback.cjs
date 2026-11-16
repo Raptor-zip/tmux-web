@@ -174,10 +174,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'配置',exact:true}).click();await page.getByRole('menuitem',{name:/^(パネルを最大化|並びに戻す)/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
-  if(scene.action==='switcher')await page.locator('.statusbar button[title="探す・操作 (Alt+P)"]').click();
+  if(scene.action==='switcher')await page.locator('.desktop-bar .bar-palette').click();
   if(checkSwitcher) await checkSwitcher();
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
-  if(scene.action==='devices')await page.locator('footer .device-name').click();
+  if(scene.action==='devices'){await page.locator('.desktop-bar .conn-status').click();await page.getByRole('dialog',{name:'接続状態',exact:true}).getByRole('button',{name:'デバイス接続を管理…',exact:true}).click();}
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
   if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
   if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^作業フォルダーを開く/}).click();}
@@ -219,15 +219,15 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
     assert.equal(style.appearance,'none');assert.notEqual(style.arrow,'none');assert.ok(style.height>=(scene.width<=1024?44:34));
    }
    if(scene.name==='desktop-controls'){
-    await page.getByTitle('文字サイズを変える',{exact:true}).click();
-    await page.getByRole('menuitem',{name:/最小にする/}).click();
-    assert.equal(await page.getByTitle('文字サイズを変える',{exact:true}).textContent(),'6px');
-    await page.getByTitle('行間を変える',{exact:true}).click();
-    await page.getByRole('menuitem',{name:/詰める/}).click();
-    assert.equal(await page.getByTitle('行間を変える',{exact:true}).textContent(),'行間 1.14');
-    await page.getByTitle('行間を変える',{exact:true}).click();
-    await page.getByRole('menuitem',{name:/最小にする/}).click();
-    assert.equal(await page.getByTitle('行間を変える',{exact:true}).textContent(),'行間 1.00');
+    // ステータスバーは無くなった。文字サイズと行間はパレットの『操作』から変える
+    const runCommand=async name=>{const palette=page.getByRole('dialog',{name:'探す・操作',exact:true});await page.locator('.desktop-bar .bar-palette').click();await palette.waitFor();await palette.getByRole('combobox').fill('>'+name);await palette.locator('.sw-row.on .sw-command',{hasText:name}).waitFor();await page.keyboard.press('Enter');await palette.waitFor({state:'detached'});};
+    const stored=key=>page.evaluate(k=>localStorage.getItem(k),key);
+    await runCommand('文字サイズを最小にする');
+    assert.equal(await stored('tw.fontSize'),'6');
+    await runCommand('行間を詰める');
+    assert.equal(await stored('tw.lineHeight'),'1.14');
+    await runCommand('行間を最小にする');
+    assert.equal(await stored('tw.lineHeight'),'1');
     await page.waitForTimeout(150);
    }
    if(scene.action==='project'){

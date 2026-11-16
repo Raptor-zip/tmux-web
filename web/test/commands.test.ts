@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type MenuSlot, type TabContext } from '../src/commands';
-import { DESKTOP_MENU, FONT_SIZE_MENU, LINE_HEIGHT_MENU, MENUS, NEW_MENU, TAB_MENU } from '../src/menus';
+import { DESKTOP_MENU, MENUS, NEW_MENU, TAB_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
 const all = [...COMMANDS, ...FAMILIES];
@@ -172,17 +172,20 @@ test('new menu: terminal, Claude and Codex with side placements, other devices, 
   assert.ok(!alone.some(e => e?.label === '別のデバイスで'));
 });
 
-test('font size and line height menus keep their short labels and limits', () => {
+test('font size and line height commands keep their short labels and limits', () => {
+  // ステータスバーのメニューは無くなった。操作はパレットと『表示と接続』から使う
+  const FONT_SIZE_MENU: MenuSlot[] = ['font.larger', 'font.smaller', 'font.min', 'font.reset'];
+  const LINE_HEIGHT_MENU: MenuSlot[] = ['lineHeight.wider', 'lineHeight.narrower', 'lineHeight.min', 'lineHeight.reset'];
   let font = 6;
   let line = 1;
   const view = { fontSize: font, lineHeight: line, setFontSize: (u: (v: number) => number) => { font = u(font); }, setLineHeight: (v: number) => { line = v; }, stepLineHeight: (d: number) => { line += d; } };
-  assert.deepEqual(names(FONT_SIZE_MENU, { view }), ['大きく', '小さく', '最小にする', '---', '既定に戻す']);
-  assert.deepEqual(names(LINE_HEIGHT_MENU, { view }), ['広げる', '詰める', '最小にする', '---', '既定に戻す']);
+  assert.deepEqual(names(FONT_SIZE_MENU, { view }), ['大きく', '小さく', '最小にする', '既定に戻す']);
+  assert.deepEqual(names(LINE_HEIGHT_MENU, { view }), ['広げる', '詰める', '最小にする', '既定に戻す']);
   const fonts = buildMenu(FONT_SIZE_MENU, { view }) as MenuItem[];
   assert.equal(fonts[1].disabled, true);
   fonts[0].run();
   assert.equal(font, 7);
-  (buildMenu(LINE_HEIGHT_MENU, { view })[4] as MenuItem).run();
+  (buildMenu(LINE_HEIGHT_MENU, { view })[3] as MenuItem).run();
   assert.equal(line, 1.15);
   assert.deepEqual(names(DESKTOP_MENU, { desktop: { rename() {} } }), ['名前を変更…']);
 });
