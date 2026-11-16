@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ContextMenu, SEP, type MenuEntry } from './ContextMenu';
 import type { AttachmentResult } from '../attachments';
 
@@ -79,8 +79,23 @@ export function InputBar({ connected, waiting, always, prefix, onPaste, onSend, 
   const input = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
+  const keys = useRef<HTMLDivElement>(null);
   const [attaching, setAttaching] = useState(false);
   const attachLock = useRef(false);
+
+  // 入力待ちになったら、強調した回答キーが見えるようにキー列を寄せる（狭い画面では右側に隠れているため）
+  useEffect(() => {
+    const row = keys.current;
+    if (!waiting || !row) return;
+    const answers = row.querySelectorAll<HTMLElement>('.key.answer');
+    const first = answers[0], last = answers[answers.length - 1];
+    if (!first || !last) return;
+    const box = row.getBoundingClientRect();
+    const left = first.getBoundingClientRect().left - box.left + row.scrollLeft;
+    const right = last.getBoundingClientRect().right - box.left + row.scrollLeft;
+    if (left >= row.scrollLeft && right <= row.scrollLeft + row.clientWidth) return;
+    row.scrollTo({ left: Math.max(0, right - row.clientWidth + 4), behavior: 'smooth' });
+  }, [waiting]);
 
   useLayoutEffect(() => {
     const el = input.current;
@@ -181,7 +196,7 @@ export function InputBar({ connected, waiting, always, prefix, onPaste, onSend, 
         </div>
       )}
       <div className="input-row">
-        <div className={`input-keys${waiting ? ' waiting' : ''}`} role="group" aria-label="キー">
+        <div ref={keys} className={`input-keys${waiting ? ' waiting' : ''}`} role="group" aria-label="キー">
           {KEYS.map((k) => (
             <button
               key={k.label}

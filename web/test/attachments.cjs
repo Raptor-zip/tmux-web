@@ -41,6 +41,12 @@ module.exports = async function checkAttachments(page, terminalInputs, transport
   assert.equal(transportOf('@1').inputs.at(-1), '/tmp/delayed.txt ', 'the upload is inserted into the tab it was started from');
   assert.equal(transportOf('@5').inputs.length, 0, 'switching tabs during upload never inserts into the new target');
   assert.equal(await draft.inputValue(), '既存の下書き', 'the draft is left alone');
+  // The agent in @5 waits for input: the answer keys are highlighted and scrolled into view on the narrow row
+  await page.locator('.input-bar .input-keys.waiting').waitFor();
+  await page.waitForFunction(() => {
+    const row = document.querySelector('.input-bar .input-keys').getBoundingClientRect();
+    return [...document.querySelectorAll('.input-bar .key.answer')].every(k => { const r = k.getBoundingClientRect(); return r.left >= row.left - 1 && r.right <= row.right + 1; });
+  }, null, { timeout: 3000 });
   await page.locator('.tile:visible [data-tab-id=tab-local-1]').click();
   await draft.fill('別の下書き');
 
