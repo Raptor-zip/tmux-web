@@ -50,6 +50,8 @@ interface Props {
   /** sudo の承認待ち（無ければ null） */
   approval: { cmd: string } | null;
   initialScope?: PaletteScope;
+  /** 『端末』を入力待ち・承認待ちだけに絞って開く（上バーの『入力待ち N』から） */
+  waitingOnly?: boolean;
   onPick(win: TmuxWindow): void;
   onPickTab(leafId: string, tabId: string): void;
   onApproval(): void;
@@ -89,8 +91,9 @@ const windowText = (it: SwitchItem) =>
  * タブ：このワークスペースのタブをパネル別に出す（旧『タブ・パネルの一覧』）。
  * 操作：commands.ts の登録表を名前と別名で探して実行する。先頭に > を打っても『操作』になる。
  */
-export function Switcher({ items, tabGroups, commands, approval, initialScope = 'terminal', onPick, onPickTab, onApproval, onShortcuts, onClose }: Props) {
+export function Switcher({ items, tabGroups, commands, approval, initialScope = 'terminal', waitingOnly = false, onPick, onPickTab, onApproval, onShortcuts, onClose }: Props) {
   const [scope, setScope] = useState<PaletteScope>(initialScope);
+  const [onlyWaiting, setOnlyWaiting] = useState(waitingOnly);
   const [query, setQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -164,7 +167,7 @@ export function Switcher({ items, tabGroups, commands, approval, initialScope = 
         };
       };
       for (const it of matched) if (it.view.status.kind === 'waiting') out.push(windowRow(it, '入力待ち・承認'));
-      for (const it of matched) if (it.view.status.kind !== 'waiting') out.push(windowRow(it, '端末'));
+      if (!onlyWaiting) for (const it of matched) if (it.view.status.kind !== 'waiting') out.push(windowRow(it, '端末'));
       return out;
     }
     if (scope === 'tab') {
@@ -208,7 +211,7 @@ export function Switcher({ items, tabGroups, commands, approval, initialScope = 
           </>
         ),
       }));
-  }, [scope, query, items, tabGroups, commands, approval, onPick, onPickTab, onApproval]);
+  }, [scope, query, onlyWaiting, items, tabGroups, commands, approval, onPick, onPickTab, onApproval]);
 
   // Live status updates can reorder the results. Keep the chosen row by key;
   // if it disappears, fall back to a result that still exists.
@@ -243,7 +246,7 @@ export function Switcher({ items, tabGroups, commands, approval, initialScope = 
   const placeholder = scope === 'terminal'
     ? '端末・操作を探す…（> で操作）'
     : scope === 'tab' ? 'タブを探す（プロジェクト・デバイス・作業名）' : '操作を探す…';
-  const empty = scope === 'terminal' ? '一致する端末はありません。' : scope === 'tab' ? '一致するタブはありません。' : '一致する操作はありません。';
+  const empty = scope === 'terminal' ? (onlyWaiting ? '入力待ちの端末はありません。' : '一致する端末はありません。') : scope === 'tab' ? '一致するタブはありません。' : '一致する操作はありません。';
 
   let lastSection = '';
   return (
@@ -308,6 +311,10 @@ export function Switcher({ items, tabGroups, commands, approval, initialScope = 
             {s.label}
           </button>
         ))}
+        {scope === 'terminal' && <button type="button" className="sw-scope sw-filter" aria-pressed={onlyWaiting}
+          onClick={() => { setOnlyWaiting(v => !v); setSelectedKey(null); inputRef.current?.focus({ preventScroll: true }); }}>
+          入力待ちだけ
+        </button>}
       </div>
 
       <div className="sw-list" ref={listRef} id={listId} role="listbox" aria-label={SCOPES.find(s => s.id === scope)!.label}>

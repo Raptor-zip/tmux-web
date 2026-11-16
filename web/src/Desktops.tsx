@@ -14,6 +14,8 @@ import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { useSharedSetting } from './shared-setting';
 import { useLongPress } from './hooks/useLongPress';
+import { ConnectionStatus, connectionLabel } from './components/ConnectionStatus';
+import { Devices } from './components/Devices';
 import { addDesktop, desktopKey, INITIAL_DESKTOPS, openScreenTab, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
 
 export default function Desktops() {
@@ -42,6 +44,11 @@ export default function Desktops() {
 function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxState> }) {
   const sync = useWorkspaceStatus();
   const [remoteOpen, setRemoteOpen] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
+  /** 上バーの差し込み口。表示中のワークスペースの App が ≡・入力待ち・承認待ち・⌕ をここへ描く */
+  const [leadSlot, setLeadSlot] = useState<HTMLElement | null>(null);
+  const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
+  const [trailSlot, setTrailSlot] = useState<HTMLElement | null>(null);
   const [state, setState] = useWorkspaceValue<DesktopState>('tw.desktops', INITIAL_DESKTOPS, restoreDesktops);
   const [visited, setVisited] = useState(() => new Set([state.activeId]));
   useEffect(() => { setVisited(prev => prev.has(state.activeId) ? prev : new Set([...prev, state.activeId])); }, [state.activeId]);
@@ -177,6 +184,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
   }, [altKeys, state, dialog]);
   return <div className="desktop-shell">
     <header className="desktop-bar">
+      <span className="bar-slot" ref={setLeadSlot} />
       <div className="desktop-tabs" role="tablist" aria-label="仮想デスクトップ" ref={list} onScroll={cancelPress}>
         {state.items.map((desktop, index) => <div className="desktop-slot" key={desktop.id}>
           <button id={`desktop-tab-${desktop.id}`} data-desktop-id={desktop.id} className={`desktop-tab ${desktop.id === state.activeId ? 'on' : ''} ${dropDesktopId === desktop.id ? 'drop-target' : ''}`} role="tab" aria-selected={desktop.id === state.activeId}
@@ -212,12 +220,22 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
       <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
       <button className="remote-desktop-launch" aria-label="リモートデスクトップ" title="リモートデスクトップ" onClick={() => setRemoteOpen(true)}><Icon name="screen" /></button>
       <InstallApp />
-      {(!sync.connected || sync.error) && <span className="workspace-sync-status" role="status">{sync.error || '配置の同期を再接続中…'}</span>}
+      <span className="bar-slot bar-status" ref={setStatusSlot} />
+      <ConnectionStatus
+        label={connectionLabel({ connected: connection.connected, unauthorized: connection.unauthorized, hasState: !!connection.state, syncOk: sync.connected && !sync.error })}
+        devices={connection.devices}
+        syncError={sync.error || (!sync.connected ? '再接続中…' : undefined)}
+        authUrl={connection.authUrl}
+        version={connection.state?.server?.version}
+        onReconnect={() => { connection.reconnect(); workspaceStore.reconnect(); }}
+        onManageDevices={() => setDevicesOpen(true)} />
+      <span className="bar-slot" ref={setTrailSlot} />
     </header>
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
-        {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab} />}
+        {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab}
+          barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot } : undefined} />}
       </section>)}
     </div>
     {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} title={state.items.find(item => item.id === tabMenu.id)?.name} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: { rename: () => {
@@ -233,6 +251,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
       const next = openScreenTab(current.layout, deviceId, current.focusedId);
       handle.write(next.layout, next.focusedId);
     }} />}
+    {devicesOpen && <Devices devices={connection.devices} onChanged={connection.reloadDevices} onClose={() => setDevicesOpen(false)} />}
     {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
   </div>;
 }

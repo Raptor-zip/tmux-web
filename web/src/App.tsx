@@ -8,6 +8,7 @@ import { ApprovalDialog, ApprovalNotice, useApproval } from './components/Approv
 import { RemoteControl } from './components/RemoteControl';
 import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
+import { createPortal } from 'react-dom';
 import { FileBrowser } from './components/FileBrowser';
 import { MobileInput } from './components/MobileInput';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -73,7 +74,9 @@ import type { Pane, TmuxWindow } from './types';
 interface Toast {
   id: number;
   text: string;
-  kind: 'error' | 'info';
+  kind: 'error' | 'info' | 'warn';
+  /** aria-live=assertive で読み上げる（承認待ちの検知など） */
+  urgent?: boolean;
   /** トーストに添えるボタン（『元に戻す』など） */
   action?: { label: string; run: () => void };
 }
@@ -108,8 +111,19 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
   return [value, setValue] as const;
 }
 
-export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab }: {
+/** 上バーの差し込み口（Desktops.tsx）。表示中のワークスペースだけが受け取る */
+export interface BarSlots {
+  /** タブ列の左：≡ */
+  leading: HTMLElement | null;
+  /** 接続状態の左：入力待ち・承認待ち */
+  status: HTMLElement | null;
+  /** 右端：⌕ 探す・操作 */
+  trailing: HTMLElement | null;
+}
+
+export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab, barSlots }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
+  barSlots?: BarSlots;
   desktopLayouts: DesktopLayoutRegistry;
   desktopTargets: { id: string; name: string }[];
   onMoveDesktopTab(sourceId: string, tabId: string, destinationId: string): void;
@@ -207,6 +221,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   }>({ openNewMenuAtStrip: () => {}, launchAgent: () => {}, goNextWaiting: () => {}, openFiles: () => false });
   /** 開いているパレットのスコープ。null なら閉じている */
   const [palette, setPalette] = useState<PaletteScope | null>(null);
+  /** 上バーの『入力待ち N』から開いたとき、パレットの『端末』を入力待ちだけに絞る */
+  const [paletteWaiting, setPaletteWaiting] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuEntry[]; title?: string } | null>(null);
   /** 『テキストを選んでコピー…』のシートで見せているペイン */
@@ -239,6 +255,17 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), action ? UNDO_MS : 5000);
     return id;
   }, []);
+
+  /** 承認待ちを初めて検知したら、上バーのチップと一緒に assertive のトーストで知らせる（同じ依頼では 1 回だけ） */
+  const announcedApproval = useRef<string | null>(null);
+  useEffect(() => {
+    const pending = approval.pending;
+    if (!active || !pending || announcedApproval.current === pending.id) return;
+    announcedApproval.current = pending.id;
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t, { id, text: `sudo の承認待ち：${pending.cmd}`, kind: 'warn', urgent: true, action: { label: '内容を確認', run: () => setApprovalOpen(true) } }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 8000);
+  }, [active, approval.pending]);
 
   /**
    * 取り返しのつかない操作の確認。ブラウザ標準の confirm() は使わない。
@@ -1438,13 +1465,28 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={{ '--sidebar-w': `${Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}px` } as React.CSSProperties}>
-      {!sidebarOpen && <nav className="sidebar-launcher" aria-label="セッション一覧">
-        <button className="icon-btn" title="セッション一覧を開く (Alt+B)"
-          aria-label="セッション一覧を開く" aria-expanded={false}
-          onClick={() => setSidebarOpen(true)}><Icon name="menu" /></button>
-      </nav>}
+      {active && barSlots?.leading && createPortal(
+        <button className="bar-btn bar-sidebar" aria-label="一覧" title="一覧 (Alt+B)" aria-pressed={!!sidebarOpen}
+          onClick={() => setSidebarOpen(v => !v)}><Icon name="menu" /></button>, barSlots.leading)}
+      {active && barSlots?.status && createPortal(<>
+        <span className="bar-live" aria-live="polite">
+          {waitingIds.length > 0 && <button className="bar-chip attention" title="入力待ちの端末を探す (Alt+J で次へ)"
+            onClick={() => { setPaletteWaiting(true); setPalette('terminal'); }}>
+            <Icon name="diamond" /><span className="bar-chip-text">入力待ち</span> {waitingIds.length}
+          </button>}
+        </span>
+        {approval.pending && <button className="bar-chip approval" title={`承認待ち：${approval.pending.cmd}`}
+          onClick={() => setApprovalOpen(true)}>
+          <Icon name="warning" /><span className="bar-chip-text">承認待ち</span> 1
+        </button>}
+      </>, barSlots.status)}
+      {active && barSlots?.trailing && createPortal(
+        <button className="bar-btn bar-palette" aria-label="探す・操作" title="探す・操作 (Alt+P)"
+          onClick={() => { setPaletteWaiting(false); setPalette('terminal'); }}>
+          <Icon name="search" /><span className="bar-btn-text">探す・操作</span><kbd className="bar-kbd">Alt+P</kbd>
+        </button>, barSlots.trailing)}
 
-      {sidebarOpen && <button className="sidebar-backdrop" aria-label="セッション一覧を閉じる"
+      {sidebarOpen && <button className="sidebar-backdrop" aria-label="一覧を閉じる"
         onClick={() => setSidebarOpen(false)} />}
       <Sidebar
         width={Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}
@@ -1644,11 +1686,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           tabGroups={paletteTabGroups}
           commands={paletteCommandList()}
           approval={approval.pending ? { cmd: approval.pending.cmd } : null}
+          waitingOnly={paletteWaiting}
           onPick={openWindow}
           onPickTab={(leafId, tabId) => { setFocusedId(leafId); activate(tabId); }}
           onApproval={() => setApprovalOpen(true)}
           onShortcuts={() => setShortcutsOpen(true)}
-          onClose={() => setPalette(null)}
+          onClose={() => { setPalette(null); setPaletteWaiting(false); }}
         />
       )}
       {shortcutsOpen && <Shortcuts altKeys={altKeys} onClose={() => setShortcutsOpen(false)} />}
@@ -1656,8 +1699,19 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
       {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
 
-      <div className="toasts" role="status" aria-live="polite">
-        {toasts.map((t) => t.action ? (
+      <div className="toasts">
+        {/* 承認待ちの検知など、すぐ伝えるものは assertive で読み上げる */}
+        <div className="toast-list" role="alert" aria-live="assertive">
+          {toasts.filter((t) => t.urgent).map((t) => (
+            <div key={t.id} className={`toast ${t.kind} has-action`}>
+              <button className="toast-text" title="クリックで閉じる"
+                onClick={() => setToasts((list) => list.filter((x) => x.id !== t.id))}>{t.text}</button>
+              {t.action && <button className="toast-action" onClick={() => { setToasts((list) => list.filter((x) => x.id !== t.id)); t.action!.run(); }}>{t.action.label}</button>}
+            </div>
+          ))}
+        </div>
+        <div className="toast-list" role="status" aria-live="polite">
+        {toasts.filter((t) => !t.urgent).map((t) => t.action ? (
           <div key={t.id} className={`toast ${t.kind} has-action`}>
             <button
               className="toast-text"
@@ -1678,6 +1732,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             {t.text}
           </button>
         ))}
+        </div>
       </div>
     </div>
   );

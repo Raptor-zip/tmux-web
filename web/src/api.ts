@@ -147,7 +147,9 @@ export function useTmuxState() {
     return { available, state };
   }, [devices, records]);
   const refresh = () => { for (const subscription of subscriptions.current.values()) subscription.refresh(); };
-  return { state, devices: available, devicesReady, connected: !!records.local?.connected, unauthorized, authUrl, refresh, reloadDevices };
+  /** 接続状態のポップオーバーの『再接続』：デバイス一覧を取り直し、各デバイスの状態の購読を張り直す */
+  const reconnect = () => { reloadDevices(); for (const subscription of subscriptions.current.values()) subscription.reconnect(); };
+  return { state, devices: available, devicesReady, connected: !!records.local?.connected, unauthorized, authUrl, refresh, reconnect, reloadDevices };
 }
 
 export interface FileEntry {

@@ -32,6 +32,9 @@ const paths = {
   splitBottom: 'M4 4h16v16H4z M4 12h16',
   more: 'M5 12h.01 M12 12h.01 M19 12h.01',
   help: 'M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 3 M12 17h.01',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M20 20l-4-4',
+  warning: 'M12 3 2 20h20z M12 10v4 M12 17h.01',
+  diamond: 'M12 3l9 9-9 9-9-9z',
 } as const;
 
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: keyof typeof paths }) {

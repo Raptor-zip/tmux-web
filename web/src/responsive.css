@@ -325,21 +325,60 @@
 
 .desktop-tab { -webkit-touch-callout:none; user-select:none; }
 
-/* 一覧を畳んだときだけ左端に開く操作を残す。パネルのフォーカスには追従しない。 */
-.app.sidebar-hidden { --activity-w:32px; }
-.sidebar-launcher { grid-area:activity; background:var(--bg-1); border-right:1px solid var(--border); }
-.sidebar-launcher .icon-btn { width:32px; min-width:32px; height:38px; padding:0; }
+/* 左のランチャーレールは廃止した。一覧の開閉は上バーの ≡（.bar-sidebar）で行う */
 @media (max-width:760px) {
   .app,.app.sidebar-hidden {
     grid-template-columns:var(--activity-w) minmax(0,1fr);
     grid-template-areas:'activity main' 'status status';
   }
-  .app.sidebar-hidden { --activity-w:44px; }
-  .sidebar-launcher .icon-btn { width:44px; min-width:44px; height:48px; }
 }
-@media (any-pointer:coarse) and (min-width:761px) {
-  .app.sidebar-hidden { --activity-w:44px; }
-  .sidebar-launcher .icon-btn { width:44px; min-width:44px; height:48px; }
+
+/* ---------------------------------------------------- 上バーの ≡ と状態チップ
+   ≡ ／ ワークスペースタブ ／ ⊞ ／ 空き ／ ◆入力待ち N ／ ⚠承認待ち N ／ 接続状態 ／ ⌕ 探す・操作 */
+.bar-slot,.bar-live { display:contents; }
+.bar-btn,.bar-chip { display:flex; align-items:center; justify-content:center; gap:5px; flex:none; margin:0; padding:0 8px; min-height:32px; border:0; background:transparent; color:var(--fg-dim); font:inherit; font-size:12px; white-space:nowrap; cursor:pointer; }
+.bar-btn:hover,.bar-chip:hover { background:var(--bg-3); color:var(--fg); }
+.bar-btn:focus-visible,.bar-chip:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.bar-btn svg,.bar-chip svg { width:15px; height:15px; flex:none; }
+.bar-sidebar { width:34px; padding:0; border-right:1px solid var(--border); }
+.bar-sidebar[aria-pressed="true"] { color:var(--fg); background:var(--bg-2); }
+.bar-palette { border-left:1px solid var(--border); padding:0 10px; }
+.bar-kbd { font:10px var(--mono); color:var(--fg-dim); padding:1px 4px; border:1px solid var(--border-strong); }
+.bar-chip.attention { color:var(--yellow); }
+.bar-chip.approval { color:#1a1b26; background:var(--yellow); font-weight:600; margin:4px 2px; min-height:24px; }
+.bar-chip.approval:hover { background:var(--yellow); color:#000; filter:brightness(1.1); }
+.conn-status-wrap { position:relative; display:flex; flex:none; }
+.conn-dot { width:8px; height:8px; flex:none; border-radius:0; background:var(--green); }
+.conn-status.partial .conn-dot { background:var(--yellow); }
+.conn-status.bad { color:var(--red); }
+.conn-status.bad .conn-dot { background:var(--red); }
+.conn-status { min-width:30px; }
+.conn-popover { position:absolute; z-index:70; top:calc(100% + 4px); right:0; width:min(340px,calc(100vw - 16px)); padding:10px 12px; border:1px solid var(--border-strong); background:var(--bg-1); box-shadow:0 8px 28px #0008; font-size:12px; color:var(--fg); }
+.conn-devices { list-style:none; margin:0 0 8px; padding:0; }
+.conn-devices li { display:flex; align-items:center; gap:8px; padding:5px 0; }
+.conn-devices li.bad .conn-dot { background:var(--red); }
+.conn-device-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.conn-device-state { color:var(--fg-dim); }
+.conn-devices li.bad .conn-device-state { color:var(--red); }
+.conn-device-version { color:var(--fg-dim); font-family:var(--mono); font-size:10px; }
+.conn-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.conn-actions .btn { display:inline-flex; align-items:center; gap:4px; text-decoration:none; }
+.conn-actions .btn svg { width:14px; height:14px; }
+.conn-note { margin:8px 0 0; color:var(--fg-dim); overflow-wrap:anywhere; }
+.sw-filter { margin-left:auto; }
+.toast-list { display:flex; flex-direction:column; gap:8px; }
+.toast.warn { border-left-color:var(--yellow); }
+@media (max-width:760px), (any-pointer:coarse) {
+  .bar-btn,.bar-chip { min-height:44px; min-width:44px; }
+  .bar-sidebar { width:44px; }
+  .bar-chip.approval { min-height:36px; }
+  .conn-actions .btn { min-height:44px; }
+}
+@media (max-width:1099px) { .bar-kbd { display:none; } }
+@media (max-width:760px) {
+  /* 狭い画面では文字を省き、形と件数だけにする（スマホの見出しの作り直しは別のステップ） */
+  .bar-chip.attention .bar-chip-text,.bar-chip.approval .bar-chip-text,.bar-btn-text { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+  .bar-palette { padding:0; }
 }
 
 /* ---------------------------------------------------- リモートデスクトップのタブ

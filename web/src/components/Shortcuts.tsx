@@ -9,7 +9,7 @@ const OTHER_SHORTCUTS: { label: string; keys: string }[] = [
   { label: '探す・操作（端末）', keys: 'Alt+P' },
   { label: '探す・操作（操作）', keys: 'Alt+Shift+P' },
   { label: 'ショートカット一覧', keys: 'Alt+/' },
-  { label: 'セッション一覧を開く / 閉じる', keys: 'Alt+B' },
+  { label: '一覧を開く / 閉じる', keys: 'Alt+B' },
   { label: '見えているタブ列の n 番目のタブ（分割表示では入力先のパネル、1 パネル表示ではワークスペース全体で数える）', keys: 'Alt+1〜9' },
   { label: '見えているタブ列の最後のタブ', keys: 'Alt+0' },
   { label: '前のタブ / 次のタブ（見えているタブ列の順）', keys: 'Alt+[ / Alt+]' },

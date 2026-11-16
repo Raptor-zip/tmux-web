@@ -764,7 +764,7 @@ export function Sidebar({
               セッション別
             </button>
           </div>
-          <button className="icon-btn sidebar-close" aria-label="セッション一覧を閉じる" title="セッション一覧を閉じる (Alt+B)" onClick={onClose}><Icon name="close" /></button>
+          <button className="icon-btn sidebar-close" aria-label="一覧を閉じる" title="一覧を閉じる (Alt+B)" onClick={onClose}><Icon name="close" /></button>
         </div>
 
         {groupBy === 'session' && <button className="btn block" onClick={onNewSession}>＋ tmux セッションを作る</button>}
@@ -831,7 +831,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="sidebar-resize" role="separator" aria-label="セッション一覧の幅" aria-orientation="vertical"
+      <div className="sidebar-resize" role="separator" aria-label="一覧の幅" aria-orientation="vertical"
         aria-valuemin={200} aria-valuemax={600} aria-valuenow={width} tabIndex={0}
         onKeyDown={e => {
           if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
