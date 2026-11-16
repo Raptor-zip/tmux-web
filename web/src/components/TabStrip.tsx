@@ -172,7 +172,7 @@ export function TabStrip({
   return (
     <div className={`tabstrip ${focused ? 'focused' : ''}`} data-strip-leaf={leaf.id}>
       {single?.kind === 'focus' && (
-        <button className="strip-chip" title="パネルを並びに戻す (Alt+Enter)" onClick={onRestore}>
+        <button className="strip-chip" title="最大化中 · 並びに戻す (Alt+Enter)" onClick={onRestore}>
           <Icon name="shrink" />最大化中 · 並びに戻す
         </button>
       )}
@@ -203,7 +203,7 @@ export function TabStrip({
         {shown.map(({ tab, leafId, view, session, device, screen, label }, i) => {
           const active = tab.id === leaf.activeId;
           const kind = view?.status.kind ?? 'idle';
-          const mark = stableMarks.get(tab.id);
+          const titleMark = stableMarks.get(tab.id);
           // 1 画面表示でパネルをまたぐところに細い区切りを入れる
           const boundary = i > 0 && desktopTabs && shown[i - 1].leafId !== leafId;
           const where = screen ? 'リモートデスクトップ' : view ? whereWithSession(view, session) : '接続が切れました';
@@ -273,7 +273,7 @@ export function TabStrip({
               >
                 {screen ? <span className="tab-kind" aria-hidden="true"><Icon name="screen" /></span> : <span className={`state-dot ${kind}`} />}
                 <span className="tab-name">{label}</span>
-                {mark && <span className="tab-mark">· {mark}</span>}
+                {titleMark && <span className="tab-mark">· {titleMark}</span>}
                 {screen && device && !device.connected && <span className="tab-device" title={device.error}>切断</span>}
                 {!screen && device && !device.local && <span className="tab-device" title={device.error}>{device.connected ? device.name : `${device.name} · 切断`}</span>}
                 <button
