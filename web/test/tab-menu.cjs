@@ -76,6 +76,8 @@ module.exports = async function checkTabMenu(page, { scene, out, touch }) {
     await undo.waitFor({ state: 'detached' });
     await page.waitForFunction(n => document.querySelectorAll('.tile .tab .tab-name').length >= n, beforeClose.length);
     assert.deepEqual(await tabNames(), beforeClose, 'undo restores the tabs in their order');
+    // 押したトーストは消えるので、入力の先は戻したパネルの端末へ返る
+    await page.waitForFunction(() => !!document.activeElement?.closest('.tile.focused'));
 
     // Shift+F10 でもタブメニュー
     await page.locator('.tile:visible .tab.active').focus();
@@ -87,6 +89,23 @@ module.exports = async function checkTabMenu(page, { scene, out, touch }) {
     const menuBox = await menu.boundingBox();
     assert.ok(Math.abs(menuBox.y - (tabBox.y + tabBox.height)) <= 8, 'Shift+F10 opens the tab menu once, under the tab ' + JSON.stringify({ menuBox, tabBox }));
     await closeMenu();
+
+    // このパネルを閉じても『元に戻す』が出て、パネルとタブが戻る
+    await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+    await item('配置').click();
+    await item('右に分割して移す').click();
+    await menu.waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelectorAll('.tile').length === 2);
+    await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+    await item('まとめて閉じる').click();
+    await page.getByRole('menuitem', { name: /^このパネル（1 タブ）$/ }).click();
+    await menu.waitFor({ state: 'detached' });
+    await undo.waitFor();
+    assert.equal(await page.locator('.tile').count(), 1, 'the panel was closed');
+    assert.match(await page.locator('.toast.has-action').textContent(), /^「.+」のパネルを閉じました（1 タブ）/, 'the panel is named by its tab');
+    await undo.click();
+    await undo.waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelectorAll('.tile').length === 2);
   } else {
     // タブの長押し
     await longPress(page.locator('.tile:visible .tab.active'));

@@ -2235,7 +2235,7 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .toast-action:hover {
   background: var(--bg-3, rgba(255, 255, 255, 0.06));
 }
-@media (pointer: coarse) {
+@media (any-pointer: coarse) {
   .toast-text,
   .toast-action {
     min-height: 44px;

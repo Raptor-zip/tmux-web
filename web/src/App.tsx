@@ -752,6 +752,17 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     [setLayout],
   );
 
+  /** タブの表示名。パネルは番号ではなく、表示中のタブ名で示す（「api」のパネル） */
+  const tabTitle = useCallback(
+    (t: TabRef | undefined) => {
+      if (!t) return '';
+      if (isScreenTab(t)) return devices.find(d => d.id === t.deviceId)?.name ?? 'リモートデスクトップ';
+      const w = t.windowId ? windows.find(x => x.id === t.windowId) : windows.find(x => x.sessionId === t.sessionId && x.active);
+      return (w && views.get(w.id)?.project) || t.sessionName || '端末';
+    },
+    [windows, views, devices],
+  );
+
   /** まとめて閉じる直前の配置。『元に戻す』トーストと対で 1 つだけ持つ */
   const undoRef = useRef<{ snap: LayoutSnapshot; toastId: number } | null>(null);
   const dropUndo = useCallback(() => {
@@ -790,6 +801,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           layoutRef.current = back.layout;
           setLayout(back.layout);
           setFocusedId(back.focusedId);
+          // 押したトーストは消えるので、入力の先を戻したパネルの端末へ返す
+          if (back.focusedId) focusSoon(back.focusedId);
         },
       });
       undoRef.current = { snap, toastId };
@@ -802,9 +815,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     (leafId: string) =>
       closeWithUndo(
         (tree) => removeLeaf(tree, leafId),
-        (before) => `パネルを閉じました（${findLeaf(before, leafId)?.tabs.length ?? 0} タブ）`,
+        (before) => {
+          const leaf = findLeaf(before, leafId);
+          return `「${tabTitle(leaf ? activeTab(leaf) ?? undefined : undefined)}」のパネルを閉じました（${leaf?.tabs.length ?? 0} タブ）`;
+        },
       ),
-    [closeWithUndo],
+    [closeWithUndo, tabTitle],
   );
 
   /** タブ列や端末に落とされた。ここで動くのはブラウザ側の配置だけで、tmux は触らない */
@@ -975,12 +991,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       const at = leaf.tabs.findIndex((t) => t.id === tabId);
       const right = leaf.tabs.slice(at + 1).map((t) => t.id);
       const leavesNow = allLeaves(tree);
-      const titleOf = (t: TabRef | undefined) => {
-        if (!t) return '';
-        if (isScreenTab(t)) return devices.find(d => d.id === t.deviceId)?.name ?? 'リモートデスクトップ';
-        const w = t.windowId ? windows.find(x => x.id === t.windowId) : windows.find(x => x.sessionId === t.sessionId && x.active);
-        return (w && views.get(w.id)?.project) || t.sessionName || '端末';
-      };
       return {
         index: at,
         count: leaf.tabs.length,
@@ -991,7 +1001,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         desktops: desktopTargets.filter(d => d.id !== workspaceId),
         panels: leavesNow.filter(l => l.id !== leaf.id).map(target => ({
           id: target.id,
-          name: titleOf(activeTab(target) ?? undefined),
+          name: tabTitle(activeTab(target) ?? undefined),
           tabs: target.tabs.length,
         })),
         moveLeft: () => setLayout(prev => prev ? moveTab(prev, tabId, leaf.id, leaf.tabs[at - 1]?.id) : prev),
@@ -1017,7 +1027,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         killWindow: () => win && killWindow(win),
       };
     },
-    [windows, views, devices, closeTabById, closeWithUndo, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
+    [windows, devices, tabTitle, closeTabById, closeWithUndo, setLayout, onDrop, doAction, killWindow, desktopTargets, workspaceId, onMoveDesktopTab],
   );
 
   /**
