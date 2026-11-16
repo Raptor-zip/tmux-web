@@ -24,13 +24,15 @@ interface Props {
   version?: string;
   onReconnect(): void;
   onManageDevices(): void;
+  /** 『表示と接続』を開く */
+  onOpenSettings(): void;
 }
 
 /**
  * 接続状態のチップとポップオーバー。
- * ポップオーバー：デバイスごとの状態 / 再接続 / 接続先を開く / デバイス接続を管理… / バージョン。
+ * ポップオーバー：デバイスごとの状態 / 再接続 / 接続先を開く / デバイス接続を管理… / 表示と接続… / バージョン。
  */
-export function ConnectionStatus({ label, devices, syncError, authUrl, version, onReconnect, onManageDevices }: Props) {
+export function ConnectionStatus({ label, devices, syncError, authUrl, version, onReconnect, onManageDevices, onOpenSettings }: Props) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -71,6 +73,7 @@ export function ConnectionStatus({ label, devices, syncError, authUrl, version, 
         <button className="btn" onClick={() => { onReconnect(); close(); }}><Icon name="refresh" />再接続</button>
         {authUrl && <a className="btn" href={authUrl}>接続先を開く</a>}
         <button className="btn" onClick={() => { setOpen(false); onManageDevices(); }}>デバイス接続を管理…</button>
+        <button className="btn" onClick={() => { setOpen(false); onOpenSettings(); }}>表示と接続…</button>
       </div>
       {version && <p className="conn-note">バージョン {version}</p>}
     </div>}

@@ -35,7 +35,7 @@ test('every menu slot names a registered command', () => {
 });
 
 const app = (over: Partial<AppContext> = {}): AppContext => ({
-  session: null, window: null, activePane: null, mode: 'mirror', showStatusBar: false, showKeyBar: false, altKeys: true,
+  session: null, window: null, activePane: null, mode: 'mirror', showStatusBar: false, inputBar: 'auto', altKeys: true,
   onAction() {}, onNewTab() {}, onLaunchAgent() {}, launchingAgent: null, onSplitNewWindow() {}, onOpenNewMenu() {}, onToggle() {},
   onCopyPane() {}, onKillPane() {}, onOpenFiles() {}, onRemoteControl() {}, onExitClaude() {}, onOpenScreen() {}, onOpenScreenTab() {},
   onOpenSwitcher() {}, onOpenShortcuts() {}, approvalPending: false, onOpenApproval() {}, onSendCommand() {}, onSelectText() {}, onPaste() {}, ...over,
@@ -62,14 +62,14 @@ test('tab menu groups placement, tmux and bulk close into submenus', () => {
   assert.deepEqual(items.map(e => (e ? e.label : '---')), [
     '全文をコピー（履歴込み）', 'テキストを選んでコピー…', '貼り付け', '---',
     '作業フォルダーを開く', 'コマンドを送る…', '---',
-    '配置', 'tmux', '---', '表示と設定', '---', 'タブを閉じる', 'まとめて閉じる',
+    '配置', 'tmux', '---', 'タブを閉じる', 'まとめて閉じる',
   ]);
   const names = (label: string) => sub(items, label).map(e => (e ? e.label : '---'));
   assert.deepEqual(names('配置'), ['パネルを最大化', '右に分割して移す', '下に分割して移す', '「api」のパネルへ移す', 'ワークスペース「作業2」へ移す', '左へ移す', '右へ移す']);
   assert.deepEqual(names('tmux'), ['端末の名前を変更…', 'ペインを拡大（tmux）', 'ペインを終了…', '端末を終了…']);
   assert.deepEqual(names('まとめて閉じる'), ['他のタブ（1）', '右側のタブ（1）', 'このパネル（2 タブ）']);
   assert.ok(!items.some(e => e?.label === '新規'), 'creating moved to the new menu (＋▾)');
-  assert.ok(names('表示と設定').includes('Alt ショートカットを使う'));
+  assert.ok(!items.some(e => e?.label === '表示と設定'), 'settings moved to the 表示と接続 dialog');
   // 最大化中は「並びに戻す」になる
   assert.equal(sub(buildMenu(TAB_MENU, full({ maximized: true })), '配置')[0]!.label, '並びに戻す');
   // 移す先のパネルにはタブ数を添える
@@ -108,15 +108,21 @@ test('tab menu switches screen/terminal items and runs with its context', () => 
 
 test('menu items run the registered action with their context', () => {
   const calls: string[] = [];
-  const items = buildMenu(TAB_MENU, full({ app: { onNewTab: () => calls.push('new'), onToggle: k => calls.push(k), altKeys: true } }));
   (buildMenu(NEW_MENU, full({ app: { onNewTab: () => calls.push('new') } }))[0] as MenuItem).run();
-  const view = sub(items, '表示と設定');
-  (view.find(e => e?.label === '直接接続に切り替える') as MenuItem).run();
-  const alt = view.at(-1) as MenuItem;
+  // 表示の切り替えはパレットの『操作』から（『表示と接続』と同じ値）
+  const ctx = (over: Partial<AppContext> = {}) => ({ app: app({ onToggle: k => calls.push(k), onOpenSettings: () => calls.push('settings'), ...over }) });
+  const list = paletteCommands(ctx());
+  list.find(c => c.id === 'view.mode')!.run();
+  const alt = list.find(c => c.id === 'view.altKeys')!;
   assert.equal(alt.hint, 'オン');
   alt.run();
-  assert.deepEqual(calls, ['new', 'mode', 'altKeys']);
-  assert.equal(((sub(buildMenu(TAB_MENU, full({ app: { altKeys: false } })), '表示と設定').at(-1)) as MenuItem).hint, 'オフ');
+  list.find(c => c.id === 'view.settings')!.run();
+  assert.deepEqual(calls, ['new', 'mode', 'altKeys', 'settings']);
+  assert.equal(paletteCommands(ctx({ altKeys: false })).find(c => c.id === 'view.altKeys')!.hint, 'オフ');
+  assert.equal(list.find(c => c.id === 'view.inputBar')!.hint, '自動 → 常に表示');
+  // アプリとして開いているときは『アプリとして追加』を出さない
+  assert.ok(paletteCommands(ctx({ onInstallApp() {} })).some(c => c.id === 'app.install'));
+  assert.ok(!paletteCommands(ctx({ onInstallApp() {}, appInstalled: true })).some(c => c.id === 'app.install'));
 });
 
 test('Claude exit asks before sending /exit', () => {
@@ -215,7 +221,7 @@ test('palette commands search labels and aliases and run with their context', ()
   assert.ok(!list.some(c => c.id === 'navigate.approval'), 'approval appears only while one is pending');
   const find = (q: string) => list.filter(c => matchesCommand(c, q)).map(c => c.label);
   assert.ok(find('本文をコピー').includes('全文をコピー（履歴込み）'), 'old names find the renamed command');
-  assert.ok(find('キーバー').includes('キーバーの表示を切り替える'), 'menu labels are searchable');
+  assert.ok(find('キーバー').includes('入力行の表示を切り替える'), 'old names find the renamed command');
   assert.ok(find('新しい 端末 タブ').includes('新しい端末'), 'every word must match (old names are aliases)');
   assert.deepEqual(find('no-such-command'), []);
   list.find(c => c.id === 'terminal.newTab')!.run();

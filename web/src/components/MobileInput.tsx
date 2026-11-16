@@ -4,6 +4,8 @@ import type { AttachmentResult } from '../attachments';
 
 interface Props {
   connected: boolean;
+  /** 『入力行：常に表示』。マウスの広い画面でも出す */
+  always?: boolean;
   onPaste(text: string): boolean | undefined;
   onSend(data: string): void;
   /** 添付の入力結果と、下書きに回収するパスを返す。 */
@@ -11,7 +13,7 @@ interface Props {
 }
 
 /** 通常の textarea に変換・選択・長押し貼り付けを任せ、確定後だけ端末へ渡す。 */
-export function MobileInput({ connected, onPaste, onSend, onAttach }: Props) {
+export function MobileInput({ connected, always, onPaste, onSend, onAttach }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState('');
   const [composing, setComposing] = useState(false);
@@ -44,7 +46,7 @@ export function MobileInput({ connected, onPaste, onSend, onAttach }: Props) {
     input.current?.focus();
   };
   return (
-    <div className="mobile-input">
+    <div className={`mobile-input${always ? ' input-always' : ''}`}>
       <div className="mobile-input-toggle-row"><button className="input-toggle" aria-expanded={expanded} onClick={()=>{if (expanded) { input.current?.blur(); setComposing(false); } setExpanded(v=>!v); if (!expanded) requestAnimationFrame(()=>input.current?.focus());}}><Icon name="keyboard" />{expanded ? '入力欄を閉じる' : text ? '下書きを開く' : '文字入力・貼り付け'}</button><button className="input-attach" disabled={!connected || attaching} onClick={()=>picker.current?.click()}><Icon name="plus" />{attaching ? '送信中…' : '添付'}</button><input ref={picker} type="file" multiple hidden onChange={(e)=>void attach(e.target.files)} /><button className="input-enter" disabled={!connected || composing} onClick={()=>onSend('\r')}>Enter ↵</button></div>
       <div className="mobile-input-draft" hidden={!expanded}>
       <textarea

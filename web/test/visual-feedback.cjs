@@ -137,7 +137,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    else if(url.pathname.endsWith('/events')){if(remote&&scene.offline){ws.close();return;}const send=()=>ws.send(JSON.stringify({type:'state',...state(remote?'spark':'local')}));send();ws.onMessage(send);}
    else if(url.pathname.endsWith('/terminal')){
     const acknowledge=(!!process.env.TERMINAL_SELECTION_CHECK && scene.name==='terminal-selection')||!!process.env.TERMINAL_DIRECT_CHECK;
-    const transport={socket:ws,remote,window:url.searchParams.get('window'),selections:[],inputs:[]};
+    const transport={socket:ws,remote,window:url.searchParams.get('window'),mode:url.searchParams.get('mode'),selections:[],inputs:[]};
     terminalConnections++;activeTerminals++;terminalTransports.push(transport);ws.onClose((code,reason)=>{transport.closeEvents=(transport.closeEvents||0)+1;if(transport.closed)return;transport.closed=true;activeTerminals--;void ws.close({code,reason}).catch(()=>{});});
     if(remote&&scene.offline){ws.send(JSON.stringify({type:'error',message:'接続先がオフラインです。再接続しています。'}));ws.close();return;}
     const ready=()=>{ws.send(JSON.stringify({type:'ready',mode:'mirror',...(acknowledge?{selectionAck:true,windowId:url.searchParams.get('window')}:{})}));ws.send(Buffer.from('\x1b[?1000h\x1b[?1006h'+output(deviceNames[remote?'spark':'local'])));};
@@ -238,6 +238,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.deepEqual(errors,[],'no runtime errors after form and font interactions');
   }
 
+  if(phase==='after' && process.env.SETTINGS_CHECK && (scene.name==='desktop-controls' || scene.name==='mobile-panels')){
+   await require('./settings.cjs')(page,{scene,terminalTransports,out});
+   assert.deepEqual(errors,[],'settings runtime errors');
+  }
   if(phase==='after' && process.env.SAFETY_CHECK && (scene.action==='devices' || scene.name==='desktop-controls')){
    await require('./safety.cjs')(page,{scene,terminalInputs,requests:apiRequests});
    assert.deepEqual(errors,[],'safety check runtime errors');

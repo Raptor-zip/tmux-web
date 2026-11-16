@@ -87,7 +87,7 @@ module.exports = async function prepareSwitcher(page, { state, scene }) {
     await scopeButton('操作').click();
     await input.fill('キーバー');
     await dialog.locator('.sw-cmd').first().waitFor();
-    check((await dialog.locator('.sw-row.on .sw-command').innerText()) === 'キーバーの表示を切り替える', 'command search matches menu labels');
+    check((await dialog.locator('.sw-row.on .sw-command').innerText()) === '入力行の表示を切り替える', 'command search finds the input bar by its old name');
     const keybarBefore = await page.locator('.keybar').count();
     await input.focus(); await page.keyboard.press('Enter');
     check(!await dialog.isVisible(), 'running a command closes the palette');

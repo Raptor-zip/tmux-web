@@ -44,15 +44,24 @@ module.exports = async (page, { scene, terminalInputs, requests }) => {
   await page.waitForTimeout(100);
   assert.equal(await sidebarHidden(), before);
 
-  // Turn them off from the workspace menu (temporary home until the settings dialog)
+  // Turn them off from 表示と接続 (connection chip → 表示と接続…)
   const openMenu = async (submenu) => {
     await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
     await page.getByRole('menuitem', { name: submenu, exact: true }).click();
   };
-  await openMenu('表示と設定');
-  const toggle = page.getByRole('menuitem', { name: /Alt ショートカットを使う/ });
-  assert.match(await toggle.textContent(), /オン/);
-  await toggle.click();
+  const settings = page.getByRole('dialog', { name: '表示と接続', exact: true });
+  const setAltKeys = async (on) => {
+    await page.locator('.conn-status').click();
+    await page.getByRole('button', { name: '表示と接続…', exact: true }).click();
+    await settings.waitFor();
+    const toggle = settings.getByRole('switch', { name: 'Alt ショートカットを使う' });
+    assert.equal(await toggle.getAttribute('aria-checked'), String(!on));
+    await toggle.click();
+    assert.equal(await toggle.getAttribute('aria-checked'), String(on));
+    await page.keyboard.press('Escape');
+    await settings.waitFor({ state: 'detached' });
+  };
+  await setAltKeys(false);
   assert.equal(await page.evaluate(() => localStorage.getItem('tw.altKeys')), 'false');
   await terminal.focus();
   const sentOff = terminalInputs.length;
@@ -66,8 +75,7 @@ module.exports = async (page, { scene, terminalInputs, requests }) => {
   await page.keyboard.press('Alt+Shift+N');
   await page.waitForTimeout(150);
   assert.equal(await page.locator('.desktop-tab').count(), workspaces, 'Alt+Shift+N does not create a workspace when shortcuts are off');
-  await openMenu('表示と設定');
-  await page.getByRole('menuitem', { name: /Alt ショートカットを使う/ }).click();
+  await setAltKeys(true);
   assert.equal(await page.evaluate(() => localStorage.getItem('tw.altKeys')), 'true');
 
   // Destructive confirmations start on Cancel, so Enter does not run them

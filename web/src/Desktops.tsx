@@ -2,7 +2,9 @@ import { ContextMenu } from './components/ContextMenu';
 import { buildMenu } from './commands';
 import { DESKTOP_MENU } from './menus';
 import { ScreenViewer } from './components/ScreenViewer';
-import { InstallApp } from './components/InstallApp';
+import { InstallHelp } from './components/InstallApp';
+import { Settings } from './components/Settings';
+import { Shortcuts } from './components/Shortcuts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import App from './App';
 import { flushSync } from 'react-dom';
@@ -12,7 +14,7 @@ import { useWorkspaceStatus, useWorkspaceValue, workspaceStore } from './workspa
 import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
-import { useSharedSetting } from './shared-setting';
+import { useAltKeys } from './shared-setting';
 import { useLongPress } from './hooks/useLongPress';
 import { ConnectionStatus, connectionLabel } from './components/ConnectionStatus';
 import { Devices } from './components/Devices';
@@ -45,6 +47,9 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
   const sync = useWorkspaceStatus();
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
+  /** 『表示と接続』。設定はワークスペースに依らないので、ここで 1 つだけ持つ */
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** 上バーの差し込み口。表示中のワークスペースの App が ≡・入力待ち・承認待ち・⌕ をここへ描く */
   const [leadSlot, setLeadSlot] = useState<HTMLElement | null>(null);
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
@@ -168,7 +173,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
     else if (child.right > parent.right) list.current.scrollLeft += child.right - parent.right;
   }, [state.activeId]);
   // tw.altKeys がオフなら、ワークスペースの Alt+Shift 操作も奪わず端末へ渡す
-  const [altKeys] = useSharedSetting('tw.altKeys', true);
+  const [altKeys] = useAltKeys();
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!altKeys || !event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || dialog || document.querySelector('dialog[open], [aria-modal="true"], .modal-backdrop, [role="menu"]')) return;
@@ -219,7 +224,6 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
       </div>
       <button className="desktop-add" aria-label="デスクトップを追加" title="デスクトップを追加 (Alt+Shift+N)" onClick={create}><Icon name="plus" /></button>
       <button className="remote-desktop-launch" aria-label="リモートデスクトップ" title="リモートデスクトップ" onClick={() => setRemoteOpen(true)}><Icon name="screen" /></button>
-      <InstallApp />
       <span className="bar-slot bar-status" ref={setStatusSlot} />
       <ConnectionStatus
         label={connectionLabel({ connected: connection.connected, unauthorized: connection.unauthorized, hasState: !!connection.state, syncOk: sync.connected && !sync.error })}
@@ -228,14 +232,16 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
         authUrl={connection.authUrl}
         version={connection.state?.server?.version}
         onReconnect={() => { connection.reconnect(); workspaceStore.reconnect(); }}
-        onManageDevices={() => setDevicesOpen(true)} />
+        onManageDevices={() => setDevicesOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)} />
       <span className="bar-slot" ref={setTrailSlot} />
     </header>
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
         {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab}
-          barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot } : undefined} />}
+          barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot } : undefined}
+          onOpenSettings={() => setSettingsOpen(true)} />}
       </section>)}
     </div>
     {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} title={state.items.find(item => item.id === tabMenu.id)?.name} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: { rename: () => {
@@ -252,6 +258,12 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
       handle.write(next.layout, next.focusedId);
     }} />}
     {devicesOpen && <Devices devices={connection.devices} onChanged={connection.reloadDevices} onClose={() => setDevicesOpen(false)} />}
+    {settingsOpen && <Settings
+      versions={connection.devices.filter(d => d.server?.version).map(d => ({ name: d.name, version: d.server?.version }))}
+      onOpenShortcuts={() => { setSettingsOpen(false); setShortcutsOpen(true); }}
+      onClose={() => setSettingsOpen(false)} />}
+    {shortcutsOpen && <Shortcuts altKeys={altKeys} onClose={() => setShortcutsOpen(false)} />}
+    <InstallHelp />
     {dialog && <Dialog spec={dialog} onClose={() => setDialog(null)} />}
   </div>;
 }

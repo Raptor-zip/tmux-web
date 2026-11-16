@@ -29,3 +29,17 @@ test('service worker never substitutes an offline or cached page for an authenti
   const response = await worker(async () => new Response('denied', { status: 401 }))('/')!;
   assert.equal(response.status, 401); assert.equal(await response.text(), 'denied');
 });
+
+test('the install hint toast appears once, and only when the browser can install the app', async () => {
+  const { takeInstallHint, INSTALL_HINT_KEY } = await import('../src/pwa');
+  const store = new Map<string, string>();
+  const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } };
+  assert.equal(takeInstallHint(storage, { installed: false, promptable: false }), false, 'no hint when the browser cannot prompt');
+  assert.equal(takeInstallHint(storage, { installed: true, promptable: true }), false, 'no hint inside the installed app');
+  assert.equal(store.has(INSTALL_HINT_KEY), false);
+  assert.equal(takeInstallHint(storage, { installed: false, promptable: true }), true, 'first chance shows the hint');
+  assert.equal(takeInstallHint(storage, { installed: false, promptable: true }), false, 'never shown twice');
+  assert.equal(takeInstallHint(null, { installed: false, promptable: true }), false, 'no storage, no hint');
+  const throwing = { getItem: () => { throw new Error('blocked'); }, setItem: () => {} };
+  assert.equal(takeInstallHint(throwing, { installed: false, promptable: true }), false);
+});

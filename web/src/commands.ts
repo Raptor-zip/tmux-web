@@ -1,5 +1,6 @@
 import type { MenuEntry, MenuItem } from './components/ContextMenu';
 import type { Pane, Session, TmuxWindow } from './types';
+import { INPUT_BAR_LABEL, nextInputBar, type InputBarMode } from './shared-setting';
 
 /**
  * 操作の登録表。
@@ -20,7 +21,8 @@ export interface AppContext {
   activePane: Pane | null;
   mode: 'mirror' | 'direct';
   showStatusBar: boolean;
-  showKeyBar: boolean;
+  /** 入力行の出し方（tw.inputBar） */
+  inputBar: InputBarMode;
   /** Alt のショートカットをアプリで受けるか（tw.altKeys）。オフなら Alt キーは端末へそのまま届く */
   altKeys: boolean;
   onAction(action: string, params: Record<string, unknown>): void;
@@ -36,7 +38,8 @@ export interface AppContext {
   waitingCount?: number;
   /** 次の入力待ちの端末へ移る（Alt+J） */
   onNextWaiting?(): void;
-  onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar' | 'altKeys'): void;
+  /** mode は確認してから切り替える。inputBar は 自動 → 常に表示 → 隠す の順に回す */
+  onToggle(key: 'mode' | 'showStatusBar' | 'inputBar' | 'altKeys'): void;
   onCopyPane(): void;
   onKillPane(): void;
   onOpenFiles(): void;
@@ -50,6 +53,11 @@ export interface AppContext {
   onOpenSwitcher(): void;
   /** ショートカット一覧を開く */
   onOpenShortcuts(): void;
+  /** 『表示と接続』を開く */
+  onOpenSettings?(): void;
+  /** アプリとして開いている（追加済み）。『アプリとして追加』を出さない */
+  appInstalled?: boolean;
+  onInstallApp?(): void;
   /** sudo の承認待ちがあるか */
   approvalPending: boolean;
   onOpenApproval(): void;
@@ -386,9 +394,15 @@ export const COMMANDS: Command[] = [
 
   // ---- 表示
   define({
-    id: 'view.keyBar', scope: 'app', group: 'view', label: 'キーバーの表示を切り替える',
-    menuLabel: c => `キーバーを${c.showKeyBar ? '隠す' : '表示'}`,
-    run: c => c.onToggle('showKeyBar'),
+    id: 'view.settings', scope: 'app', group: 'view', label: '表示と接続…',
+    aliases: ['設定', '文字サイズ', '行間', 'インストール', 'バージョン'],
+    when: c => !!c.onOpenSettings, run: c => c.onOpenSettings!(),
+  }),
+  define({
+    id: 'view.inputBar', scope: 'app', group: 'view', label: '入力行の表示を切り替える',
+    aliases: ['キーバーの表示を切り替える', 'キーバー'],
+    hint: c => `${INPUT_BAR_LABEL[c.inputBar]} → ${INPUT_BAR_LABEL[nextInputBar(c.inputBar)]}`,
+    run: c => c.onToggle('inputBar'),
   }),
   define({
     id: 'view.statusBar', scope: 'app', group: 'view', label: 'tmux のステータス行の表示を切り替える',
@@ -396,16 +410,21 @@ export const COMMANDS: Command[] = [
     run: c => c.onToggle('showStatusBar'),
   }),
   define({
-    id: 'view.mode', scope: 'app', group: 'view', label: '接続方式を切り替える',
-    menuLabel: c => (c.mode === 'mirror' ? '直接接続に切り替える' : 'ミラー接続に切り替える'),
+    id: 'view.mode', scope: 'app', group: 'view', label: '接続方式を切り替える…',
+    aliases: ['接続方式を切り替える', 'ミラー', '直接'],
+    menuLabel: c => (c.mode === 'mirror' ? '直接接続に切り替える…' : 'ミラー接続に切り替える…'),
     run: c => c.onToggle('mode'),
   }),
   define({
-    // 設定ダイアログ（ステップ10）ができるまでの仮置き。ワークスペースメニューの末尾に出す
     id: 'view.altKeys', scope: 'app', group: 'view', label: 'Alt ショートカットを使う',
     aliases: ['Alt キー', 'ショートカットを無効にする'],
     hint: c => (c.altKeys ? 'オン' : 'オフ'),
     run: c => c.onToggle('altKeys'),
+  }),
+  define({
+    id: 'app.install', scope: 'app', group: 'view', label: 'アプリとして追加',
+    aliases: ['アプリとしてインストール', 'インストール', 'ホーム画面に追加'],
+    when: c => !c.appInstalled && !!c.onInstallApp, run: c => c.onInstallApp!(),
   }),
 
   // ---- タブ

@@ -113,7 +113,7 @@
 @media (max-width:760px), (pointer:coarse) {
  .tab-close { width:44px; min-width:44px; height:44px; min-height:44px; }
  .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; min-width:44px; height:44px; min-height:44px; }
- .desktop-close,.desktop-add,.desktop-rename,.app-install { min-width:44px; }
+ .desktop-close,.desktop-add,.desktop-rename { min-width:44px; }
  .editorbar { min-height:48px; }
 }
 /* Keep project confirmation reachable when a short viewport or keyboard reduces height. */

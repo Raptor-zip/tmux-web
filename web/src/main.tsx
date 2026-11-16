@@ -4,9 +4,10 @@ import Desktops from './Desktops';
 import '@fontsource-variable/noto-sans-jp';
 import './styles.css';
 import './responsive.css';
-import { registerAppWorker } from './pwa';
+import { registerAppWorker, watchInstall } from './pwa';
 
 registerAppWorker();
+watchInstall();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

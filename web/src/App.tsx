@@ -19,7 +19,8 @@ import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar
 import { tabMenuItems, FONT_SIZE_MENU, LINE_HEIGHT_MENU, NEW_MENU } from './menus';
 import { buildMenu, paletteCommands, type AppContext, type CreateContext, type PanelContext, type SelectionContext, type TabContext, type ViewContext } from './commands';
 import { KeyBar } from './components/KeyBar';
-import { useSharedSetting } from './shared-setting';
+import { nextInputBar, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLineHeight, useStatusLine } from './shared-setting';
+import { requestInstall, takeInstallHint, useInstallState } from './pwa';
 import { Dialog, type DialogSpec } from './components/Dialog';
 import { SplitView, tabPayload, type DragPayload, type DropTarget } from './components/SplitView';
 import { Switcher, type PaletteScope, type PaletteTabGroup, type SwitchItem } from './components/Switcher';
@@ -124,9 +125,11 @@ export interface BarSlots {
   trailing: HTMLElement | null;
 }
 
-export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab, barSlots }: {
+export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab, barSlots, onOpenSettings }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
   barSlots?: BarSlots;
+  /** 『表示と接続』を開く（Desktops.tsx が持つ。設定は全ワークスペースで共通） */
+  onOpenSettings?(): void;
   desktopLayouts: DesktopLayoutRegistry;
   desktopTargets: { id: string; name: string }[];
   onMoveDesktopTab(sourceId: string, tabId: string, destinationId: string): void;
@@ -162,17 +165,21 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
   const [layout, setLayout] = useWorkspaceValue<LayoutNode | null>(key('tw.layout'), null, migrate);
   const [focusedId, setFocusedId] = useWorkspaceValue<string | null>(key('tw.focusedLeaf'), null);
-  const [mode, setMode] = usePersisted<'mirror' | 'direct'>('tw.mode', 'mirror');
-  const [showStatusBar, setShowStatusBar] = usePersisted('tw.statusBar', false);
-  const [showKeyBar, setShowKeyBar] = usePersisted('tw.keyBar.v2', false);
+  // 『表示と接続』の設定。すべてのワークスペースで同じ値を見る（shared-setting.ts）
+  const [mode, setMode] = useConnectionMode();
+  const [showStatusBar, setShowStatusBar] = useStatusLine();
+  /** 入力行（キー列＋入力）：自動 / 常に表示 / 隠す。旧キーバーの設定を引き継ぐ */
+  const [inputBar, setInputBar] = useInputBar();
   /** Alt のショートカットをアプリで受けるか。オフなら Alt キーはすべて端末（readline や TUI）へ届く */
-  const [altKeys, setAltKeys] = useSharedSetting('tw.altKeys', true);
+  const [altKeys, setAltKeys] = useAltKeys();
   // 一覧はプロジェクト（作業ディレクトリのリポジトリ）単位を既定にする。
   // 1 つのディレクトリに 1 つのエージェント、という使い方に一覧の形を合わせる
   const [groupBy, setGroupBy] = usePersisted<GroupBy>('tw.groupBy', 'project');
-  const [fontSize, setFontSize] = usePersisted('tw.fontSize', 13);
-  const [lineHeight, setLineHeight] = usePersisted('tw.lineHeight', 1.15);
+  const [fontSize, setFontSize] = useFontSize();
+  const [lineHeight, setLineHeight] = useLineHeight();
   useEffect(() => {
+    // 文字サイズは全ワークスペース共通なので、表示中のワークスペースだけがホイールを受ける
+    if (!active) return;
     let accumulated = 0;
     let lastTime = 0;
     const onWheel = (event: WheelEvent) => {
@@ -197,7 +204,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     };
     window.addEventListener('wheel', onWheel, { capture: true, passive: false });
     return () => window.removeEventListener('wheel', onWheel, true);
-  }, [setFontSize]);
+  }, [active, setFontSize]);
   // 狭い画面ではサイドバーが全面を覆ってしまうので、最初は畳んでおく
   const isNarrow = () => window.matchMedia('(max-width: 760px)').matches;
   // 開閉は覚えておく。VS Code と同じで、閉じたまま開き直せるほうが自然
@@ -268,6 +275,19 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     setToasts((t) => [...t, { id, text: `sudo の承認待ち：${pending.cmd}`, kind: 'warn', urgent: true, action: { label: '内容を確認', run: () => setApprovalOpen(true) } }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 8000);
   }, [active, approval.pending]);
+
+  // 『アプリとして追加』は上バーに置かない。追加できるブラウザでは、初回に一度だけ案内する
+  const install = useInstallState();
+  useEffect(() => {
+    if (!active || install.installed || !install.promptable) return;
+    let storage: Storage | null = null;
+    try { storage = localStorage; } catch { /* 保存できない環境では案内しない */ }
+    if (!takeInstallHint(storage, install)) return;
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t, { id, text: 'アプリとして追加すると、専用ウィンドウで開けます', kind: 'info',
+      action: { label: 'アプリとして追加', run: () => { setToasts((t) => t.filter((x) => x.id !== id)); void requestInstall(); } } }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 10_000);
+  }, [active, install]);
 
   /**
    * 取り返しのつかない操作の確認。ブラウザ標準の confirm() は使わない。
@@ -1115,13 +1135,19 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   );
 
   const onToggle = useCallback(
-    (key: 'mode' | 'showStatusBar' | 'showKeyBar' | 'altKeys') => {
-      if (key === 'mode') setMode((m) => (m === 'mirror' ? 'direct' : 'mirror'));
+    (key: 'mode' | 'showStatusBar' | 'inputBar' | 'altKeys') => {
+      if (key === 'mode') {
+        // 端末をすべてつなぎ直すので、切り替える前に確かめる（『表示と接続』と同じ）
+        const next = mode === 'mirror' ? 'direct' : 'mirror';
+        confirmThen(`接続方式を『${next === 'mirror' ? 'ミラー' : '直接'}』に切り替えますか？`,
+          '開いている端末をすべてつなぎ直します。tmux と実行中の処理はそのまま続きます。',
+          () => setMode(next), { confirmLabel: '切り替える', danger: false });
+      }
       if (key === 'showStatusBar') setShowStatusBar((v) => !v);
-      if (key === 'showKeyBar') setShowKeyBar((v) => !v);
+      if (key === 'inputBar') setInputBar((v) => nextInputBar(v));
       if (key === 'altKeys') setAltKeys((v) => !v);
     },
-    [setMode, setShowStatusBar, setShowKeyBar, setAltKeys],
+    [mode, confirmThen, setMode, setShowStatusBar, setInputBar, setAltKeys],
   );
 
   // ------------------------------------------------------------ 切り替え
@@ -1283,7 +1309,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       activePane: activePane,
       mode: mode,
       showStatusBar: showStatusBar,
-      showKeyBar: showKeyBar,
+      inputBar: inputBar,
       altKeys: altKeys,
       onAction: doAction,
       onNewTab: () => newTerminal(focusedIdRef.current),
@@ -1301,6 +1327,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       canOpenTerminal: !!focusedDevice && sessions.some(s => deviceOf(s.id) === focusedDevice),
       onOpenSwitcher: () => setPalette('terminal'),
       onOpenShortcuts: () => setShortcutsOpen(true),
+      onOpenSettings: () => onOpenSettings?.(),
+      appInstalled: install.installed,
+      onInstallApp: () => void requestInstall(),
       approvalPending: !!approval.pending,
       onOpenApproval: () => setApprovalOpen(true),
       onPaste: pasteClipboard,
@@ -1605,7 +1634,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         </div>
 
         {/* リモートデスクトップの文字入力は画面側の「文字入力」から送る */}
-        {!focusedScreen && <MobileInput
+        {!focusedScreen && inputBar !== 'hidden' && <MobileInput
+          always={inputBar === 'always'}
           connected={!!focusedId && !!termStatuses[focusedId]?.connected}
           onPaste={(text) => focusedTerm()?.paste(text)}
           onSend={(data) => focusedTerm()?.send(data)}
@@ -1624,7 +1654,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             return { text, inserted: terminal.paste(text, target) };
           }}
         />}
-        {showKeyBar && !focusedScreen && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
+        {inputBar === 'always' && !focusedScreen && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
       </main>
 
       {devicesOpen && <Devices devices={devices} onChanged={reloadDevices} onClose={() => setDevicesOpen(false)} />}

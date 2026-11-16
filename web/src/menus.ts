@@ -38,17 +38,6 @@ export const TAB_MENU: readonly MenuSlot[] = [
   ] },
   { submenu: 'tmux', items: ['window.rename', 'pane.zoom', 'pane.kill', 'window.kill'] },
   SEP,
-  // 『表示と接続』ができるまでの置き場。旧ワークスペースメニューの残り
-  { submenu: '表示と設定', items: [
-    'navigate.switcher',
-    'navigate.shortcuts',
-    SEP,
-    'view.keyBar',
-    'view.statusBar',
-    'view.mode',
-    'view.altKeys',
-  ] },
-  SEP,
   'tab.close',
   { submenu: 'まとめて閉じる', items: ['tab.closeOthers', 'tab.closeRight', 'panel.close'] },
 ];
