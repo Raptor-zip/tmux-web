@@ -73,6 +73,12 @@ module.exports = async function prepareStateConnection(page, { state, terminals 
     await devices.waitFor();
     await page.keyboard.press('Escape');
     await devices.waitFor({ state: 'detached' });
+    // Esc はチップにフォーカスがあってもポップオーバーを閉じる
+    await chip.click();
+    await popover.waitFor();
+    await chip.focus();
+    await page.keyboard.press('Escape');
+    await popover.waitFor({ state: 'detached' });
     dropLocal = false;
     await page.locator('.desktop-bar .conn-status.ok, .desktop-bar .conn-status.partial').waitFor({ timeout: 10000 });
     assert.equal((await chip.textContent()).trim(), '', 'the chip returns to a dot after reconnecting');
@@ -104,7 +110,9 @@ module.exports = async function prepareStateConnection(page, { state, terminals 
 
     // ◆ 入力待ち：押すと入力待ちだけに絞ったパレットが開く
     const attention = page.locator('.desktop-bar').getByRole('button', { name: /^入力待ち \d+$/ });
-    if (await attention.count()) {
+    {
+      await attention.waitFor({ timeout: 5000 });
+      assert.match(await attention.getAttribute('title'), /^入力待ち \d+ \(Alt\+J で次へ\)$/, 'the chip tooltip starts with its visible label');
       await attention.click();
       const palette = page.getByRole('dialog', { name: '探す・操作', exact: true });
       await palette.waitFor();

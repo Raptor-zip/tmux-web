@@ -371,7 +371,8 @@
 @media (max-width:760px), (any-pointer:coarse) {
   .bar-btn,.bar-chip { min-height:44px; min-width:44px; }
   .bar-sidebar { width:44px; }
-  .bar-chip.approval { min-height:36px; }
+  /* 見た目は 36px の帯のまま、上下の透明な枠で押せる範囲を 44px にする */
+  .bar-chip.approval { min-height:44px; margin:0 2px; border-block:4px solid transparent; background-clip:padding-box; }
   .conn-actions .btn { min-height:44px; }
 }
 @media (max-width:1099px) { .bar-kbd { display:none; } }

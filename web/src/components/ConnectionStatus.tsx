@@ -48,7 +48,8 @@ export function ConnectionStatus({ label, devices, syncError, authUrl, version, 
   }, [open]);
   const close = () => { setOpen(false); button.current?.focus(); };
   const name = label ?? '接続状態';
-  return <div className="conn-status-wrap">
+  return <div className="conn-status-wrap"
+    onKeyDown={e => { if (open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } }}>
     <button ref={button} className={`bar-chip conn-status ${label ? 'bad' : remoteDown ? 'partial' : 'ok'}`}
       aria-label={label ? undefined : name} title={name}
       aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
@@ -56,8 +57,7 @@ export function ConnectionStatus({ label, devices, syncError, authUrl, version, 
       <span className="conn-dot" aria-hidden="true" />
       {label && <span className="bar-chip-text">{label}</span>}
     </button>
-    {open && <div ref={panel} id={id} className="conn-popover" role="dialog" aria-label="接続状態"
-      onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } }}>
+    {open && <div ref={panel} id={id} className="conn-popover" role="dialog" aria-label="接続状態">
       <ul className="conn-devices">
         {devices.map(device => <li key={device.id} className={device.connected ? 'ok' : 'bad'}>
           <span className="conn-dot" aria-hidden="true" />

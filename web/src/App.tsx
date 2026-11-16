@@ -111,6 +111,9 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
   return [value, setValue] as const;
 }
 
+/** 承認待ちのトーストを出した依頼。ワークスペースを切り替えても同じ依頼で二度読み上げない */
+let announcedApprovalId: string | null = null;
+
 /** 上バーの差し込み口（Desktops.tsx）。表示中のワークスペースだけが受け取る */
 export interface BarSlots {
   /** タブ列の左：≡ */
@@ -257,11 +260,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   }, []);
 
   /** 承認待ちを初めて検知したら、上バーのチップと一緒に assertive のトーストで知らせる（同じ依頼では 1 回だけ） */
-  const announcedApproval = useRef<string | null>(null);
   useEffect(() => {
     const pending = approval.pending;
-    if (!active || !pending || announcedApproval.current === pending.id) return;
-    announcedApproval.current = pending.id;
+    if (!active || !pending || announcedApprovalId === pending.id) return;
+    announcedApprovalId = pending.id;
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, text: `sudo の承認待ち：${pending.cmd}`, kind: 'warn', urgent: true, action: { label: '内容を確認', run: () => setApprovalOpen(true) } }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 8000);
@@ -1470,7 +1472,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           onClick={() => setSidebarOpen(v => !v)}><Icon name="menu" /></button>, barSlots.leading)}
       {active && barSlots?.status && createPortal(<>
         <span className="bar-live" aria-live="polite">
-          {waitingIds.length > 0 && <button className="bar-chip attention" title="入力待ちの端末を探す (Alt+J で次へ)"
+          {waitingIds.length > 0 && <button className="bar-chip attention" title={`入力待ち ${waitingIds.length} (Alt+J で次へ)`}
             onClick={() => { setPaletteWaiting(true); setPalette('terminal'); }}>
             <Icon name="diamond" /><span className="bar-chip-text">入力待ち</span> {waitingIds.length}
           </button>}
