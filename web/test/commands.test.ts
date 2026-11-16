@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMenu, COMMANDS, commandShortcuts, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type ListContext, type RowContext, type MenuSlot, type ScreenContext, type TabContext } from '../src/commands';
+import { buildMenu, COMMANDS, commandShortcuts, OTHER_SHORTCUTS, shortcutRows, FAMILIES, findCommand, matchesCommand, paletteCommands, type AppContext, type CommandContext, type ListContext, type RowContext, type MenuSlot, type ScreenContext, type TabContext } from '../src/commands';
 import { DESKTOP_MENU, DEVICE_MENU, LIST_MENU, MENUS, NEW_MENU, ROW_MENU, SCREEN_MENU, TAB_MENU } from '../src/menus';
 import type { MenuItem } from '../src/components/ContextMenu';
 
@@ -248,6 +248,13 @@ test('shortcut list is generated from command hints', () => {
   const keys = commandShortcuts().map(s => s.keys);
   for (const k of ['Alt+T', 'Alt+W', 'Alt+P', 'Alt+/', 'Alt+Enter', 'Alt+Shift+T', 'Alt+Shift+C', 'Alt+Shift+X']) assert.ok(keys.includes(k), `${k} is listed`);
   assert.ok(!keys.includes('6px'), 'non-key hints are not shortcuts');
+  // 一覧はヒントから作る。固定の表に登録表と同じキーを重ねて書かない
+  for (const row of OTHER_SHORTCUTS) assert.ok(!keys.includes(row.keys), `${row.keys} comes from a command hint, not the fixed table`);
+  const rows = shortcutRows().map(s => s.keys);
+  for (const k of keys) assert.ok(rows.includes(k), `${k} is in the shortcut list`);
+  assert.equal(new Set(rows).size, rows.length, 'each key is listed once');
+  assert.equal(shortcutRows().find(s => s.keys === 'Alt+B')?.label, '一覧を開く / 閉じる', 'Alt+B toggles the list');
+  for (const k of ['Alt+Shift+C', 'Alt+Shift+X', 'Alt+Shift+T', 'Alt+Shift+P', 'Alt+J', 'Alt+O', 'Alt+/', 'Alt+B', 'Alt+Shift+N']) assert.ok(rows.includes(k), `${k} is in the shortcut list`);
 });
 
 test('menus can carry headings, one-level submenus and accelerator keys', () => {

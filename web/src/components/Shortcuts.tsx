@@ -1,35 +1,9 @@
 import { Modal } from './Modal';
-import { commandShortcuts } from '../commands';
-
-/**
- * 登録表のヒントに載らない、キーとマウスの操作。
- * どれもメニューには出ないので、ここに書いておかないと見つけられない。
- */
-const OTHER_SHORTCUTS: { label: string; keys: string }[] = [
-  { label: '探す・操作（端末）', keys: 'Alt+P' },
-  { label: '探す・操作（操作）', keys: 'Alt+Shift+P' },
-  { label: 'ショートカット一覧', keys: 'Alt+/' },
-  { label: '一覧を開く / 閉じる', keys: 'Alt+B' },
-  { label: '見えているタブ列の n 番目のタブ（分割表示では入力先のパネル、1 パネル表示ではワークスペース全体で数える）', keys: 'Alt+1〜9' },
-  { label: '見えているタブ列の最後のタブ', keys: 'Alt+0' },
-  { label: '前のタブ / 次のタブ（見えているタブ列の順）', keys: 'Alt+[ / Alt+]' },
-  { label: '新しいワークスペース', keys: 'Alt+Shift+N' },
-  { label: '前 / 次のワークスペース', keys: 'Alt+Shift+← / →' },
-  { label: '文字サイズを変える', keys: 'Ctrl+ホイール' },
-  { label: 'タブを閉じる', keys: 'タブを中クリック' },
-  { label: '新しい端末', keys: 'タブ列の空いた所をダブルクリック' },
-  { label: 'ワークスペースの名前を変える', keys: 'ワークスペースをダブルクリック' },
-  { label: '端末の文字を選ぶ（tmux がマウスを使っているとき）', keys: 'Shift+ドラッグ' },
-  { label: 'ブラウザの右クリックメニューを出す', keys: 'Shift+右クリック' },
-  { label: '選択をコピー', keys: 'Ctrl+Shift+C' },
-];
+import { shortcutRows } from '../commands';
 
 /** ショートカット一覧（Alt+/）。commands.ts の hint から作り、隠れた操作を足す */
 export function Shortcuts({ altKeys, onClose }: { altKeys: boolean; onClose(): void }) {
-  // 同じキーの操作（Alt+T の『新しい端末をタブで開く』と『現在のデバイスで端末を開く』など）は最初の 1 つだけ
-  const seen = new Set<string>();
-  const fromCommands = commandShortcuts().filter(s => !seen.has(s.keys) && !!seen.add(s.keys));
-  const rows = [...fromCommands, ...OTHER_SHORTCUTS.filter(s => !seen.has(s.keys))];
+  const rows = shortcutRows();
   return (
     <Modal title="ショートカット一覧" className="shortcuts-modal" onClose={onClose}>
       {!altKeys && <p className="shortcuts-note">Alt ショートカットはオフです。Alt キーはそのまま端末に届きます。</p>}

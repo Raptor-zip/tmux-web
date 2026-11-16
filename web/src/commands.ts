@@ -298,6 +298,8 @@ export interface Command<S extends Scope = Scope> {
   group: CommandGroup;
   /** 右側に薄く出すキー表記や補足 */
   hint?: string | ((ctx: Sections[S]) => string | undefined);
+  /** ショートカット一覧での名前。キーが label より広い操作をするとき（Alt+B は開くのにも使う）に付ける */
+  shortcutLabel?: string;
   /** false ならメニューに出さない */
   when?(ctx: Sections[S]): boolean;
   /** 押せない理由。null / undefined なら押せる */
@@ -705,7 +707,7 @@ export const COMMANDS: Command[] = [
     aliases: ['デバイスを追加', '接続先'], run: c => c.manageDevices(),
   }),
   define({
-    id: 'list.close', scope: 'list', group: 'list', label: '一覧を閉じる', hint: 'Alt+B',
+    id: 'list.close', scope: 'list', group: 'list', label: '一覧を閉じる', hint: 'Alt+B', shortcutLabel: '一覧を開く / 閉じる',
     aliases: ['サイドバーを閉じる', 'セッション一覧'], when: c => !!c.close, run: c => c.close?.(),
   }),
 
@@ -1029,5 +1031,31 @@ export function matchesCommand(command: Pick<PaletteCommand, 'words' | 'hint'>, 
 export function commandShortcuts(): { label: string; keys: string }[] {
   return COMMANDS
     .filter(c => typeof c.hint === 'string' && /^(Alt|Ctrl|Shift)\+/.test(c.hint))
-    .map(c => ({ label: c.label, keys: c.hint as string }));
+    .map(c => ({ label: c.shortcutLabel ?? c.label, keys: c.hint as string }));
+}
+
+/**
+ * 登録表のヒントに載らない、キーとマウスの操作。
+ * どれもメニューには出ないので、ショートカット一覧に書いておかないと見つけられない。
+ * 登録表の hint にあるキーはここに書かない（一覧は hint から作る）。
+ */
+export const OTHER_SHORTCUTS: readonly { label: string; keys: string }[] = [
+  { label: '探す・操作（操作）', keys: 'Alt+Shift+P' },
+  { label: '見えているタブ列の n 番目のタブ（分割表示では入力先のパネル、1 パネル表示ではワークスペース全体で数える）', keys: 'Alt+1〜9' },
+  { label: '見えているタブ列の最後のタブ', keys: 'Alt+0' },
+  { label: '前のタブ / 次のタブ（見えているタブ列の順）', keys: 'Alt+[ / Alt+]' },
+  { label: '前 / 次のワークスペース', keys: 'Alt+Shift+← / →' },
+  { label: '文字サイズを変える', keys: 'Ctrl+ホイール' },
+  { label: 'タブを閉じる', keys: 'タブを中クリック' },
+  { label: '新しい端末', keys: 'タブ列の空いた所をダブルクリック' },
+  { label: 'ワークスペースの名前を変える', keys: 'ワークスペースをダブルクリック' },
+  { label: '端末の文字を選ぶ（tmux がマウスを使っているとき）', keys: 'Shift+ドラッグ' },
+  { label: 'ブラウザの右クリックメニューを出す', keys: 'Shift+右クリック' },
+];
+
+/** ショートカット一覧（Alt+/）の行。登録表の hint から作り、同じキーは最初の 1 つだけにして、隠れた操作を後ろに足す */
+export function shortcutRows(): { label: string; keys: string }[] {
+  const seen = new Set<string>();
+  const fromCommands = commandShortcuts().filter(s => !seen.has(s.keys) && !!seen.add(s.keys));
+  return [...fromCommands, ...OTHER_SHORTCUTS.filter(s => !seen.has(s.keys))];
 }

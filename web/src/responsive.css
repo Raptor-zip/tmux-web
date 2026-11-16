@@ -9,17 +9,6 @@
   --radius: 0;
 }
 .app,.app.sidebar-hidden { --activity-w:0px; }
-.activitybar { display:none; }
-.editorbar { min-height:44px; height:44px; padding:0 8px; gap:8px; background:var(--bg-1); border-bottom:1px solid var(--border); }
-.workspace-sidebar-button { display:grid; flex:none; }
-.editorbar .mobile-sidebar-button { display:none; }
-.crumbs { flex:1; min-width:0; height:auto; gap:8px; overflow:hidden; }
-.input-target-label { font-size:10px; color:var(--fg-dim); flex:none; letter-spacing:.06em; }
-.crumbs .crumb:not(.project),.crumbs .sep,.crumbs .tile-count { display:none; }
-.crumbs .crumb.project { max-width:none; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
-.editorbar-actions { width:auto; gap:4px; flex:none; }
-.editorbar-actions .icon-btn,.workspace-sidebar-button { width:32px; height:32px; min-width:32px; min-height:32px; border-radius: 0; }
-.editorbar-actions .toolbar-new-tab,.editorbar-actions .toolbar-switcher,.editorbar-actions .split-button { display:none; }
 .icon-btn:active:not(:disabled),.strip-btn:active:not(:disabled) { background:var(--bg-selected); }
 .panel-workspace { display:flex; flex-direction:column; height:100%; min-width:0; min-height:0; }
 .panel-workspace .splitview { flex:1; height:auto; min-height:0; }
@@ -36,14 +25,10 @@
 .tab.active { background:transparent; }
 .tab-name { min-width:0; flex:1; }
 .tab-device { flex:none; font-size:10px; max-width:90px; overflow:hidden; text-overflow:ellipsis; }
-.device-short { display:none; }
-.tab-where { display:none; }
 .strip-tools { gap:0; padding:0 2px; background:transparent; }
 .strip-btn { width:30px; height:34px; border-radius: 0; }
 .tab-close { width:24px; height:28px; opacity:1; color:var(--fg-dim); }
 @container panel (max-width: 420px) {
-  .device-full { display:none; }
-  .device-short { display:inline; }
   .tab { min-width:130px; max-width:230px; padding-left:7px; gap:5px; }
 }
 @container panel (max-width: 290px) { .tab-device,.tab .state-dot { display:none; } .tab { min-width:100px; } }
@@ -52,14 +37,7 @@
 .ctxmenu { border-radius: 0; border:1px solid var(--border-strong); box-shadow:0 12px 36px #0006; padding:5px; }
 .ctxmenu button { min-height:34px; border-radius: 0; }
 .ctxmenu button:focus-visible { outline:2px solid var(--accent); background:var(--bg-3); }
-@media (min-width:761px) { .editorbar-actions .term-status { display:none; } }
-@media (max-width:1000px) { .agent-launchers { display:none; } }
 @media (max-width:760px) {
- .editorbar { flex-direction:row; min-height:48px; height:48px; padding:0 6px; gap:4px; }
- .editorbar-actions { width:auto; gap:0; }
- .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; height:44px; min-width:44px; min-height:44px; }
- .editorbar .crumbs { height:auto; flex:1; gap:5px; }
- .input-target-label { display:none; }
  .tabstrip { height:46px; }
  .tab { min-width:150px; max-width:220px; }
  .strip-btn { width:44px; height:44px; }
@@ -67,43 +45,28 @@
  .ctxmenu button { min-height:44px; }
 }
 @media (pointer:coarse) and (min-width:761px) { .strip-btn { min-width:44px; min-height:44px; } .tabstrip { height:46px; } .icon-btn { min-width:44px; min-height:44px; } }
-.toolbar-device { font-size:11px; flex:none; max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:3px 6px; border-radius: 0; border:1px solid var(--border-strong); }
 .tile-body { position:relative; }
 .panel-connection { position:absolute; z-index:2; top:12px; left:12px; right:12px; display:flex; align-items:flex-start; flex-wrap:wrap; gap:8px; background:var(--bg-1); border:1px solid var(--border-strong); border-left:3px solid var(--yellow); border-radius: 0; padding:12px; box-shadow:0 4px 16px #0005; }
 .panel-connection strong { width:100%; font-size:12px; }
 .panel-connection.selecting { border-left-color:var(--accent); }
 .panel-connection span { flex:1; min-width:100px; font-size:12px; color:var(--fg-dim); }
 .panel-connection button { background:var(--bg-2); color:var(--fg); border:1px solid var(--border-strong); border-radius: 0; padding:6px 10px; cursor:pointer; }
-.desktop-more { position:relative; }
-.desktop-more summary { list-style:none; cursor:pointer; min-height:32px; display:flex; align-items:center; }
-.desktop-more summary::-webkit-details-marker { display:none; }
-.desktop-more-content { display:flex; gap:6px; flex-wrap:wrap; padding-top:8px; }
-.desktop-more[open] { flex-basis:100%; }
-.desktop-viewer .screen-foot { max-height:100px; overflow:auto; }
 .desktop-viewer .screen-controls { align-items:center; }
 .desktop-viewer .desktop-device-label { flex:1; min-width:150px; }
 .prompt-dialog { width:min(480px,calc(100vw - 24px)); }
 .dialog-content { padding:16px; }
 .file-header strong { font-size:12px; overflow-wrap:anywhere; }
 @media (max-width:760px) {
- .toolbar-device { max-width:105px; font-size:10px; }
  .panel-connection button { min-height:44px; }
- .desktop-more summary { min-height:44px; }
  .file-header { gap:8px; padding:8px; }
- .desktop-viewer .screen-foot { font-size:10px; padding:6px 8px; max-height:72px; }
 }
 .panel-workspace .splitview { position:relative; inset:auto; width:100%; }
 @media (max-width:760px) { .app-modal-head .icon-btn { min-width:44px; min-height:44px; } }
-.tab-caption { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; line-height:1.2; }
-.tab-caption .tab-name { display:block; flex:none; }
-.tab-task { overflow:hidden; text-overflow:ellipsis; font-size:10px; color:var(--fg-dim); white-space:nowrap; }
 .tab.active { background:var(--bg); box-shadow:inset 0 -2px 0 var(--accent); }
 .tab:not(.active) .tab-name { font-weight:600; color:var(--fg-dim); }
 @media (max-width:760px), (pointer:coarse) {
  .tab-close { width:44px; min-width:44px; height:44px; min-height:44px; }
- .editorbar-actions .icon-btn,.workspace-sidebar-button { width:44px; min-width:44px; height:44px; min-height:44px; }
  .desktop-add { min-width:44px; }
- .editorbar { min-height:48px; }
 }
 /* Keep project confirmation reachable when a short viewport or keyboard reduces height. */
 .app-modal:has(.project-form)[open] { display:flex; flex-direction:column; overflow:hidden; }
@@ -176,21 +139,12 @@
 :root input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; height: 16px; border: 0; border-radius: 0; background: var(--accent); }
 :root input[type="range"]::-moz-range-thumb { width: 12px; height: 16px; border: 0; border-radius: 0; background: var(--accent); }
 .desktop-add { display: grid; place-items: center; }
-:root .tab-picker { min-height: 28px; padding-top: 3px; padding-bottom: 3px; font-size: 11px; }
 @media (max-width: 1024px) {
   :root :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], .xterm-helper-textarea), select, textarea:not(.xterm-helper-textarea)) { font-size: 16px; min-height: 44px; }
 }
 @media (forced-colors: active) {
   :root select, :root input[type="checkbox"] { appearance: auto; background-image: none; }
 }
-
-/* 操作はタブ列に収め、現在地の重複行を作らない。 */
-.workspace-actions { display:flex; align-items:center; flex:none; gap:2px; padding:0 2px; }
-.workspace-actions .icon-btn { width:30px; min-width:30px; height:34px; min-height:34px; }
-.project-actions { margin:6px 0; color:var(--fg-dim); font-size:11px; }
-.project-actions summary { cursor:pointer; padding:6px 2px; }
-.project-actions[open] summary { margin-bottom:4px; }
-.project-actions .btn { font-size:11px; text-align:left; }
 
 .sidebar { position:relative; min-width:0; }
 .sidebar-close { display:inline-flex; margin-left:auto; flex:none; }
@@ -204,7 +158,7 @@
 .touch-menu-close { display:none; }
 @media (any-pointer:coarse) {
   /* Browsing and scrolling the chrome must not start native text selection. */
-  .desktop-bar,.tabstrip,.sidebar,.workspace-actions,.input-keys,.ctxmenu,.sw-list {
+  .desktop-bar,.tabstrip,.sidebar,.input-keys,.ctxmenu,.sw-list {
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
   }
   .terminal-host { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
@@ -214,7 +168,7 @@
   .tree { touch-action:pan-y; overscroll-behavior-y:contain; }
   .tab { min-width:220px; max-width:300px; }
   .tabstrip,.desktop-tabs { min-height:48px; }
-  .strip-tools .strip-btn,.workspace-actions .icon-btn { min-width:44px; min-height:44px; }
+  .strip-tools .strip-btn { min-width:44px; min-height:44px; }
   .ctxmenu { left:8px !important; top:auto !important; bottom:calc(8px + var(--safe-bottom)); width:calc(100vw - 16px); max-width:560px; max-height:calc(var(--app-height,100dvh) - 24px - var(--safe-top) - var(--safe-bottom)); padding:6px; overscroll-behavior:contain; }
   .ctxmenu button { min-height:48px; padding:10px 12px; }
   /* シートの見出し行。右上の × で閉じる（以前は先頭の『閉じる』項目だった） */
