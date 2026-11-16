@@ -17,7 +17,7 @@ import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedPr
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { tabMenuItems, NEW_MENU } from './menus';
-import { buildMenu, paletteCommands, type AppContext, type CreateContext, type PanelContext, type SelectionContext, type TabContext, type ViewContext } from './commands';
+import { buildMenu, paletteCommands, type AppContext, type CreateContext, type PanelContext, type SelectionContext, type TabContext } from './commands';
 import { KeyBar } from './components/KeyBar';
 import { nextInputBar, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLineHeight, useStatusLine } from './shared-setting';
 import { requestInstall, takeInstallHint, useInstallState } from './pwa';
@@ -68,7 +68,7 @@ import {
   visibleTabOrder,
   type LayoutNode,
 } from './layout';
-import { buildWindowViews, paneCommand, windowName, type WindowView } from './windows';
+import { buildWindowViews, paneCommand, type WindowView } from './windows';
 import { nextWaiting, STATUS_ORDER } from './status';
 import type { Pane, TmuxWindow } from './types';
 
@@ -149,7 +149,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const unavailable = useMemo(() => new Set(devices.filter(d => !d.connected || !d.serverPid).map(d => d.id)), [devices]);
   useEffect(() => {
     if (!active || !device) return;
-    document.documentElement.style.removeProperty('--status');
     document.documentElement.style.removeProperty('--accent');
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#1a1b26');
     document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', device.name);
