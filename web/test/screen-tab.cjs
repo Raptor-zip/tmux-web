@@ -44,7 +44,7 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   assert.match(await page.locator('.tab.tab-screen.active .tab-name').textContent(), /ThinkPad/);
   assert.equal(await page.locator('.panel-connection:visible').count(), 0, 'the terminal reconnect overlay is not stacked on the screen');
   await waitFor(() => (workspace().values['tw.layout'] || '').includes('"kind":"screen"'), 'the screen tab is saved to the synced layout');
-  assert.equal(await page.locator('.mobile-input:visible').count(), 0, 'terminal input bar is hidden for a screen tab');
+  assert.equal(await page.locator('.input-bar:visible').count(), 0, 'terminal input bar is hidden for a screen tab');
 
   // 同じデバイスをもう一度開いても 2 枚目は作らず、接続も増やさない
   await plusMenu();

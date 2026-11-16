@@ -35,9 +35,9 @@ module.exports = async (page, { scene, terminalTransports, out }) => {
   await page.keyboard.press('Home');
   assert.equal(await stored('tw.lineHeight'), '1');
 
-  // Input bar: 隠す removes it, 常に表示 adds the key row, 自動 goes back
+  // Input bar: 隠す removes it, 常に表示 shows it everywhere, 自動 goes back
   const inputBar = settings.getByRole('radiogroup', { name: '入力行' });
-  const visibleInput = () => page.locator('.mobile-input:visible').count();
+  const visibleInput = () => page.locator('.input-bar:visible').count();
   const autoVisible = await visibleInput();
   assert.equal(autoVisible, scene.touch ? 1 : 0, '自動 shows the input bar only on touch or narrow screens');
   // Arrow keys move the choice and keep focus on the checked radio
@@ -49,13 +49,13 @@ module.exports = async (page, { scene, terminalTransports, out }) => {
   assert.equal(await stored('tw.inputBar'), '"auto"');
   await inputBar.getByRole('radio', { name: '隠す', exact: true }).click();
   assert.equal(await stored('tw.inputBar'), '"hidden"');
-  assert.equal(await page.locator('.mobile-input').count(), 0, '隠す removes the input bar');
+  assert.equal(await page.locator('.input-bar').count(), 0, '隠す removes the input bar');
   await inputBar.getByRole('radio', { name: '常に表示', exact: true }).click();
   assert.equal(await visibleInput(), 1, '常に表示 shows the input bar on every screen');
-  assert.equal(await page.locator('.keybar').count(), 1, '常に表示 keeps the old key bar row');
+  assert.equal(await page.locator('.input-bar.input-always').count(), 1, '常に表示 marks the input bar as always shown');
   await inputBar.getByRole('radio', { name: '自動', exact: true }).click();
   assert.equal(await visibleInput(), autoVisible);
-  assert.equal(await page.locator('.keybar').count(), 0);
+  assert.equal(await page.locator('.input-bar.input-always').count(), 0);
 
   // tmux status line and the phone/landscape switches are stored
   for (const [name, key] of [['tmux のステータス行', 'tw.statusBar'], ['スマホでタブ列を表示', 'tw.phoneTabs'], ['横持ちで見出しを隠す', 'tw.landscapeHideHeader']]) {

@@ -104,7 +104,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    transferTasks.push((async()=>{const response=await request.response();const headers=await response.allHeaders();const sizes=await request.sizes();transfers.push({asset:url.pathname.split('/').at(-1),encoding:headers['content-encoding']||'identity',wireBodyBytes:sizes.responseBodySize,decodedBytes:(await response.body()).length});})().catch(error=>errors.push(error.message)));
   });
   if(process.env.TRANSFER_REPORT){
-   await page.addInitScript(()=>{new MutationObserver((_,observer)=>{const button=document.querySelector('.mobile-input .input-attach');if(button&&!button.disabled){window.__terminalReadyAt=performance.now();observer.disconnect();}}).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']});});
+   await page.addInitScript(()=>{new MutationObserver((_,observer)=>{const button=document.querySelector('.input-bar .input-enter');if(button&&!button.disabled){window.__terminalReadyAt=performance.now();observer.disconnect();}}).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['disabled']});});
    if(process.env.THROTTLE_KBPS){const cdp=await context.newCDPSession(page);await cdp.send('Network.enable');await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});await cdp.send('Network.emulateNetworkConditions',{offline:false,downloadThroughput:Number(process.env.THROTTLE_KBPS)*1000/8,uploadThroughput:100000,latency:Number(process.env.THROTTLE_RTT_MS||0)});}
   }
   await page.route('**/api/**',async route=>{
@@ -159,20 +159,22 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(process.env.ALT_NAV_CHECK && scene.name==='laptop-four'){await require('./alt-nav.cjs')(page,{terminalInputs});assert.deepEqual(errors,[],'alt navigation runtime errors');}
   if(process.env.TERMINAL_TARGET_CHECK && scene.name==='terminal-target') await require('./terminal-target.cjs')(page,{terminalTransports,terminalSelections});
   if(process.env.TERMINAL_READY_CHECK && scene.name==='mobile-panels'){
-   assert.equal(await page.locator('.mobile-input .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
-   assert.equal(await page.locator('.mobile-input .input-enter').isDisabled(),true,'transport open does not enable Enter before terminal ready');
-   await page.getByRole('button',{name:'文字入力・貼り付け',exact:true}).click();
-   await page.getByRole('textbox',{name:'文字入力・貼り付け用の下書き'}).fill('ready後に挿入');
-   assert.equal(await page.getByRole('button',{name:'端末に挿入',exact:true}).isDisabled(),true);
+   assert.equal(await page.locator('.input-bar .input-enter').isDisabled(),true,'transport open does not enable Enter before terminal ready');
+   assert.equal(await page.locator('.input-bar .input-keys .key').first().isDisabled(),true,'transport open does not enable the key row before terminal ready');
+   const inputToggle=page.locator('.input-bar').getByRole('button',{name:'入力',exact:true});
+   await inputToggle.click();
+   assert.equal(await page.locator('.input-bar .input-attach').isDisabled(),true,'transport open does not enable attachments before terminal ready');
+   await page.getByRole('textbox',{name:'下書き',exact:true}).fill('ready後に挿入');
+   assert.equal(await page.getByRole('button',{name:'挿入のみ',exact:true}).isDisabled(),true);
    assert.equal(typeof releaseTerminalReady,'function');releaseTerminalReady();
-   await page.locator('.mobile-input .input-attach:enabled').waitFor();
-   await page.getByRole('button',{name:'端末に挿入',exact:true}).click();
+   await page.locator('.input-bar .input-attach:enabled').waitFor();
+   await page.getByRole('button',{name:'挿入のみ',exact:true}).click();
    assert.equal(terminalInputs.at(-1),'ready後に挿入');
-   await page.getByRole('button',{name:'入力欄を閉じる',exact:true}).click();
+   await inputToggle.click();
    console.log('terminal controls wait for tmux readiness and preserve the draft');
   }
   const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'配置',exact:true}).click();await page.getByRole('menuitem',{name:/^(パネルを最大化|並びに戻す)/}).click();};
-  if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs);
+  if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs, terminalTransports);
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
   if(scene.action==='switcher')await page.locator('.desktop-bar .bar-palette').click();
   if(checkSwitcher) await checkSwitcher();
@@ -250,7 +252,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(process.env.DESKTOP_TRANSFER_CHECK) await require('./desktop-transfer.cjs')(page, errors, () => {workspaceState={type:'workspace',initialized:false,revision:0,values:{}};});
   console.log(scene.name,JSON.stringify(metrics));
   if(phase==='after' && scene.name==='mobile-panels'){
-   assert.equal(activeTerminals,1,'only the visible mobile panel attaches');
+   // ATTACHMENT_CHECK opens a second tab in the same panel, and a visited tab keeps its connection.
+   assert.equal(activeTerminals,process.env.ATTACHMENT_CHECK?2:1,'only the visible mobile panel attaches');
    const layout=await page.evaluate(()=>localStorage.getItem('tw.layout'));
    assert.equal(await page.locator('.tile:visible .tab-count').count(),0,'the tab count badge is gone');
    await page.locator('.tile:visible').getByRole('button',{name:'他 3 パネル',exact:true}).click();

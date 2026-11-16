@@ -52,11 +52,6 @@
 .ctxmenu { border-radius: 0; border:1px solid var(--border-strong); box-shadow:0 12px 36px #0006; padding:5px; }
 .ctxmenu button { min-height:34px; border-radius: 0; }
 .ctxmenu button:focus-visible { outline:2px solid var(--accent); background:var(--bg-3); }
-.mobile-input-draft { display:flex; flex-direction:column; gap:6px; }
-.mobile-input-draft[hidden] { display:none; }
-.mobile-input-toggle-row { display:flex; gap:8px; }
-.mobile-input-toggle-row button { min-height:44px; border:1px solid var(--border-strong); border-radius: 0; background:var(--bg-2); color:var(--fg); padding:0 12px; }
-.mobile-input-toggle-row .input-toggle { flex:1; text-align:left; }
 @media (min-width:761px) { .editorbar-actions .term-status { display:none; } }
 @media (max-width:1000px) { .agent-launchers { display:none; } }
 @media (max-width:760px) {
@@ -69,7 +64,6 @@
  .tab { min-width:150px; max-width:220px; }
  .strip-btn { width:44px; height:44px; }
  .tab-close { width:32px; min-width:32px; height:44px; }
- .mobile-input { padding:4px 6px; gap:4px; }
  .ctxmenu button { min-height:44px; }
 }
 @media (pointer:coarse) and (min-width:761px) { .strip-btn { min-width:44px; min-height:44px; } .tabstrip { height:46px; } .icon-btn { min-width:44px; min-height:44px; } }
@@ -182,7 +176,6 @@
 :root input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; height: 16px; border: 0; border-radius: 0; background: var(--accent); }
 :root input[type="range"]::-moz-range-thumb { width: 12px; height: 16px; border: 0; border-radius: 0; background: var(--accent); }
 .desktop-add { display: grid; place-items: center; }
-.mobile-input-toggle-row .input-toggle { display: flex; align-items: center; gap: 8px; }
 :root .tab-picker { min-height: 28px; padding-top: 3px; padding-bottom: 3px; font-size: 11px; }
 @media (max-width: 1024px) {
   :root :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], .xterm-helper-textarea), select, textarea:not(.xterm-helper-textarea)) { font-size: 16px; min-height: 44px; }
@@ -216,7 +209,7 @@
 .touch-menu-close { display:none; }
 @media (any-pointer:coarse) {
   /* Browsing and scrolling the chrome must not start native text selection. */
-  .desktop-bar,.tabstrip,.sidebar,.workspace-actions,.keybar,.ctxmenu,.sw-list {
+  .desktop-bar,.tabstrip,.sidebar,.workspace-actions,.input-keys,.ctxmenu,.sw-list {
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
   }
   .terminal-host { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }

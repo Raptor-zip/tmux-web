@@ -88,10 +88,10 @@ module.exports = async function prepareSwitcher(page, { state, scene }) {
     await input.fill('キーバー');
     await dialog.locator('.sw-cmd').first().waitFor();
     check((await dialog.locator('.sw-row.on .sw-command').innerText()) === '入力行の表示を切り替える', 'command search finds the input bar by its old name');
-    const keybarBefore = await page.locator('.keybar').count();
+    const alwaysBefore = await page.locator('.input-bar.input-always').count();
     await input.focus(); await page.keyboard.press('Enter');
     check(!await dialog.isVisible(), 'running a command closes the palette');
-    await page.waitForFunction(n => document.querySelectorAll('.keybar').length !== n, keybarBefore);
+    await page.waitForFunction(n => document.querySelectorAll('.input-bar.input-always').length !== n, alwaysBefore);
     // Alt+Shift+P opens the command scope directly; a leading > switches to it.
     await page.keyboard.press('Alt+Shift+P');
     await dialog.waitFor();
@@ -100,7 +100,7 @@ module.exports = async function prepareSwitcher(page, { state, scene }) {
     await input.fill('>キーバー');
     check(await scopeButton('操作').getAttribute('aria-pressed') === 'true' && await input.inputValue() === 'キーバー', 'a leading > switches to commands');
     await input.focus(); await page.keyboard.press('Enter');
-    await page.waitForFunction(n => document.querySelectorAll('.keybar').length === n, keybarBefore);
+    await page.waitForFunction(n => document.querySelectorAll('.input-bar.input-always').length === n, alwaysBefore);
     check(!await dialog.isVisible(), 'the toggled command runs again from the > prefix');
     await page.keyboard.press('Alt+/');
     const shortcuts = page.getByRole('dialog', { name: 'ショートカット一覧', exact: true });

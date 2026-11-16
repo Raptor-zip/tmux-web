@@ -10,7 +10,7 @@ import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
 import { createPortal } from 'react-dom';
 import { FileBrowser } from './components/FileBrowser';
-import { MobileInput } from './components/MobileInput';
+import { InputBar } from './components/InputBar';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
@@ -18,7 +18,6 @@ import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
 import { tabMenuItems, NEW_MENU } from './menus';
 import { buildMenu, paletteCommands, type AppContext, type CreateContext, type DesktopContext, type PanelContext, type SelectionContext, type TabContext } from './commands';
-import { KeyBar } from './components/KeyBar';
 import { nextInputBar, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLineHeight, useStatusLine } from './shared-setting';
 import { requestInstall, takeInstallHint, useInstallState } from './pwa';
 import { Dialog, type DialogSpec } from './components/Dialog';
@@ -1619,8 +1618,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         </div>
 
         {/* リモートデスクトップの文字入力は画面側の「文字入力」から送る */}
-        {!focusedScreen && inputBar !== 'hidden' && <MobileInput
+        {!focusedScreen && inputBar !== 'hidden' && <InputBar
           always={inputBar === 'always'}
+          prefix={prefix}
+          waiting={!!focusedTerminalTab?.windowId && views.get(focusedTerminalTab.windowId)?.status.kind === 'waiting'}
           connected={!!focusedId && !!termStatuses[focusedId]?.connected}
           onPaste={(text) => focusedTerm()?.paste(text)}
           onSend={(data) => focusedTerm()?.send(data)}
@@ -1639,7 +1640,6 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             return { text, inserted: terminal.paste(text, target) };
           }}
         />}
-        {inputBar === 'always' && !focusedScreen && <KeyBar prefix={prefix} onSend={(d) => focusedTerm()?.send(d)} />}
       </main>
 
       {devicesOpen && <Devices devices={devices} onChanged={reloadDevices} onClose={() => setDevicesOpen(false)} />}
