@@ -178,7 +178,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
   if(scene.action==='devices')await page.locator('footer .device-name').click();
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
-  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'新規',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'リモートデスクトップをダイアログで開く',exact:true}).click();}
+  if(scene.action==='desktop' && !(scene.name.startsWith('remote-') && phase==='after')){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
   if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'作業フォルダーを開く',exact:true}).click();}
   if(checkFiles) await checkFiles();
   if(scene.name.startsWith('remote-') && scene.action==='desktop'){
@@ -246,9 +246,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(phase==='after' && scene.name==='mobile-panels'){
    assert.equal(activeTerminals,1,'only the visible mobile panel attaches');
    const layout=await page.evaluate(()=>localStorage.getItem('tw.layout'));
-   await page.getByRole('button',{name:'このパネルの2タブを一覧で見る',exact:true}).click();
+   assert.equal(await page.locator('.tile:visible .tab-count').count(),0,'the tab count badge is gone');
+   await page.locator('.tile:visible').getByRole('button',{name:'他 3 パネル',exact:true}).click();
    const palette=page.getByRole('dialog',{name:'探す・操作',exact:true});
-   assert.equal(await palette.getByRole('button',{name:'タブ',exact:true}).getAttribute('aria-pressed'),'true','the tab count opens the palette on its tab scope');
+   assert.equal(await palette.getByRole('button',{name:'タブ',exact:true}).getAttribute('aria-pressed'),'true','the other-panels chip opens the palette on its tab scope');
    await palette.getByRole('combobox',{name:'探す・操作'}).fill('DGX Spark');
    await page.keyboard.press('Alt+Enter');
    await page.screenshot({path:join(out,'panel-overview.png'),animations:'disabled'});
@@ -263,7 +264,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    while(activeTerminals!==4 && Date.now()<splitDeadline)await page.waitForTimeout(20);
    assert.equal(activeTerminals,4,'only visible split panels retain websocket connections '+JSON.stringify(terminalTransports.map(t=>({window:t.window,remote:t.remote,closes:t.closeEvents||0}))));
    await page.setViewportSize({width:900,height:1024});await page.waitForTimeout(150);
-   for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close, .tile:visible .strip-btn, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
+   for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close:visible, .tile:visible .strip-btn:visible, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
    for(const list of await page.locator('.tile:visible .tablist').all()) assert.ok(await list.evaluate(el=>el.querySelector('.tab.active').getBoundingClientRect().left>=el.getBoundingClientRect().left-1),'selected tab keeps its leading label visible after resize');
    assert.equal(await page.evaluate(()=>localStorage.getItem('tw.layout')),layout,'responsive presentation preserves saved split tree');
   }
@@ -288,10 +289,27 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(await page.locator('.tab[aria-selected=true]').getAttribute('data-tab-id'),'tab-local-2');
    assert.deepEqual(await page.locator('.tab').evaluateAll(tabs=>tabs.map(tab=>tab.getBoundingClientRect().width)),tabWidths,'tab selection preserves every tab width');
    assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('data-tab-id')),'tab-local-2');
-   await page.locator('.tile:visible').getByRole('button',{name:'新しい端末をタブで開く',exact:true}).click();
-   assert.equal(await page.getByRole('menuitem',{name:'DGX Spark で端末を開く'}).count(),1);
-   await page.keyboard.press('End');assert.match(await page.evaluate(()=>document.activeElement?.textContent),/DGX Spark/);
+   // ＋▾ の新規メニュー：入力先のデバイスは『端末』で開くので、『別のデバイスで ▸』には他のデバイスだけ
+   await page.locator('.tile:visible').getByRole('button',{name:'新規メニュー',exact:true}).click();
+   assert.equal(await page.getByRole('menu').first().getAttribute('aria-label'),'新規');
+   assert.equal(await page.getByRole('menuitem',{name:/^端末/}).getAttribute('aria-keyshortcuts'),'t');
+   assert.equal(await page.getByRole('menuitem',{name:'Claude を右に並べる',exact:true}).count(),1,'side placements are named in full for assistive tech');
+   await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')),'新しい端末を右に並べる','→ moves into the row');
+   await page.keyboard.press('ArrowDown');assert.match(await page.evaluate(()=>document.activeElement?.textContent),/^Claude/,'↓ moves between rows, not side buttons');
+   await page.keyboard.press('End');await page.keyboard.press('ArrowUp');await page.keyboard.press('ArrowUp');await page.keyboard.press('ArrowUp');await page.keyboard.press('ArrowUp');await page.keyboard.press('ArrowUp');
+   assert.match(await page.evaluate(()=>document.activeElement?.textContent),/別のデバイスで/);
+   await page.keyboard.press('ArrowRight');
+   assert.equal(await page.getByRole('menuitem',{name:'DGX Spark',exact:true}).count(),1);
+   assert.match(await page.evaluate(()=>document.activeElement?.textContent),/DGX Spark/);
+   await page.keyboard.press('Escape');await page.keyboard.press('Escape');assert.equal(await page.getByRole('menu').count(),0);
+   // Alt+Shift+T でも同じメニューが開き、先頭にフォーカスが当たる
+   await page.locator('.tab[aria-selected=true]').focus();await page.keyboard.press('Alt+Shift+T');
+   assert.equal(await page.getByRole('menu').first().getAttribute('aria-label'),'新規');
+   assert.match(await page.evaluate(()=>document.activeElement?.textContent),/^端末/);
    await page.keyboard.press('Escape');assert.equal(await page.getByRole('menu').count(),0);
+   // タブがあふれたら ‹ › が出る。× はアクティブなタブだけ
+   assert.equal(await page.locator('.tile:visible .strip-scroll').count(),2,'overflowing tabs show scroll buttons');
+   assert.equal(await page.locator('.tile:visible .tab:not(.active) .tab-close:visible').count(),0,'inactive tabs hide their close button');
    const close=page.locator('.tab[aria-selected=true] .tab-close');await close.focus();await page.keyboard.press('Enter');
    assert.equal(await page.locator('[data-tab-id=tab-local-2]').count(),0,'close button works with keyboard');
    await page.getByRole('button',{name:'現在のデスクトップの名前を変更',exact:true}).click();

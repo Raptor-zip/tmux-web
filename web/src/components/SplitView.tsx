@@ -60,7 +60,7 @@ interface Props {
   statuses: Record<string, TerminalStatus>;
   focusMode: boolean;
   onToggleFocus(): void;
-  /** タブ数バッジ。パレットの『タブ』を開く */
+  /** 自動の 1 パネル表示のチップ『他 N パネル』。パレットの『タブ』を開く */
   onOverview(): void;
   focusedId: string | null;
   sessions: Session[];
@@ -82,8 +82,8 @@ interface Props {
   onActivateTab(tabId: string): void;
   onCloseTab(tabId: string): void;
   onNewTab(leafId: string, deviceId?: string): void;
-  /** そのデバイスのリモートデスクトップをタブで開く */
-  onOpenScreen(leafId: string, deviceId: string): void;
+  /** タイル見出しの ▾：新規メニューを (x, y) に開く */
+  onNewMenu(leafId: string, x: number, y: number): void;
   onDrop(target: DropTarget, payload: DragPayload): void;
   onStartDrag(payload: DragPayload): void;
   onDragEnd(): void;
@@ -142,7 +142,7 @@ export function SplitView({
   onActivateTab,
   onCloseTab,
   onNewTab,
-  onOpenScreen,
+  onNewMenu,
   onDrop,
   onStartDrag,
   onDragEnd,
@@ -318,9 +318,10 @@ export function SplitView({
             <TabStrip
               leaf={leaf}
               desktopTabs={single ? tiles.flatMap(({ leaf }) => leaf.tabs.map(tab => ({ tab, leafId: leaf.id }))) : undefined}
+              single={single ? { kind: focusMode ? 'focus' : 'auto', others: tiles.length - 1 } : undefined}
+              onRestore={() => panelFor(leaf.id).toggleFocus()}
               onOverview={() => { onFocus(leaf.id); onOverview(); }}
               focused={focused}
-              devices={devices}
               viewOf={viewOf}
               draggingTabId={drag?.fromTabId ?? null}
               caret={tabDrop ? dropAt.before : undefined}
@@ -330,8 +331,8 @@ export function SplitView({
                 onActivateTab(id);
               }}
               onClose={onCloseTab}
-              onNewTab={(deviceId) => onNewTab(leaf.id, deviceId)}
-              onOpenScreen={(deviceId) => { onFocus(leaf.id); onOpenScreen(leaf.id, deviceId); }}
+              onNewTab={() => onNewTab(leaf.id)}
+              onNewMenu={(x, y) => { onFocus(leaf.id); onNewMenu(leaf.id, x, y); }}
               onStartDrag={onStartDrag}
               onContextMenu={(tabId, x, y) => {
                 const owner = tiles.find(({ leaf }) => leaf.tabs.some(tab => tab.id === tabId))?.leaf.id ?? leaf.id;

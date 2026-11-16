@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildWindowViews, groupProjectWindows, paneCommand, windowName, windowTitle } from '../src/windows';
+import { buildWindowViews, distinguishTitles, groupProjectWindows, paneCommand, windowName, windowTitle } from '../src/windows';
 import { TERMINAL_GRACE_MS, windowStatus } from '../src/status';
 import type { Pane, TmuxWindow } from '../src/types';
 
@@ -111,4 +111,26 @@ test('linked windows appear once in project rows even through independent sessio
   const rows = groupProjectWindows([win, linked], views, null, new Set());
   assert.equal(rows.length, 1);
   assert.equal(rows[0].others.length, 0);
+});
+
+test('tabs with the same title get the first hint that tells them apart', () => {
+  const marks = distinguishTitles([
+    { key: 'a', title: 'atlas-web', hints: ['1:claude', 'main'] },
+    { key: 'b', title: 'atlas-web', hints: ['2:ui', 'main'] },
+    { key: 'c', title: 'notes', hints: ['1:zsh', 'notes'] },
+  ]);
+  assert.deepEqual([...marks], [['a', '1:claude'], ['b', '2:ui']], 'unique titles get no mark');
+
+  // tmux の場所が同じ（別セッション）なら、次の手がかり（セッション名）で分ける
+  assert.deepEqual([...distinguishTitles([
+    { key: 1, title: 'api', hints: ['1:zsh', 'work'] },
+    { key: 2, title: 'api', hints: ['1:zsh', 'play'] },
+  ])], [[1, 'work'], [2, 'play']]);
+
+  // どの手がかりでも分けられなければ、つないだうえで通し番号を付ける
+  assert.deepEqual([...distinguishTitles([
+    { key: 1, title: 'api', hints: ['1:zsh'] },
+    { key: 2, title: 'api', hints: ['1:zsh'] },
+    { key: 3, title: 'api', hints: [undefined] },
+  ])], [[1, '1:zsh #1'], [2, '1:zsh #2']]);
 });

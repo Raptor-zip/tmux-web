@@ -17,6 +17,13 @@ export interface MenuItem {
    * マウスでは右に開き、タッチのシートでは同じシートの中で前へ進む（先頭に『‹ 戻る』）。
    */
   submenu?: MenuEntry[];
+  /**
+   * 行の右に並べる小さなボタン（新規メニューの『右に並べる』『下に並べる』）。
+   * 上下の矢印では行の本体だけを移り、→ ← で行の中のボタンへ移る。
+   */
+  side?: MenuItem[];
+  /** 読み上げ用の名前。見た目が短い名前のとき（side のボタン）だけ使う */
+  ariaLabel?: string;
   run(): void;
 }
 
@@ -47,7 +54,7 @@ const SHEET_QUERY = '(any-pointer:coarse)';
 const isSheet = () => typeof window !== 'undefined' && !!window.matchMedia?.(SHEET_QUERY).matches;
 
 const focusable = (root: HTMLElement | null) =>
-  [...(root?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? [])].filter(b => b.getClientRects().length > 0);
+  [...(root?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled):not([data-side])') ?? [])].filter(b => b.getClientRects().length > 0);
 
 /**
  * アプリ側で出すメニュー（端末の右クリック・タブ・パネル ⋯ など）。
@@ -162,7 +169,17 @@ export function ContextMenu({ x, y, items, title, onClose }: Props) {
   const onMenuKey = (e: React.KeyboardEvent<HTMLDivElement>, entries: MenuEntry[], level: 'top' | 'sub') => {
     const root = e.currentTarget;
     const buttons = focusable(root);
-    const current = document.activeElement as HTMLButtonElement;
+    let current = document.activeElement as HTMLButtonElement;
+    // 行の右のボタン（side）：← → で行の中を移り、↑ ↓ は行の本体から数える
+    const row = current?.closest('.ctx-row');
+    if (row && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      const inRow = [...row.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')];
+      const at = inRow.indexOf(current);
+      const to = inRow[at + (e.key === 'ArrowRight' ? 1 : -1)];
+      if (to) { e.preventDefault(); e.stopPropagation(); to.focus(); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); return; }
+    }
+    if (current?.dataset.side) current = row?.querySelector<HTMLButtonElement>('button[data-index]') ?? current;
     const index = buttons.indexOf(current);
     let next = index;
     if (e.key === 'ArrowDown') next = (index + 1) % buttons.length;
@@ -177,6 +194,9 @@ export function ContextMenu({ x, y, items, title, onClose }: Props) {
       const item = entries[i];
       if (item && !isHeading(item) && item.submenu && !item.disabled) {
         e.preventDefault(); e.stopPropagation(); activate(item, i, current, 'key');
+      } else if (item && !isHeading(item) && item.side) {
+        e.preventDefault(); e.stopPropagation();
+        current.closest('.ctx-row')?.querySelector<HTMLButtonElement>('button[data-side]:not(:disabled)')?.focus();
       }
       return;
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -194,6 +214,29 @@ export function ContextMenu({ x, y, items, title, onClose }: Props) {
   const renderEntries = (entries: MenuEntry[], level: 'top' | 'sub') => entries.map((item, i) => {
     if (item === SEP) return <hr role="separator" key={`s${i}`} />;
     if (isHeading(item)) return <div className="ctx-heading" role="presentation" key={`h${i}`}>{item.label}</div>;
+    if (item.side?.length) {
+      return (
+        <div className="ctx-row" role="none" key={`${level}${i}:${item.label}`}>
+          {renderItem(item, i, level)}
+          {item.side.map((side, j) => (
+            <button
+              role="menuitem" tabIndex={-1} key={j}
+              className="ctx-side"
+              data-side={j}
+              disabled={side.disabled}
+              aria-label={side.ariaLabel}
+              title={side.disabled ? side.disabledReason : side.ariaLabel}
+              onPointerEnter={sheet || level !== 'top' || !sub ? undefined : () => { setSub(null); setFlyPos(null); }}
+              onClick={() => activate(side, null, null, 'pointer')}
+            >{side.label}</button>
+          ))}
+        </div>
+      );
+    }
+    return renderItem(item, i, level);
+  });
+
+  const renderItem = (item: MenuItem, i: number, level: 'top' | 'sub') => {
     const reasonId = item.disabled && item.disabledReason ? `ctx-reason-${level}-${i}` : undefined;
     const hasSub = level === 'top' && !!item.submenu;
     return (
@@ -226,7 +269,7 @@ export function ContextMenu({ x, y, items, title, onClose }: Props) {
         {hasSub ? <span className="ctx-key ctx-sub" aria-hidden="true">▸</span> : item.hint && <span className="ctx-key">{item.hint}</span>}
       </button>
     );
-  });
+  };
 
   // シートでは、サブメニューを同じシートの中で開く（親の一覧と入れ替える）
   const inSheetSub = sheet && subEntries;

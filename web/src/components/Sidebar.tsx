@@ -1,7 +1,5 @@
 import { deviceOf, type Device } from '../devices';
 import { Icon } from './Icon';
-import { RecentWork } from './ProjectStart';
-import type { StartedProject } from '../api';
 import { useMemo, useRef, useState } from 'react';
 import { HoverPreview, type PreviewTarget } from './HoverPreview';
 import type { DragPayload } from './SplitView';
@@ -53,7 +51,8 @@ interface Props {
   onNewSession(): void;
   onNewProject(): void;
   onOpenFolder(): void;
-  onProjectStarted(project: StartedProject): void;
+  /** 過去の会話を再開（Claude / Codex）のモーダルを開く */
+  onResume(): void;
   onConfirm(message: string, detail: string, run: () => void): void;
   /** 一定距離ドラッグしたら呼ばれる。ここから先はターミナル側が受け取る */
   onStartDrag(payload: DragPayload): void;
@@ -91,7 +90,7 @@ export function Sidebar({
   onNewSession,
   onNewProject,
   onOpenFolder,
-  onProjectStarted,
+  onResume,
   onConfirm,
   onStartDrag,
   onDropInTree,
@@ -830,7 +829,6 @@ export function Sidebar({
             </div>}
           </section>;
         })}
-        <RecentWork key={selectedDevice} deviceId={selectedDevice} home={home} onStarted={onProjectStarted} />
       </nav>
 
       <div className="sidebar-resize" role="separator" aria-label="セッション一覧の幅" aria-orientation="vertical"
@@ -858,6 +856,7 @@ export function Sidebar({
           <div className="sidebar-more-content">
             <button className="btn ghost block" onClick={onNewProject}>プロジェクトを作る</button>
             <button className="btn ghost block" onClick={onOpenFolder}>フォルダーを開く</button>
+            <button className="btn ghost block" onClick={onResume}>過去の会話を再開…</button>
         <div className="filter-wrap">
           <input
             className="sidebar-filter"

@@ -21,6 +21,51 @@ export function createWorkspaces({ home = os.homedir(), runTmux = tmux, run = ex
     if (!(await fs.stat(dir)).isDirectory()) throw fail(400, 'フォルダーを指定してください');
     return dir;
   }
+  /**
+   * Codex の会話。~/.codex/sessions/年/月/日/rollout-<時刻>-<id>.jsonl の新しいものから見る。
+   * 先頭行（session_meta）は指示文を含んで長いので、JSON として読まず先頭の一部から cwd と source を拾う。
+   * codex exec の自動実行（source が exec）は、人が続ける会話ではないので出さない。
+   */
+  async function codexRecent() {
+    const base = path.join(home, '.codex', 'sessions');
+    const names = async dir => (await fs.readdir(dir, { withFileTypes: true }).catch(() => [])).map(d => d.name).sort().reverse();
+    const files = [];
+    outer: for (const year of await names(base)) {
+      if (!/^\d{4}$/.test(year)) continue;
+      for (const month of await names(path.join(base, year))) {
+        for (const day of await names(path.join(base, year, month))) {
+          const dir = path.join(base, year, month, day);
+          for (const name of await names(dir)) {
+            if (!name.endsWith('.jsonl')) continue;
+            files.push(path.join(dir, name));
+            if (files.length >= 200) break outer;
+          }
+        }
+      }
+    }
+    const items = [];
+    for (const file of files) {
+      const id = path.basename(file).match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i)?.[1];
+      if (!id) continue;
+      const handle = await fs.open(file, 'r').catch(() => null);
+      if (!handle) continue;
+      try {
+        const stat = await handle.stat();
+        const buf = Buffer.alloc(16384);
+        const { bytesRead } = await handle.read(buf, 0, buf.length, 0);
+        const head = buf.subarray(0, bytesRead).toString();
+        if (/"source":"exec"/.test(head)) continue;
+        const raw = head.match(/"cwd":("(?:[^"\\]|\\.)*")/)?.[1];
+        if (!raw) continue;
+        let cwd;
+        try { cwd = JSON.parse(raw); } catch { continue; }
+        cwd = await directory(cwd).catch(() => null);
+        if (!cwd) continue;
+        items.push({ agent: 'codex', cwd, name: path.basename(cwd), sessionId: id, modified: stat.mtimeMs, summary: '' });
+      } finally { await handle.close(); }
+    }
+    return items;
+  }
   async function recent() {
     if (historyCache && Date.now() - historyCache.at < 15000) return historyCache.items;
     const base = path.join(home, '.claude', 'projects');
@@ -52,12 +97,17 @@ export function createWorkspaces({ home = os.homedir(), runTmux = tmux, run = ex
         if (!cwd) continue;
         cwd = await directory(cwd).catch(() => null);
         if (!cwd) continue;
-        projects.push({ cwd, name: path.basename(cwd), sessionId: latest.name.slice(0, -6), modified: latest.modified, summary });
+        projects.push({ agent: 'claude', cwd, name: path.basename(cwd), sessionId: latest.name.slice(0, -6), modified: latest.modified, summary });
       } finally { await handle.close(); }
     }
+    projects.push(...await codexRecent());
+    // 同じフォルダーでも Claude と Codex の会話は別々に残す（どちらで続けるかを選べるように）
     const unique = new Map();
-    for (const project of projects.sort((a, b) => b.modified - a.modified)) if (!unique.has(project.cwd)) unique.set(project.cwd, project);
-    const items = [...unique.values()].slice(0, 60);
+    for (const project of projects.sort((a, b) => b.modified - a.modified)) {
+      const key = `${project.agent}:${project.cwd}`;
+      if (!unique.has(key)) unique.set(key, project);
+    }
+    const items = [...unique.values()].slice(0, 80);
     historyCache = { at: Date.now(), items };
     return items;
   }
@@ -65,7 +115,7 @@ export function createWorkspaces({ home = os.homedir(), runTmux = tmux, run = ex
     const { mode, name, template = 'none', agent = 'claude', prompt = '', resumeId, remoteControl = false } = body;
     if (!['new', 'existing'].includes(mode) || !['none', 'node', 'python'].includes(template) || !['claude', 'codex', 'shell'].includes(agent)) throw fail(400, '作成方法・テンプレート・起動するツールを確認してください');
     if (typeof prompt !== 'string' || prompt.length > 32000) throw fail(400, '指示は32,000文字以内で入力してください');
-    if (resumeId && (agent !== 'claude' || typeof resumeId !== 'string' || !uuid.test(resumeId))) throw fail(400, '再開する履歴が無効です');
+    if (resumeId && (!['claude', 'codex'].includes(agent) || typeof resumeId !== 'string' || !uuid.test(resumeId))) throw fail(400, '再開する履歴が無効です');
     let cwd;
     if (mode === 'new') {
       if (typeof name !== 'string' || !name.trim() || name.length > 80 || /[/\\\x00-\x1f\x7f]/.test(name) || name.trim().startsWith('.')) throw fail(400, 'プロジェクト名は80文字以内で、スラッシュや先頭のドットを含めずに入力してください');
@@ -86,7 +136,7 @@ export function createWorkspaces({ home = os.homedir(), runTmux = tmux, run = ex
     if (agent === 'claude') {
       if (resumeId) args.push('--resume', resumeId);
       if (remoteControl) args.push('--remote-control');
-    }
+    } else if (agent === 'codex' && resumeId) args.push('resume', resumeId);
     if (prompt.trim()) args.push('--', prompt);
     const command = agent === 'shell' ? null : `${agent === 'claude' ? 'CLAUDE_CODE_NO_FLICKER=1 ' : ''}${args.map(quote).join(' ')}; exec "$SHELL" -l`;
     const tmuxArgs = ['new-session', '-d', '-P', '-F', '#{session_id}\t#{window_id}\t#{pane_id}', '-c', cwd, '-x', '140', '-y', '40'];

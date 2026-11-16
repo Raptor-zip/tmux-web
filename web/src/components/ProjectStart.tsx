@@ -52,37 +52,59 @@ export function ProjectStart({ home, deviceId = 'local', deviceName, initialMode
   </Modal>;
 }
 
-export function RecentWork({ home, deviceId = 'local', onStarted }: { home: string; deviceId?: string; onStarted(project: StartedProject): void }) {
-  const [open, setOpen] = useState(false);
+/**
+ * 過去の会話を再開する（新規メニューの『過去の会話を再開…』）。Claude と Codex の会話を新しい順に並べる。
+ * 同じフォルダーでも Claude と Codex は別の行にする（どちらで続けるかを選べるように）。
+ */
+export function ResumeConversation({ home, deviceId = 'local', deviceName, onClose, onStarted }: {
+  home: string; deviceId?: string; deviceName?: string; onClose(): void; onStarted(project: StartedProject): void;
+}) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [agent, setAgent] = useState<'all' | 'claude' | 'codex'>('all');
   const [busy, setBusy] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const lock = useRef(false);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { input.current?.focus(); }, []);
   useEffect(() => {
-    if (!open) return;
     const controller = new AbortController();
     setLoading(true); setError('');
     recentProjects(controller.signal, deviceId).then(data => setProjects(data.projects)).catch(e => { if (!controller.signal.aborted) setError(e.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [open, revision, deviceId]);
-  return <section className="recent-work" aria-label="最近のClaude履歴">
-    <button className="recent-heading" aria-expanded={open} onClick={() => setOpen(v => !v)}><span aria-hidden="true">{open ? '▾' : '▸'}</span> 最近のClaude履歴 <Icon name="history" /></button>
-    {open && <div className="recent-body">
-      <div className="recent-filter"><input aria-label="履歴を検索" placeholder="プロジェクトを検索" value={query} onChange={e => setQuery(e.target.value)} /><button className="icon-btn" title="履歴を更新" aria-label="履歴を更新" disabled={loading || busy !== null} onClick={() => setRevision(v => v + 1)}><Icon name="refresh" /></button></div>
-      {loading && <p className="field-hint" role="status">履歴を読み込んでいます…</p>}
-      {error && <p className="inline-error" role="alert">{error}</p>}
-      {!loading && !error && projects.filter(p => `${p.name} ${p.cwd} ${p.summary}`.toLowerCase().includes(query.toLowerCase())).length === 0 && <p className="field-hint">{query ? '一致する履歴がありません' : '再開できる履歴がありません'}</p>}
-      {projects.filter(p => `${p.name} ${p.cwd} ${p.summary}`.toLowerCase().includes(query.toLowerCase())).map(project => <button key={project.cwd} className="recent-row" disabled={busy !== null} onClick={async () => {
-        if (lock.current) return; lock.current = true; setBusy(project.cwd); setError('');
-        try { onStarted(await startProject({ mode: 'existing', dir: project.cwd, agent: 'claude', resumeId: project.sessionId }, deviceId)); }
-        catch (e) { setError((e as Error).message); }
-        finally { setBusy(null); lock.current = false; }
-      }} title={`${project.summary || project.name}\n${project.cwd}\nクリックして会話を再開`}>
-        <span><strong>{project.name}</strong><small>{tildePath(project.cwd, home)}</small>{project.summary && <small>{project.summary}</small>}</span><span className="recent-resume">{busy === project.cwd ? '起動中…' : '再開'}</span>
-      </button>)}
-    </div>}
-  </section>;
+  }, [revision, deviceId]);
+  const agentOf = (p: RecentProject) => p.agent ?? 'claude';
+  const shown = projects
+    .filter(p => agent === 'all' || agentOf(p) === agent)
+    .filter(p => `${p.name} ${p.cwd} ${p.summary} ${agentOf(p)}`.toLowerCase().includes(query.toLowerCase()));
+  return <Modal title={`${deviceName || 'このPC'} · 過去の会話を再開`} onClose={onClose} busy={busy !== null} className="resume-modal">
+    <div className="recent-work">
+      <div className="recent-filter">
+        <input ref={input} aria-label="会話を検索" placeholder="プロジェクト・フォルダーで探す" value={query} onChange={e => setQuery(e.target.value)} />
+        <div className="project-modes recent-agents" role="group" aria-label="エージェント">
+          {(['all', 'claude', 'codex'] as const).map(a => <button key={a} type="button" className={agent === a ? 'on' : ''} aria-pressed={agent === a} onClick={() => setAgent(a)}>{a === 'all' ? 'すべて' : a === 'claude' ? 'Claude' : 'Codex'}</button>)}
+        </div>
+        <button className="icon-btn" title="一覧を更新" aria-label="一覧を更新" disabled={loading || busy !== null} onClick={() => setRevision(v => v + 1)}><Icon name="refresh" /></button>
+      </div>
+      <div className="recent-body">
+        {loading && <p className="field-hint" role="status">会話を読み込んでいます…</p>}
+        {error && <p className="inline-error" role="alert">{error}</p>}
+        {!loading && !error && shown.length === 0 && <p className="field-hint">{query || agent !== 'all' ? '一致する会話がありません' : '再開できる会話がありません'}</p>}
+        {shown.map(project => {
+          const key = `${agentOf(project)}:${project.cwd}`;
+          const name = agentOf(project) === 'codex' ? 'Codex' : 'Claude';
+          return <button key={key} className="recent-row" disabled={busy !== null} onClick={async () => {
+            if (lock.current) return; lock.current = true; setBusy(key); setError('');
+            try { onStarted(await startProject({ mode: 'existing', dir: project.cwd, agent: agentOf(project), resumeId: project.sessionId }, deviceId)); }
+            catch (e) { setError((e as Error).message); }
+            finally { setBusy(null); lock.current = false; }
+          }} title={`${project.summary || project.name}\n${project.cwd}\n${name} の会話を再開`}>
+            <span><strong>{project.name} <span className={`recent-agent ${agentOf(project)}`}>{name}</span></strong><small>{tildePath(project.cwd, home)} · {new Date(project.modified).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</small>{project.summary && <small>{project.summary}</small>}</span><span className="recent-resume">{busy === key ? '起動中…' : '再開'}</span>
+          </button>;
+        })}
+      </div>
+    </div>
+  </Modal>;
 }

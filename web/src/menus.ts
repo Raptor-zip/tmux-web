@@ -38,18 +38,7 @@ export const TAB_MENU: readonly MenuSlot[] = [
   ] },
   { submenu: 'tmux', items: ['window.rename', 'pane.zoom', 'pane.kill', 'window.kill'] },
   SEP,
-  // 新規メニュー（＋▾）と『表示と接続』ができるまでの置き場。旧ワークスペースメニューの残り
-  { submenu: '新規', items: [
-    'terminal.newTab',
-    'terminal.splitRight',
-    'terminal.splitBottom',
-    SEP,
-    'agent.claude',
-    'agent.codex',
-    SEP,
-    'screen.openTab',
-    'screen.openDialog',
-  ] },
+  // 『表示と接続』ができるまでの置き場。旧ワークスペースメニューの残り
   { submenu: '表示と設定', items: [
     'navigate.switcher',
     'navigate.shortcuts',
@@ -64,12 +53,23 @@ export const TAB_MENU: readonly MenuSlot[] = [
   { submenu: 'まとめて閉じる', items: ['tab.closeOthers', 'tab.closeRight', 'panel.close'] },
 ];
 
-/** タブ列の ＋ */
+/**
+ * 新規メニュー（タイル見出しの ＋▾、Alt+Shift+T）。
+ * 先頭の 3 行は 1 文字キー（T・C・X）で選べ、行の右の『右に並べる』『下に並べる』で隣のパネルに開く。
+ * 入力先のデバイスでの端末は先頭の『端末』なので、『別のデバイスで ▸』には他のデバイスだけを出す。
+ */
 export const NEW_MENU: readonly MenuSlot[] = [
-  'create.terminalHere',
-  'create.terminalOnDevice',
+  { id: 'terminal.newTab', label: '端末', accel: 't', side: ['terminal.splitRight', 'terminal.splitBottom'] },
+  { id: 'agent.claude', label: 'Claude', accel: 'c', side: ['agent.claudeRight', 'agent.claudeBottom'] },
+  { id: 'agent.codex', label: 'Codex', accel: 'x', side: ['agent.codexRight', 'agent.codexBottom'] },
   SEP,
-  'create.screenOnDevice',
+  { submenu: '別のデバイスで', items: ['create.terminalOnDevice'] },
+  { submenu: 'リモートデスクトップ', accel: 'r', items: ['create.screenOnDevice', SEP, { id: 'screen.openDialog', label: 'ダイアログで開く' }] },
+  SEP,
+  'create.project',
+  'create.folder',
+  'create.resume',
+  'create.session',
 ];
 
 /** 仮想デスクトップのタブを右クリック・長押ししたときのメニュー */

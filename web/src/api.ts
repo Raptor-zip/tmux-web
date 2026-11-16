@@ -212,7 +212,7 @@ export function writeDesktopClipboard(text: string, device = 'local') {
   return request<{ ok: true }>(devicePath(device, '/api/desktop/clipboard'), { method: 'POST', body: JSON.stringify({ text }) });
 }
 
-export interface RecentProject { name: string; cwd: string; sessionId: string; modified: number; summary: string }
+export interface RecentProject { agent?: 'claude' | 'codex'; name: string; cwd: string; sessionId: string; modified: number; summary: string }
 export interface StartedProject { sessionId: string; windowId: string; paneId: string; cwd: string }
 export interface StartProjectOptions {
   mode: 'new' | 'existing'; name?: string; parent?: string; dir?: string;

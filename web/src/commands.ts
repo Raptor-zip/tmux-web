@@ -1,4 +1,4 @@
-import type { MenuEntry } from './components/ContextMenu';
+import type { MenuEntry, MenuItem } from './components/ContextMenu';
 import type { Pane, Session, TmuxWindow } from './types';
 
 /**
@@ -28,8 +28,10 @@ export interface AppContext {
   onNewTab(): void;
   onLaunchAgent(agent: 'claude' | 'codex'): void;
   launchingAgent: 'claude' | 'codex' | null;
-  /** 新しいウィンドウを作って、その向きに並べる */
-  onSplitNewWindow(side: 'right' | 'bottom'): void;
+  /** 新しいウィンドウを作って、その向きに並べる。agent を渡すとそのエージェントを起動する */
+  onSplitNewWindow(side: 'right' | 'bottom', agent?: 'claude' | 'codex'): void;
+  /** 新規メニュー（＋▾）を入力先のパネルで開く */
+  onOpenNewMenu(): void;
   onToggle(key: 'mode' | 'showStatusBar' | 'showKeyBar' | 'altKeys'): void;
   onCopyPane(): void;
   onKillPane(): void;
@@ -110,11 +112,17 @@ export interface StripContext {
   closePanel(): void;
 }
 
-/** タブ列の ＋：どのデバイスで何を開くか */
+/** 新規メニュー（＋▾）：どのデバイスで何を開くか */
 export interface CreateContext {
   devices: { id: string; name: string; connected?: boolean }[];
+  /** 入力先のデバイス。『別のデバイスで ▸』からは外し、『リモートデスクトップ ▸』では先頭に置く */
+  current?: string;
   newTerminal(deviceId?: string): void;
   openScreen(deviceId: string): void;
+  newProject?(): void;
+  openFolder?(): void;
+  resume?(): void;
+  newSession?(): void;
 }
 
 /** 仮想デスクトップのタブ */
@@ -193,6 +201,8 @@ export interface CommandFamily<S extends Scope = Scope, A = any> {
   group: CommandGroup;
   items(ctx: Sections[S]): A[];
   itemLabel(ctx: Sections[S], item: A): string;
+  /** メニューでの表示名（サブメニューの中で短くする）。無ければ itemLabel */
+  itemMenuLabel?(ctx: Sections[S], item: A): string;
   hint?(ctx: Sections[S], item: A): string | undefined;
   disabledReason?(ctx: Sections[S], item: A): string | null | undefined;
   danger?: boolean;
@@ -215,32 +225,65 @@ const onTerminal = (c: AppContext) => !c.screenTab;
 export const COMMANDS: Command[] = [
   // ---- 作る・起動する
   define({
-    id: 'terminal.newTab', scope: 'app', group: 'create', label: '新しい端末をタブで開く', hint: 'Alt+T',
+    id: 'terminal.newTab', scope: 'app', group: 'create', label: '新しい端末', hint: 'Alt+T',
+    aliases: ['新しい端末をタブで開く', '現在のデバイスで端末を開く'],
     run: c => c.onNewTab(),
   }),
   define({
-    id: 'terminal.splitRight', scope: 'app', group: 'create', label: '新しい端末を右に並べる',
+    id: 'terminal.splitRight', scope: 'app', group: 'create', label: '新しい端末を右に並べる', menuLabel: '右に並べる',
     disabledReason: c => (canOpen(c) ? null : '端末を開けるセッションがありません'),
     run: c => c.onSplitNewWindow('right'),
   }),
   define({
-    id: 'terminal.splitBottom', scope: 'app', group: 'create', label: '新しい端末を下に並べる',
+    id: 'terminal.splitBottom', scope: 'app', group: 'create', label: '新しい端末を下に並べる', menuLabel: '下に並べる',
     disabledReason: c => (canOpen(c) ? null : '端末を開けるセッションがありません'),
     run: c => c.onSplitNewWindow('bottom'),
   }),
   define({
-    id: 'create.terminalHere', scope: 'create', group: 'create', label: '現在のデバイスで端末を開く', hint: 'Alt+T',
-    run: c => c.newTerminal(),
+    id: 'create.menu', scope: 'app', group: 'create', label: '新規メニュー', hint: 'Alt+Shift+T',
+    aliases: ['新しく開く', '作る'],
+    run: c => c.onOpenNewMenu(),
+  }),
+  ...(['claude', 'codex'] as const).flatMap(agent => {
+    const name = agent === 'claude' ? 'Claude' : 'Codex';
+    const launchReason = (c: AppContext) => (canLaunch(c) ? null : c.launchingAgent ? '起動中です' : '起動できるセッションがありません');
+    return [
+      define({
+        id: `agent.${agent}`, scope: 'app', group: 'agent', label: `${name} を起動`,
+        hint: agent === 'claude' ? 'Alt+Shift+C' : 'Alt+Shift+X',
+        aliases: [`${name} を新しいタブで起動`],
+        disabledReason: launchReason,
+        run: c => c.onLaunchAgent(agent),
+      }),
+      define({
+        id: `agent.${agent}Right`, scope: 'app', group: 'agent', label: `${name} を右に並べる`, menuLabel: '右に並べる',
+        disabledReason: launchReason,
+        run: c => c.onSplitNewWindow('right', agent),
+      }),
+      define({
+        id: `agent.${agent}Bottom`, scope: 'app', group: 'agent', label: `${name} を下に並べる`, menuLabel: '下に並べる',
+        disabledReason: launchReason,
+        run: c => c.onSplitNewWindow('bottom', agent),
+      }),
+    ];
   }),
   define({
-    id: 'agent.claude', scope: 'app', group: 'agent', label: 'Claude を新しいタブで起動',
-    disabledReason: c => (canLaunch(c) ? null : c.launchingAgent ? '起動中です' : '起動できるセッションがありません'),
-    run: c => c.onLaunchAgent('claude'),
+    id: 'create.project', scope: 'create', group: 'create', label: 'プロジェクトを作る…', aliases: ['新しいプロジェクト'],
+    when: c => !!c.newProject, run: c => c.newProject?.(),
   }),
   define({
-    id: 'agent.codex', scope: 'app', group: 'agent', label: 'Codex を新しいタブで起動',
-    disabledReason: c => (canLaunch(c) ? null : c.launchingAgent ? '起動中です' : '起動できるセッションがありません'),
-    run: c => c.onLaunchAgent('codex'),
+    id: 'create.folder', scope: 'create', group: 'create', label: 'フォルダーを開く…', aliases: ['既存のフォルダー'],
+    when: c => !!c.openFolder, run: c => c.openFolder?.(),
+  }),
+  define({
+    id: 'create.resume', scope: 'create', group: 'create', label: '過去の会話を再開…',
+    aliases: ['最近のClaude履歴', '履歴', 'resume', 'Codex', 'Claude'],
+    when: c => !!c.resume, run: c => c.resume?.(),
+  }),
+  define({
+    id: 'create.session', scope: 'create', group: 'create', label: 'tmux セッションを作る…',
+    aliases: ['新しいセッションを作る', 'セッション'],
+    when: c => !!c.newSession, run: c => c.newSession?.(),
   }),
   define({
     id: 'agent.remoteControl', scope: 'app', group: 'agent', label: 'Claude アプリに接続…',
@@ -458,13 +501,18 @@ export const COMMANDS: Command[] = [
 export const FAMILIES: CommandFamily[] = [
   family({
     id: 'create.terminalOnDevice', scope: 'create', group: 'create', label: '{デバイス} で端末を開く',
-    items: c => c.devices, itemLabel: (_c, d) => `${d.name} で端末を開く`,
+    // 入力先のデバイスは『新しい端末』と同じなので、ここには出さない
+    items: c => c.devices.filter(d => d.id !== c.current),
+    itemLabel: (_c, d) => `${d.name} で端末を開く`, itemMenuLabel: (_c, d) => d.name,
     disabledReason: (_c, d) => (d.connected ? null : 'このデバイスは接続していません'),
     run: (c, d) => c.newTerminal(d.id),
   }),
   family({
     id: 'create.screenOnDevice', scope: 'create', group: 'screen', label: '{デバイス} のリモートデスクトップを開く',
-    items: c => c.devices, itemLabel: (_c, d) => `${d.name} のリモートデスクトップを開く`,
+    // 入力先のデバイスを先頭に
+    items: c => [...c.devices].sort((a, b) => Number(b.id === c.current) - Number(a.id === c.current)),
+    itemLabel: (_c, d) => `${d.name} のリモートデスクトップを開く`, itemMenuLabel: (_c, d) => d.name,
+    hint: (c, d) => (d.id === c.current ? '入力先' : undefined),
     disabledReason: (_c, d) => (d.connected ? null : 'このデバイスは接続していません'),
     run: (c, d) => c.openScreen(d.id),
   }),
@@ -496,7 +544,7 @@ export function findCommand(id: string): Command | undefined {
  */
 export type MenuSlot =
   | string
-  | { id: string; hint?: string; accel?: string }
+  | { id: string; hint?: string; accel?: string; label?: string; side?: readonly string[] }
   | { heading: string }
   | { submenu: string; items: readonly MenuSlot[]; accel?: string }
   | null;
@@ -524,6 +572,8 @@ export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext, neste
     const id = typeof slot === 'string' ? slot : slot.id;
     const override = typeof slot === 'string' ? undefined : slot.hint;
     const accel = typeof slot === 'string' ? undefined : slot.accel;
+    const labelOverride = typeof slot === 'string' ? undefined : slot.label;
+    const sideIds = typeof slot === 'string' ? undefined : slot.side;
     const fam = familyById.get(id);
     if (fam) {
       const section = ctx[fam.scope];
@@ -531,7 +581,7 @@ export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext, neste
       for (const item of fam.items(section)) {
         const reason = fam.disabledReason?.(section, item) ?? null;
         out.push({
-          label: fam.itemLabel(section, item),
+          label: fam.itemMenuLabel?.(section, item) ?? fam.itemLabel(section, item),
           hint: override ?? fam.hint?.(section, item),
           accel,
           disabled: reason !== null,
@@ -551,12 +601,18 @@ export function buildMenu(slots: readonly MenuSlot[], ctx: CommandContext, neste
     }
     if (command.when && !command.when(section)) continue;
     const reason = command.disabledReason?.(section) ?? null;
-    const label = typeof command.menuLabel === 'function' ? command.menuLabel(section) : command.menuLabel ?? command.label;
+    const label = labelOverride ?? (typeof command.menuLabel === 'function' ? command.menuLabel(section) : command.menuLabel ?? command.label);
     const hint = override ?? (typeof command.hint === 'function' ? command.hint(section) : command.hint);
+    // 行の右に並べる小さなボタン（新規メニューの『右に並べる』『下に並べる』）
+    // 見た目は短い名前（右に並べる）、読み上げは正式な名前（新しい端末を右に並べる）
+    const side = sideIds?.flatMap(sid => buildMenu([sid], ctx, true)
+      .filter((e): e is MenuItem => !!e && !('heading' in e))
+      .map(e => ({ ...e, ariaLabel: commandById.get(sid)?.label })));
     out.push({
       label,
       hint,
       accel,
+      side: side?.length ? side : undefined,
       disabled: reason !== null,
       disabledReason: reason ?? undefined,
       danger: command.danger,

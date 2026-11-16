@@ -17,7 +17,8 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
     throw error;
   });
   const plusMenu = async () => {
-    await page.locator('.tile.focused').getByRole('button', { name: '新しい端末をタブで開く', exact: true }).click();
+    await page.locator('.tile.focused').getByRole('button', { name: '新規メニュー', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'リモートデスクトップ', exact: true }).click();
   };
 
   // Playwright の WebSocket 差し替えは send などを親クラスに持つため、noVNC の
@@ -33,9 +34,9 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
     }
   });
 
-  // 「+」から開く。端末のタブと同じ列にモニタのアイコン付きで並ぶ
+  // 「＋▾ → リモートデスクトップ ▸」から開く。端末のタブと同じ列にモニタのアイコン付きで並ぶ
   await plusMenu();
-  await page.getByRole('menuitem', { name: 'ThinkPad のリモートデスクトップを開く', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^ThinkPad/ }).click();
   await connected();
   assert.equal(await shown.locator('.desktop-viewport canvas').count(), 1, 'the remote screen renders inside the tile');
   assert.equal(open().length, 1);
@@ -47,7 +48,7 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
 
   // 同じデバイスをもう一度開いても 2 枚目は作らず、接続も増やさない
   await plusMenu();
-  await page.getByRole('menuitem', { name: 'ThinkPad のリモートデスクトップを開く', exact: true }).click();
+  await page.getByRole('menuitem', { name: /^ThinkPad/ }).click();
   await page.waitForTimeout(300);
   assert.equal(await page.locator('.tab.tab-screen').count(), 1);
   assert.equal(screenTransports.length, 1, 'reopening the same device does not reconnect');
@@ -77,9 +78,8 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   assert.equal(screenTransports.length, 1, 'returning within the grace period does not reconnect');
 
   // ダイアログで同じ画面を開くと、タブは接続を譲って「別の場所で表示中」になる
-  await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '新規', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'リモートデスクトップをダイアログで開く', exact: true }).click();
+  await plusMenu();
+  await page.getByRole('menuitem', { name: 'ダイアログで開く', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'リモートデスクトップ', exact: true });
   await dialog.locator('.desktop-connection-status.is-connected').waitFor({ timeout: 8000 });
   await waitFor(() => open().length === 1 && screenTransports[0].closed, 'the dialog takes over the only connection');
@@ -90,9 +90,8 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
 
   // ダイアログの「タブで開く」は、既存のタブを前に出してダイアログを閉じる
   await page.locator('.tab:not(.tab-screen)').first().click();
-  await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '新規', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'リモートデスクトップをダイアログで開く', exact: true }).click();
+  await plusMenu();
+  await page.getByRole('menuitem', { name: 'ダイアログで開く', exact: true }).click();
   await dialog.getByRole('button', { name: 'タブで開く', exact: true }).click();
   assert.equal(await dialog.count(), 0);
   assert.equal(await page.locator('.tab.tab-screen').count(), 1);

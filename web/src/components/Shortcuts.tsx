@@ -17,7 +17,7 @@ const OTHER_SHORTCUTS: { label: string; keys: string }[] = [
   { label: '前 / 次のワークスペース', keys: 'Alt+Shift+← / →' },
   { label: '文字サイズを変える', keys: 'Ctrl+ホイール' },
   { label: 'タブを閉じる', keys: 'タブを中クリック' },
-  { label: '新しい端末をタブで開く', keys: 'タブ列の空いた所をダブルクリック' },
+  { label: '新しい端末', keys: 'タブ列の空いた所をダブルクリック' },
   { label: 'ワークスペースの名前を変える', keys: 'ワークスペースをダブルクリック' },
   { label: '端末の文字を選ぶ（tmux がマウスを使っているとき）', keys: 'Shift+ドラッグ' },
   { label: 'ブラウザの右クリックメニューを出す', keys: 'Shift+右クリック' },

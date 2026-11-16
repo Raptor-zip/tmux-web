@@ -125,3 +125,38 @@ export function groupProjectWindows(windows: TmuxWindow[], views: Map<string, Wi
     return { key, window, others: members.filter(win => win !== window) };
   });
 }
+
+/**
+ * 同じタイトルが並ぶときに付ける、区別用の薄い表記（atlas-web · 2:ui）。
+ * hints を前から順に試し、同じタイトルの仲間の中で全部ちがう最初のものを使う。
+ * どれでも分けられなければ hints をつないだもの、それでも同じなら通し番号を付ける。
+ * タイトルが 1 つしかないものには何も付けない（Map に入らない）。
+ */
+export function distinguishTitles<K>(items: { key: K; title: string; hints: (string | null | undefined)[] }[]): Map<K, string> {
+  const out = new Map<K, string>();
+  const byTitle = new Map<string, typeof items>();
+  for (const item of items) {
+    const list = byTitle.get(item.title);
+    if (list) list.push(item); else byTitle.set(item.title, [item]);
+  }
+  for (const group of byTitle.values()) {
+    if (group.length < 2) continue;
+    const levels = Math.max(...group.map(g => g.hints.length));
+    let chosen: string[] | null = null;
+    for (let level = 0; level < levels && !chosen; level++) {
+      const values = group.map(g => g.hints[level] || '');
+      if (values.every(Boolean) && new Set(values).size === values.length) chosen = values;
+    }
+    if (!chosen) {
+      const joined = group.map(g => g.hints.filter(Boolean).join(' · '));
+      const seen = new Map<string, number>();
+      chosen = joined.map(text => {
+        const n = (seen.get(text) ?? 0) + 1;
+        seen.set(text, n);
+        return n === 1 && joined.filter(j => j === text).length === 1 ? text : [text, `#${n}`].filter(Boolean).join(' ');
+      });
+    }
+    group.forEach((g, i) => { if (chosen![i]) out.set(g.key, chosen![i]); });
+  }
+  return out;
+}

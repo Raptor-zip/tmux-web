@@ -36,7 +36,7 @@ test('every menu slot names a registered command', () => {
 
 const app = (over: Partial<AppContext> = {}): AppContext => ({
   session: null, window: null, activePane: null, mode: 'mirror', showStatusBar: false, showKeyBar: false, altKeys: true,
-  onAction() {}, onNewTab() {}, onLaunchAgent() {}, launchingAgent: null, onSplitNewWindow() {}, onToggle() {},
+  onAction() {}, onNewTab() {}, onLaunchAgent() {}, launchingAgent: null, onSplitNewWindow() {}, onOpenNewMenu() {}, onToggle() {},
   onCopyPane() {}, onKillPane() {}, onOpenFiles() {}, onRemoteControl() {}, onExitClaude() {}, onOpenScreen() {}, onOpenScreenTab() {},
   onOpenSwitcher() {}, onOpenShortcuts() {}, approvalPending: false, onOpenApproval() {}, onSendCommand() {}, onSelectText() {}, onPaste() {}, ...over,
 });
@@ -62,13 +62,13 @@ test('tab menu groups placement, tmux and bulk close into submenus', () => {
   assert.deepEqual(items.map(e => (e ? e.label : '---')), [
     '全文をコピー（履歴込み）', 'テキストを選んでコピー…', '貼り付け', '---',
     '作業フォルダーを開く', 'コマンドを送る…', '---',
-    '配置', 'tmux', '---', '新規', '表示と設定', '---', 'タブを閉じる', 'まとめて閉じる',
+    '配置', 'tmux', '---', '表示と設定', '---', 'タブを閉じる', 'まとめて閉じる',
   ]);
   const names = (label: string) => sub(items, label).map(e => (e ? e.label : '---'));
   assert.deepEqual(names('配置'), ['パネルを最大化', '右に分割して移す', '下に分割して移す', '「api」のパネルへ移す', 'ワークスペース「作業2」へ移す', '左へ移す', '右へ移す']);
   assert.deepEqual(names('tmux'), ['端末の名前を変更…', 'ペインを拡大（tmux）', 'ペインを終了…', '端末を終了…']);
   assert.deepEqual(names('まとめて閉じる'), ['他のタブ（1）', '右側のタブ（1）', 'このパネル（2 タブ）']);
-  assert.ok(names('新規').includes('Claude を新しいタブで起動'), 'the old workspace menu items stay reachable');
+  assert.ok(!items.some(e => e?.label === '新規'), 'creating moved to the new menu (＋▾)');
   assert.ok(names('表示と設定').includes('Alt ショートカットを使う'));
   // 最大化中は「並びに戻す」になる
   assert.equal(sub(buildMenu(TAB_MENU, full({ maximized: true })), '配置')[0]!.label, '並びに戻す');
@@ -109,7 +109,7 @@ test('tab menu switches screen/terminal items and runs with its context', () => 
 test('menu items run the registered action with their context', () => {
   const calls: string[] = [];
   const items = buildMenu(TAB_MENU, full({ app: { onNewTab: () => calls.push('new'), onToggle: k => calls.push(k), altKeys: true } }));
-  (sub(items, '新規')[0] as MenuItem).run();
+  (buildMenu(NEW_MENU, full({ app: { onNewTab: () => calls.push('new') } }))[0] as MenuItem).run();
   const view = sub(items, '表示と設定');
   (view.find(e => e?.label === '直接接続に切り替える') as MenuItem).run();
   const alt = view.at(-1) as MenuItem;
@@ -129,11 +129,41 @@ test('Claude exit asks before sending /exit', () => {
   assert.deepEqual(sent, ['confirm'], 'the menu only opens the confirmation; /exit is sent after it');
 });
 
-test('new-tab menu lists every device and disables offline ones', () => {
-  const items = buildMenu(NEW_MENU, { create: { devices: [{ id: 'a', name: 'A', connected: true }, { id: 'b', name: 'B', connected: false }], newTerminal() {}, openScreen() {} } });
-  assert.deepEqual(items.map(e => (e ? `${e.label}${e.disabled ? ' (x)' : ''}` : '---')), [
-    '現在のデバイスで端末を開く', 'A で端末を開く', 'B で端末を開く (x)', '---', 'A のリモートデスクトップを開く', 'B のリモートデスクトップを開く (x)',
+test('new menu: terminal, Claude and Codex with side placements, other devices, remote desktops and creators', () => {
+  const calls: string[] = [];
+  const devices = [{ id: 'a', name: 'A', connected: true }, { id: 'b', name: 'B', connected: false }, { id: 'c', name: 'C', connected: true }];
+  const create = {
+    devices, current: 'c', newTerminal: (id?: string) => calls.push(`term:${id}`), openScreen: (id: string) => calls.push(`screen:${id}`),
+    newProject: () => calls.push('project'), openFolder: () => calls.push('folder'), resume: () => calls.push('resume'), newSession: () => calls.push('session'),
+  };
+  const items = buildMenu(NEW_MENU, { app: app({ canOpenTerminal: true, onSplitNewWindow: (side, agent) => calls.push(`split:${side}:${agent ?? 'term'}`) }), create });
+  assert.deepEqual(items.map(e => (e ? e.label : '---')), [
+    '端末', 'Claude', 'Codex', '---', '別のデバイスで', 'リモートデスクトップ', '---',
+    'プロジェクトを作る…', 'フォルダーを開く…', '過去の会話を再開…', 'tmux セッションを作る…',
   ]);
+  const rows = items.slice(0, 3) as MenuItem[];
+  assert.deepEqual(rows.map(r => [r.accel, r.hint]), [['t', 'Alt+T'], ['c', 'Alt+Shift+C'], ['x', 'Alt+Shift+X']]);
+  assert.deepEqual(rows.map(r => r.side!.map(s => `${s.label}=${s.ariaLabel}`)), [
+    ['右に並べる=新しい端末を右に並べる', '下に並べる=新しい端末を下に並べる'],
+    ['右に並べる=Claude を右に並べる', '下に並べる=Claude を下に並べる'],
+    ['右に並べる=Codex を右に並べる', '下に並べる=Codex を下に並べる'],
+  ]);
+  rows[1].side![1].run();
+  // 入力先のデバイス（C）は『端末』と同じなので、別のデバイスには出さない
+  const other = sub(items, '別のデバイスで') as MenuItem[];
+  assert.deepEqual(other.map(e => `${e.label}${e.disabled ? ` (${e.disabledReason})` : ''}`), ['A', 'B (このデバイスは接続していません)']);
+  other[0].run();
+  // リモートデスクトップは入力先を先頭に、R で開く
+  const screen = items.find(e => e?.label === 'リモートデスクトップ') as MenuItem;
+  assert.equal(screen.accel, 'r');
+  assert.deepEqual(screen.submenu!.map(e => (e ? `${e.label}${e.disabled ? ' (x)' : ''}${(e as MenuItem).hint ? ` [${(e as MenuItem).hint}]` : ''}` : '---')),
+    ['C [入力先]', 'A', 'B (x)', '---', 'ダイアログで開く']);
+  (screen.submenu![0] as MenuItem).run();
+  for (const label of ['プロジェクトを作る…', 'フォルダーを開く…', '過去の会話を再開…', 'tmux セッションを作る…']) (items.find(e => e?.label === label) as MenuItem).run();
+  assert.deepEqual(calls, ['split:bottom:claude', 'term:a', 'screen:c', 'project', 'folder', 'resume', 'session']);
+  // ほかのデバイスが無ければ『別のデバイスで ▸』ごと出さない
+  const alone = buildMenu(NEW_MENU, { app: app(), create: { ...create, devices: [devices[2]] } });
+  assert.ok(!alone.some(e => e?.label === '別のデバイスで'));
 });
 
 test('font size and line height menus keep their short labels and limits', () => {
@@ -186,7 +216,7 @@ test('palette commands search labels and aliases and run with their context', ()
   const find = (q: string) => list.filter(c => matchesCommand(c, q)).map(c => c.label);
   assert.ok(find('本文をコピー').includes('全文をコピー（履歴込み）'), 'old names find the renamed command');
   assert.ok(find('キーバー').includes('キーバーの表示を切り替える'), 'menu labels are searchable');
-  assert.ok(find('新しい 端末 タブ').includes('新しい端末をタブで開く'), 'every word must match');
+  assert.ok(find('新しい 端末 タブ').includes('新しい端末'), 'every word must match (old names are aliases)');
   assert.deepEqual(find('no-such-command'), []);
   list.find(c => c.id === 'terminal.newTab')!.run();
   assert.deepEqual(calls, ['new']);
@@ -200,7 +230,7 @@ test('palette commands search labels and aliases and run with their context', ()
 
 test('shortcut list is generated from command hints', () => {
   const keys = commandShortcuts().map(s => s.keys);
-  for (const k of ['Alt+T', 'Alt+W', 'Alt+P', 'Alt+/', 'Alt+Enter']) assert.ok(keys.includes(k), `${k} is listed`);
+  for (const k of ['Alt+T', 'Alt+W', 'Alt+P', 'Alt+/', 'Alt+Enter', 'Alt+Shift+T', 'Alt+Shift+C', 'Alt+Shift+X']) assert.ok(keys.includes(k), `${k} is listed`);
   assert.ok(!keys.includes('6px'), 'non-key hints are not shortcuts');
 });
 

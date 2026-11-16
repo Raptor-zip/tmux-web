@@ -3,7 +3,7 @@ import { desktopKey, type DesktopLayoutRegistry } from './desktops';
 import { Devices } from './components/Devices';
 import { DeviceStart } from './components/DeviceStart';
 import { deviceOf } from './devices';
-import { ProjectStart } from './components/ProjectStart';
+import { ProjectStart, ResumeConversation } from './components/ProjectStart';
 import { ApprovalDialog, ApprovalNotice, useApproval } from './components/Approval';
 import { RemoteControl } from './components/RemoteControl';
 import { ScreenViewer } from './components/ScreenViewer';
@@ -15,8 +15,8 @@ import { flushSync } from 'react-dom';
 import { fetchCapture, runAction, uploadAttachment, useTmuxState, type StartedProject } from './api';
 import { quotePath } from './attachments';
 import { Sidebar, type GroupBy, type TreeDropTarget } from './components/Sidebar';
-import { tabMenuItems, FONT_SIZE_MENU, LINE_HEIGHT_MENU } from './menus';
-import { buildMenu, paletteCommands, type AppContext, type PanelContext, type SelectionContext, type TabContext, type ViewContext } from './commands';
+import { tabMenuItems, FONT_SIZE_MENU, LINE_HEIGHT_MENU, NEW_MENU } from './menus';
+import { buildMenu, paletteCommands, type AppContext, type CreateContext, type PanelContext, type SelectionContext, type TabContext, type ViewContext } from './commands';
 import { KeyBar } from './components/KeyBar';
 import { useSharedSetting } from './shared-setting';
 import { Dialog, type DialogSpec } from './components/Dialog';
@@ -185,6 +185,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const pendingWindows = useRef<Set<string>>(new Set());
   const pendingSessions = useRef<Set<string>>(new Set());
   const [projectMode, setProjectMode] = useState<'new' | 'existing' | null>(null);
+  /** 過去の会話を再開（Claude / Codex）のモーダル */
+  const [resumeOpen, setResumeOpen] = useState(false);
   const approval = useApproval(active);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [remotePane, setRemotePane] = useState<string | null>(null);
@@ -192,6 +194,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
   const launchInFlight = useRef(false);
+  const latestKeys = useRef<{ openNewMenuAtStrip(): void; launchAgent(agent: 'claude' | 'codex'): void }>({ openNewMenuAtStrip: () => {}, launchAgent: () => {} });
   /** 開いているパレットのスコープ。null なら閉じている */
   const [palette, setPalette] = useState<PaletteScope | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -636,6 +639,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     setTimeout(() => { pendingSessions.current.delete(project.sessionId); pendingWindows.current.delete(project.windowId); refresh(); }, 10000);
     pendingWindows.current.add(project.windowId);
     setProjectMode(null);
+    setResumeOpen(false);
     openTab(project.sessionId, project.windowId);
     refresh();
   };
@@ -700,18 +704,24 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    * Terminator と同じ考え方で、1 ウィンドウ 1 ペインのまま画面だけを割る。
    */
   const splitIntoNewWindow = useCallback(
-    async (side: 'right' | 'bottom') => {
+    async (side: 'right' | 'bottom', agent?: 'claude' | 'codex') => {
       // リモートデスクトップを見ているときは、そのデバイスの端末を隣に開く
       const session = focusedTerminalTab?.sessionId
         ?? (focusedDevice ? sessions.find(s => deviceOf(s.id) === focusedDevice)?.id : undefined)
         ?? sessions[0]?.id;
       if (!session) return;
+      if (agent) {
+        if (launchInFlight.current) return;
+        launchInFlight.current = true;
+        setLaunchingAgent(agent);
+      }
       try {
         // 新しい端末は、いま見ているペインと同じディレクトリで開く
-        const { result } = await runAction('newWindow', {
+        const { result } = await runAction(agent ? 'launchAgent' : 'newWindow', {
           target: session,
           after: true,
           cwd: activePane?.path,
+          ...(agent ? { agent } : {}),
         });
         if (!result) return;
         pendingWindows.current.add(result);
@@ -731,7 +741,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         }
         refresh();
       } catch (err) {
-        toast(`newWindow: ${(err as Error).message}`);
+        toast(`${agent || 'newWindow'}: ${(err as Error).message}`);
+      } finally {
+        if (agent) { launchInFlight.current = false; setLaunchingAgent(null); }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1129,6 +1141,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       // Alt+Shift+P：パレットを『操作』で開く。ほかの Alt+Shift はワークスペース（Desktops.tsx）が受ける
       if (e.shiftKey) {
         if (e.code === 'KeyP') { stop(); setPalette('command'); }
+        // Alt+Shift+T：新規メニュー（続けて T・C・X・R）。Alt+Shift+C / X：Claude / Codex を起動
+        else if (e.code === 'KeyT') { stop(); latestKeys.current.openNewMenuAtStrip(); }
+        else if (e.code === 'KeyC') { stop(); latestKeys.current.launchAgent('claude'); }
+        else if (e.code === 'KeyX') { stop(); latestKeys.current.launchAgent('codex'); }
         return;
       }
       // Alt+/：ショートカット一覧。配列によって key が変わるので code も見る
@@ -1215,6 +1231,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onLaunchAgent: launchAgent,
       launchingAgent: launchingAgent,
       onSplitNewWindow: splitIntoNewWindow,
+      onOpenNewMenu: () => openNewMenuAtStrip(),
       onToggle: onToggle,
       screenTab: focusedScreen,
       ...paneActions(activePane),
@@ -1227,6 +1244,49 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       onOpenApproval: () => setApprovalOpen(true),
       onPaste: pasteClipboard,
   };
+
+  const openNewSession = () => setDialog({
+    kind: 'prompt',
+    title: '新しいセッションを作る',
+    detail: '名前は省略できます（tmux が番号を振ります）。',
+    placeholder: 'セッション名',
+    confirmLabel: '作成',
+    onSubmit: (name) => doAction('newSession', { deviceId: activeDevice.id, ...(name.trim() ? { name: name.trim() } : {}) }),
+  });
+
+  /** 新規メニューとパレットの『作る』に渡す文脈。leafId のパネルに開く */
+  const createContext = (leafId?: string | null): CreateContext => ({
+    devices: devices.map(d => ({ id: d.id, name: d.name, connected: d.connected })),
+    current: focusedDevice ?? activeDevice.id,
+    newTerminal: (deviceId) => newTerminal(leafId ?? focusedIdRef.current, undefined, deviceId),
+    openScreen: (deviceId) => openScreen(deviceId, leafId ?? focusedIdRef.current),
+    newProject: () => setProjectMode('new'),
+    openFolder: () => setProjectMode('existing'),
+    resume: () => setResumeOpen(true),
+    newSession: openNewSession,
+  });
+
+  /**
+   * 新規メニュー（＋▾）。先頭の 3 行（端末・Claude・Codex）は T・C・X、リモートデスクトップ ▸ は R で選べる。
+   * 中身は入力先のパネル（leafId）に開く。
+   */
+  const openNewMenu = (anchor: { x: number; y: number }, leafId?: string | null) => {
+    const items = buildMenu(NEW_MENU, {
+      app: { ...appContext, onNewTab: () => newTerminal(leafId ?? focusedIdRef.current) },
+      create: createContext(leafId),
+    });
+    setMenu({ x: anchor.x, y: anchor.y, items, title: '新規' });
+  };
+
+  /** Alt+Shift+T とパレットから：入力先のパネルの ▾ の下に新規メニューを開く */
+  const openNewMenuAtStrip = () => {
+    const button = document.querySelector<HTMLElement>('.tile.focused .new-more') ?? document.querySelector<HTMLElement>('.tile:not([hidden]) .new-more');
+    const r = button?.getBoundingClientRect();
+    openNewMenu(r ? { x: r.left, y: r.bottom } : { x: window.innerWidth / 2 - 120, y: 80 }, focusedIdRef.current);
+  };
+
+  /** キー操作から呼ぶ、毎回作り直される関数の最新版 */
+  latestKeys.current = { openNewMenuAtStrip, launchAgent };
 
   /** パレットの『タブ』：このワークスペースのタブをパネル別に。パネルは表示中のタブ名で示す */
   const paletteTabGroups = useMemo<PaletteTabGroup[]>(() => {
@@ -1260,11 +1320,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     panel: { multiple: leaves.length >= 2, toggleFocus: () => setPanelFocus(v => !v) },
     tab: focusedTab ? tabContext(focusedTab.id) : undefined,
     view: { fontSize, lineHeight, setFontSize, setLineHeight, stepLineHeight: onLineHeightStep },
-    create: {
-      devices: devices.map(d => ({ id: d.id, name: d.name, connected: d.connected })),
-      newTerminal: (deviceId) => newTerminal(focusedIdRef.current, undefined, deviceId),
-      openScreen: (deviceId) => openScreen(deviceId, focusedIdRef.current),
-    },
+    create: createContext(),
   }, new Set(['navigate.switcher']));
 
   /**
@@ -1370,17 +1426,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         onClose={() => setSidebarOpen(false)}
         onNewProject={() => setProjectMode('new')}
         onOpenFolder={() => setProjectMode('existing')}
-        onProjectStarted={projectStarted}
-        onNewSession={() =>
-          setDialog({
-            kind: 'prompt',
-            title: '新しいセッションを作る',
-            detail: '名前は省略できます（tmux が番号を振ります）。',
-            placeholder: 'セッション名',
-            confirmLabel: '作成',
-            onSubmit: (name) => doAction('newSession', { deviceId: activeDevice.id, ...(name.trim() ? { name: name.trim() } : {}) }),
-          })
-        }
+        onResume={() => setResumeOpen(true)}
+        onNewSession={openNewSession}
         onConfirm={confirmThen}
         onStartDrag={startDrag}
         onDropInTree={dropInTree}
@@ -1405,7 +1452,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
                 onOverview={() => setPalette('tab')}
                 focusedId={focusedId}
                 devices={devices}
-                onOpenScreen={(leafId, deviceId) => openScreen(deviceId, leafId)}
+                onNewMenu={(leafId, x, y) => openNewMenu({ x, y }, leafId)}
                 sessions={sessions}
                 windows={windows}
                 views={views}
@@ -1534,6 +1581,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       {textCopyPane && <TextCopy pane={textCopyPane} onClose={() => setTextCopyPane(null)}
         onCopied={(lines) => toast(`${lines} 行をコピーしました`, 'info')} onError={(text) => toast(text)} />}
 
+      {resumeOpen && <ResumeConversation deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} onClose={() => setResumeOpen(false)} onStarted={projectStarted} />}
       {projectMode && <ProjectStart deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
       {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure} onClose={() => setApprovalOpen(false)} onDone={() => { setApprovalOpen(false); approval.refresh(); }} />}
       {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}

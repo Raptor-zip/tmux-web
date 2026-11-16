@@ -1,17 +1,13 @@
-import { ContextMenu, type MenuEntry } from './ContextMenu';
-import { buildMenu } from '../commands';
-import { NEW_MENU } from '../menus';
 import { useLongPress } from '../hooks/useLongPress';
 import type { Device } from '../devices';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { tabPayload, type DragPayload } from './SplitView';
 import { isScreenTab, type LeafNode, type TabRef } from '../layout';
 import type { Session } from '../types';
-import { whereWithSession, type WindowView } from '../windows';
+import { distinguishTitles, whereWithSession, type WindowView } from '../windows';
 
 interface Props {
-  devices: Device[];
   leaf: LeafNode;
   focused: boolean;
   /** 1画面表示では、同じデスクトップの全パネルからタブを並べる。 */
@@ -25,12 +21,19 @@ interface Props {
    * null = 末尾、文字列 = そのタブの手前
    */
   caret?: string | null;
+  /**
+   * 1 枚だけを大きく出しているときの見出しのチップ。
+   * focus = 最大化中（押すと並びに戻す）、auto = 狭くて自動の 1 パネル表示（押すとパレットの『タブ』）。
+   */
+  single?: { kind: 'focus' | 'auto'; others: number };
+  onRestore(): void;
   onOverview(): void;
   onActivate(tabId: string): void;
   onClose(tabId: string): void;
-  onNewTab(deviceId?: string): void;
-  /** そのデバイスのリモートデスクトップをタブで開く */
-  onOpenScreen(deviceId: string): void;
+  /** ＋ の本体：新しい端末（Alt+T と同じ） */
+  onNewTab(): void;
+  /** ＋ の ▾（タッチでは ＋ の長押しでも）：新規メニュー */
+  onNewMenu(x: number, y: number): void;
   onStartDrag(payload: DragPayload): void;
   /** タブメニューを開く（タブの右クリック・長押し・Shift+F10、見出しの ⋯） */
   onContextMenu(tabId: string, x: number, y: number): void;
@@ -43,26 +46,66 @@ interface Props {
  * 掴んで並べ替え／別のタイルへ移動・空きをダブルクリックで新しい端末）。
  */
 export function TabStrip({
-  devices,
   leaf,
   focused,
   desktopTabs,
   viewOf,
   draggingTabId,
   caret,
+  single,
+  onRestore,
   onOverview,
   onActivate,
   onClose,
   onNewTab,
-  onOpenScreen,
+  onNewMenu,
   onStartDrag,
   onContextMenu,
 }: Props) {
-  const [menu, setMenu] = useState<{x:number;y:number;items:MenuEntry[]} | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const tabs = desktopTabs ?? leaf.tabs.map(tab => ({ tab, leafId: leaf.id }));
   /** タッチでタブを長押ししたらタブメニュー。マウスは右クリックがある */
   const longPress = useLongPress<string>((tabId, point) => onContextMenu(tabId, point.x, point.y));
+  /** タッチで ＋ を長押ししたら新規メニュー（▾ と同じ） */
+  const plusPress = useLongPress<null>((_, point) => onNewMenu(point.x, point.y));
+
+  /** タブごとの表示名と、同じ名前が並んだときの区別用の表記 */
+  const shown = tabs.map(({ tab, leafId }) => {
+    const { view, session, device } = viewOf(tab);
+    const screen = isScreenTab(tab);
+    const label = screen ? device?.name ?? 'リモートデスクトップ' : view?.project || tab.sessionName || '—';
+    return { tab, leafId, view, session, device, screen, label };
+  });
+  const marks = distinguishTitles(shown.map(t => ({
+    key: t.tab.id,
+    title: t.label,
+    hints: t.screen ? [] : [t.view?.where, t.session?.name, t.device?.name],
+  })));
+  const markKey = [...marks].join('|');
+  const stableMarks = useMemo(() => marks, [markKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** あふれたタブ列：端をフェードさせ、‹ › で送る */
+  const [overflow, setOverflow] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const left = list.scrollLeft > 1;
+    const right = list.scrollLeft + list.clientWidth < list.scrollWidth - 1;
+    setOverflow(prev => (prev.left === left && prev.right === right ? prev : { left, right }));
+  }, []);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [measure, tabs.length, stableMarks]);
+  const scrollBy = (dir: -1 | 1) => {
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollBy({ left: dir * Math.max(80, list.clientWidth * 0.7), behavior: 'smooth' });
+  };
 
   // 前面のタブが隠れていたら見える位置まで送る（キーボードで切り替えたときに要る）
   useEffect(() => {
@@ -79,10 +122,11 @@ export function TabStrip({
       else if (tabBox.right > box.right) list.scrollLeft += tabBox.right - box.right;
     };
     reveal();
+    measure();
     const observer = new ResizeObserver(reveal);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [leaf.activeId, tabs.length]);
+  }, [leaf.activeId, tabs.length, measure]);
 
   /** 押してから 6px 動いたらドラッグ開始。押しただけで動き出すと切り替えられない */
   const dragCleanup = useRef<(() => void) | null>(null);
@@ -127,8 +171,23 @@ export function TabStrip({
 
   return (
     <div className={`tabstrip ${focused ? 'focused' : ''}`} data-strip-leaf={leaf.id}>
+      {single?.kind === 'focus' && (
+        <button className="strip-chip" title="パネルを並びに戻す (Alt+Enter)" onClick={onRestore}>
+          <Icon name="shrink" />最大化中 · 並びに戻す
+        </button>
+      )}
+      {single?.kind === 'auto' && single.others > 0 && (
+        <button className="strip-chip" title="ほかのパネルとタブの一覧を開く" onClick={onOverview}>
+          他 {single.others} パネル
+        </button>
+      )}
+      {(overflow.left || overflow.right) && (
+        <button className="strip-btn strip-scroll" aria-label="タブ列を左へ送る" title="タブ列を左へ送る" tabIndex={-1}
+          disabled={!overflow.left} onClick={() => scrollBy(-1)}><Icon name="chevron-left" /></button>
+      )}
       <div
-        className="tablist"
+        className={`tablist ${overflow.left ? 'fade-left' : ''} ${overflow.right ? 'fade-right' : ''}`}
+        onScroll={measure}
         role="tablist"
         aria-label={desktopTabs ? "このデスクトップのタブ" : "このパネルのタブ"}
         ref={listRef}
@@ -141,16 +200,18 @@ export function TabStrip({
           if (e.target === e.currentTarget) onNewTab();
         }}
       >
-        {tabs.map(({ tab, leafId }, i) => {
-          const { view, session, device } = viewOf(tab);
+        {shown.map(({ tab, leafId, view, session, device, screen, label }, i) => {
           const active = tab.id === leaf.activeId;
-          const screen = isScreenTab(tab);
           const kind = view?.status.kind ?? 'idle';
-          const label = screen ? device?.name ?? 'リモートデスクトップ' : view?.project || tab.sessionName || '—';
+          const mark = stableMarks.get(tab.id);
+          // 1 画面表示でパネルをまたぐところに細い区切りを入れる
+          const boundary = i > 0 && desktopTabs && shown[i - 1].leafId !== leafId;
           const where = screen ? 'リモートデスクトップ' : view ? whereWithSession(view, session) : '接続が切れました';
           const hold = longPress.bind(tab.id);
           return (
-            <div key={tab.id} className="tab-slot" data-strip-leaf={leafId}>
+            <Fragment key={tab.id}>
+            {boundary && <span className="tab-panel-sep" aria-hidden="true" />}
+            <div className="tab-slot" data-strip-leaf={leafId}>
               {caret === tab.id && mark}
               <div
                 className={`tab st-${kind} ${screen ? 'tab-screen' : ''} ${active ? 'active' : ''} ${
@@ -212,6 +273,7 @@ export function TabStrip({
               >
                 {screen ? <span className="tab-kind" aria-hidden="true"><Icon name="screen" /></span> : <span className={`state-dot ${kind}`} />}
                 <span className="tab-name">{label}</span>
+                {mark && <span className="tab-mark">· {mark}</span>}
                 {screen && device && !device.connected && <span className="tab-device" title={device.error}>切断</span>}
                 {!screen && device && !device.local && <span className="tab-device" title={device.error}>{device.connected ? device.name : `${device.name} · 切断`}</span>}
                 <button
@@ -227,21 +289,29 @@ export function TabStrip({
                 </button>
               </div>
             </div>
+            </Fragment>
           );
         })}
         {caret === null && mark}
       </div>
 
+      {(overflow.left || overflow.right) && (
+        <button className="strip-btn strip-scroll" aria-label="タブ列を右へ送る" title="タブ列を右へ送る" tabIndex={-1}
+          disabled={!overflow.right} onClick={() => scrollBy(1)}><Icon name="chevron-right" /></button>
+      )}
+
       <div className="strip-tools">
-        {leaf.tabs.length > 1 && <button className="strip-btn tab-count" title="このパネルのタブを一覧で見る" aria-label={`このパネルの${leaf.tabs.length}タブを一覧で見る`} onClick={onOverview}>{leaf.tabs.length}</button>}
-        <button className="strip-btn" title="新しい端末・リモートデスクトップを開く" aria-label="新しい端末をタブで開く" aria-haspopup="menu"
-          onClick={e => { const r=e.currentTarget.getBoundingClientRect(); setMenu({x:r.left,y:r.bottom,items:buildMenu(NEW_MENU,{
-            create:{devices,newTerminal:onNewTab,openScreen:onOpenScreen},
-          })}); }}><Icon name="plus" /></button>
+        <div className="split-new" role="group" aria-label="新しく開く">
+          <button className="strip-btn new-main" title="新しい端末 (Alt+T)" aria-label="新しい端末"
+            {...plusPress.bind(null)}
+            onContextMenu={e => e.preventDefault()}
+            onClick={() => onNewTab()}><Icon name="plus" /></button>
+          <button className="strip-btn new-more" title="新規メニュー (Alt+Shift+T)" aria-label="新規メニュー" aria-haspopup="menu"
+            onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onNewMenu(r.left, r.bottom); }}><Icon name="chevron-down" /></button>
+        </div>
         <button className="strip-btn" title="タブの操作" aria-label="タブの操作" aria-haspopup="menu"
           onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onContextMenu(leaf.activeId, r.right, r.bottom); }}><Icon name="more" /></button>
       </div>
-      {menu && <ContextMenu {...menu} onClose={()=>setMenu(null)} />}
     </div>
   );
 }

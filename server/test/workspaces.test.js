@@ -48,6 +48,25 @@ test('history resolves cwd from transcripts, deduplicates it and skips deleted, 
   await assert.rejects(service.start({mode:'existing',dir:path.join(home,'notes'),resumeId:'not-an-id'}), /履歴/);
 });
 
+test('history lists interactive Codex conversations next to Claude and resumes them with codex resume', async t => {
+  const { home, service, calls } = await fixture(t);
+  await fs.mkdir(path.join(home, 'notes'));
+  const day = path.join(home, '.codex', 'sessions', '2026', '10', '30');
+  await fs.mkdir(day, { recursive: true });
+  const id = '01a18908-8d58-7161-b52d-c78c0699e5a8';
+  const meta = (source, cwd) => JSON.stringify({ type: 'session_meta', payload: { id, cwd, source, base_instructions: { text: 'x'.repeat(30000) } } }) + '\n';
+  await fs.writeFile(path.join(day, `rollout-2026-10-30T04-00-01-${id}.jsonl`), meta('cli', path.join(home, 'notes')));
+  await fs.writeFile(path.join(day, 'rollout-2026-10-30T05-00-01-22222222-2222-4222-8222-222222222222.jsonl'), meta('exec', path.join(home, 'notes')));
+  const claude = path.join(home, '.claude', 'projects', 'notes');
+  await fs.mkdir(claude, { recursive: true });
+  await fs.writeFile(path.join(claude, '11111111-1111-4111-8111-111111111111.jsonl'), JSON.stringify({ cwd: path.join(home, 'notes') }) + '\n');
+  const recent = await service.recent();
+  assert.deepEqual(recent.map(r => r.agent).sort(), ['claude', 'codex'], 'one entry per agent and folder; codex exec runs are skipped');
+  assert.equal(recent.find(r => r.agent === 'codex').sessionId, id);
+  await service.start({ mode: 'existing', dir: path.join(home, 'notes'), agent: 'codex', resumeId: id });
+  assert.match(calls.at(-1).at(-1), /^'codex' 'resume' '01a18908-8d58-7161-b52d-c78c0699e5a8'; exec/);
+});
+
 test('new and resumed Claude sessions use the shared tmux socket, preserve prompt arguments and leave a shell', async t => {
   try { execFileSync('tmux',['-V']); } catch { t.skip('tmux unavailable'); return; }
   const { home, cleanup } = await fixture(t);
