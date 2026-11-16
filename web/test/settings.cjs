@@ -3,6 +3,7 @@
 // install button is gone from the top bar.
 // SCREENS=desktop-controls,mobile-panels SETTINGS_CHECK=1 node web/test/visual-feedback.cjs after
 const assert = require('node:assert/strict');
+const { openPalette, openConnection } = require('./phone.cjs');
 
 module.exports = async (page, { scene, terminalTransports, out }) => {
   const settings = page.getByRole('dialog', { name: '表示と接続', exact: true });
@@ -11,7 +12,7 @@ module.exports = async (page, { scene, terminalTransports, out }) => {
 
   // From the palette's 操作 scope
   const palette = page.getByRole('dialog', { name: '探す・操作', exact: true });
-  await page.locator('.bar-palette').click();
+  await openPalette(page);
   await palette.waitFor();
   await palette.getByRole('combobox').fill('>表示と接続');
   await palette.locator('.sw-row.on .sw-command', { hasText: '表示と接続…' }).waitFor();
@@ -97,7 +98,8 @@ module.exports = async (page, { scene, terminalTransports, out }) => {
   await shortcuts.waitFor({ state: 'detached' });
 
   // From the connection chip, and the browser install help when no prompt is available
-  await page.locator('.conn-status').click();
+  const chipShown = await page.locator('.desktop-bar .conn-status:visible').count() > 0;
+  await openConnection(page);
   await page.getByRole('button', { name: '表示と接続…', exact: true }).click();
   await settings.waitFor();
   await settings.getByRole('button', { name: 'アプリとして追加' }).click();
@@ -107,6 +109,7 @@ module.exports = async (page, { scene, terminalTransports, out }) => {
   await help.waitFor({ state: 'detached' });
   await page.keyboard.press('Escape');
   await settings.waitFor({ state: 'detached' });
-  assert.ok(await page.locator('.conn-status').evaluate(el => el === document.activeElement), 'focus returns to the connection chip');
+  // スマホでは点が見出しに無い（⋯ のシートから開いた）ので、チップへ戻すのはチップがあるときだけ
+  if (chipShown) assert.ok(await page.locator('.conn-status').evaluate(el => el === document.activeElement), 'focus returns to the connection chip');
   console.log(`settings: ${scene.name} passed`);
 };

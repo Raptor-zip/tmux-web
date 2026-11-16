@@ -13,9 +13,10 @@ import { useWorkspaceStatus, useWorkspaceValue, workspaceStore } from './workspa
 import { newId } from './layout';
 import { useTmuxState } from './api';
 import { Dialog, type DialogSpec } from './components/Dialog';
-import { useAltKeys } from './shared-setting';
+import { useAltKeys, useLandscapeHideHeader, usePhoneTabs } from './shared-setting';
+import { PHONE_LANDSCAPE_QUERY, PHONE_QUERY, useMedia } from './phone';
 import { useLongPress } from './hooks/useLongPress';
-import { ConnectionStatus, connectionLabel } from './components/ConnectionStatus';
+import { ConnectionStatus, connectionLabel, connectionSummary } from './components/ConnectionStatus';
 import { Devices } from './components/Devices';
 import { addDesktop, desktopKey, INITIAL_DESKTOPS, moveDesktop, removeDesktop, restoreDesktops, transferDesktopTab, type DesktopLayoutRegistry, type Desktops as DesktopState } from './desktops';
 
@@ -52,6 +53,31 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
   const [leadSlot, setLeadSlot] = useState<HTMLElement | null>(null);
   const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
   const [trailSlot, setTrailSlot] = useState<HTMLElement | null>(null);
+  /** スマホの見出し：現在のタブ ▾ n/m と、右端の ＋▾ ⋯。スマホの見出しのときだけ置く */
+  const [phoneSlot, setPhoneSlot] = useState<HTMLElement | null>(null);
+  const [phoneEndSlot, setPhoneEndSlot] = useState<HTMLElement | null>(null);
+  const [connectionOpen, setConnectionOpen] = useState(false);
+  const phone = useMedia(PHONE_QUERY);
+  const landscape = useMedia(PHONE_LANDSCAPE_QUERY) && phone;
+  const [phoneTabs] = usePhoneTabs();
+  const [hideHeaderSetting] = useLandscapeHideHeader();
+  /** スマホでタブ列を表示しない（既定）なら、上バーとタブ列を見出し 1 行にまとめる */
+  const phoneHead = phone && !phoneTabs;
+  /** 横持ちで見出しを隠す。上端をタップするか、フォーカスが見出しへ移ると戻る */
+  const hideHeader = landscape && hideHeaderSetting;
+  const [headerShown, setHeaderShown] = useState(false);
+  const bar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!hideHeader || !headerShown) return;
+    const away = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      // 見出しと、見出しから開いたメニュー・シートの中では隠さない
+      if (bar.current?.contains(target) || target?.closest?.('.ctxmenu, dialog, .head-reveal')) return;
+      setHeaderShown(false);
+    };
+    window.addEventListener('pointerdown', away, true);
+    return () => window.removeEventListener('pointerdown', away, true);
+  }, [hideHeader, headerShown]);
   const [state, setState] = useWorkspaceValue<DesktopState>('tw.desktops', INITIAL_DESKTOPS, restoreDesktops);
   const [visited, setVisited] = useState(() => new Set([state.activeId]));
   useEffect(() => { setVisited(prev => prev.has(state.activeId) ? prev : new Set([...prev, state.activeId])); }, [state.activeId]);
@@ -197,9 +223,14 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
   }, [altKeys, state, dialog]);
-  return <div className="desktop-shell">
-    <header className="desktop-bar">
+  const connLabel = connectionLabel({ connected: connection.connected, unauthorized: connection.unauthorized, hasState: !!connection.state, syncOk: sync.connected && !sync.error });
+  const shellClass = ['desktop-shell', phone && 'phone', phoneHead && 'phone-head', landscape && 'phone-landscape',
+    hideHeader && 'hide-head', hideHeader && headerShown && 'head-shown'].filter(Boolean).join(' ');
+  return <div className={shellClass}>
+    {hideHeader && <div className="head-reveal" aria-hidden="true" onPointerDown={() => setHeaderShown(true)} />}
+    <header className="desktop-bar" ref={bar}>
       <span className="bar-slot" ref={setLeadSlot} />
+      {phoneHead && <span className="bar-slot" ref={setPhoneSlot} />}
       <div className="desktop-tabs" role="tablist" aria-label="ワークスペース" ref={list} onScroll={cancelPress}>
         {state.items.map((desktop, index) => <div className="desktop-slot" key={desktop.id}>
           <button id={`desktop-tab-${desktop.id}`} data-desktop-id={desktop.id} className={`desktop-tab ${desktop.id === state.activeId ? 'on' : ''} ${dropDesktopId === desktop.id ? 'drop-target' : ''}`} role="tab" aria-selected={desktop.id === state.activeId}
@@ -234,7 +265,8 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
       <button className="desktop-add" aria-label="新しいワークスペース" title={altKeys ? '新しいワークスペース (Alt+Shift+N)' : '新しいワークスペース'} onClick={create}><Icon name="plus-square" /></button>
       <span className="bar-slot bar-status" ref={setStatusSlot} />
       <ConnectionStatus
-        label={connectionLabel({ connected: connection.connected, unauthorized: connection.unauthorized, hasState: !!connection.state, syncOk: sync.connected && !sync.error })}
+        open={connectionOpen} onOpenChange={setConnectionOpen}
+        label={connLabel}
         devices={connection.devices}
         syncError={sync.error || (!sync.connected ? '再接続中…' : undefined)}
         authUrl={connection.authUrl}
@@ -243,12 +275,20 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
         onManageDevices={() => setDevicesOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)} />
       <span className="bar-slot" ref={setTrailSlot} />
+      {phoneHead && <span className="bar-slot" ref={setPhoneEndSlot} />}
     </header>
     <div className="desktop-panels">
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
         {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab}
-          barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot } : undefined}
+          barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot, phone: phoneHead ? phoneSlot : null, phoneEnd: phoneHead ? phoneEndSlot : null } : undefined}
+          phone={desktop.id === state.activeId && phoneHead ? {
+            workspaces: state.items, activeWorkspace: state.activeId, selectWorkspace: select,
+            openWorkspaceMenu: (id, x, y) => setTabMenu({ id, x, y }),
+            connection: connectionSummary(connLabel, connection.devices.some(d => !d.local && !d.connected)),
+            connectionBad: !!connLabel,
+            openConnection: () => setTimeout(() => setConnectionOpen(true)),
+          } : undefined}
           workspace={desktop.id === state.activeId ? workspaceContext(desktop.id) : undefined}
           onOpenSettings={() => setSettingsOpen(true)} />}
       </section>)}

@@ -2,6 +2,22 @@ const assert = require('node:assert/strict');
 const { join } = require('node:path');
 module.exports = async function checkDesktopContext(page, { scene, out, screenshots }) {
   assert.equal(await page.locator('.desktop-rename').count(), 0);
+  const phone = require('./phone.cjs');
+  if (await phone.isPhoneHead(page)) {
+    // スマホの見出し 1 行：ワークスペースはタブ一覧シートの列にある。右クリック・長押しで同じメニュー
+    await page.locator('.desktop-bar .phone-tab').click();
+    const sheet = page.getByRole('dialog', { name: 'タブ一覧', exact: true });
+    const ws = sheet.getByRole('group', { name: 'ワークスペース', exact: true });
+    assert.equal(await ws.locator('.tsheet-ws[aria-current=true]').textContent(), '1ワークスペース 1');
+    await ws.locator('.tsheet-ws[aria-current=true]').click({ button: 'right' });
+    await sheet.waitFor({ state: 'detached' });
+    await page.getByRole('menuitem', { name: '名前を変更…', exact: true }).waitFor();
+    assert.equal(await page.getByRole('menu').getAttribute('aria-label'), 'ワークスペース 1', 'the sheet opens the workspace menu');
+    await page.keyboard.press('Escape');
+    await page.getByRole('menu').waitFor({ state: 'detached' });
+    // 以下はワークスペースタブを並べた表示（『スマホでタブ列を表示』）で確かめる
+    await phone.showPhoneTabs(page);
+  }
   // ワークスペースバー：タブごとの × とモニタアイコンは無い。追加は ⊞『新しいワークスペース』
   const bar = page.locator('.desktop-bar');
   assert.equal(await bar.getByRole('button', { name:'リモートデスクトップ', exact:true }).count(), 0, 'no monitor icon in the workspace bar');

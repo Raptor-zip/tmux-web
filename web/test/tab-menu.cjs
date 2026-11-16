@@ -107,6 +107,23 @@ module.exports = async function checkTabMenu(page, { scene, out, touch }) {
     await undo.waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.querySelectorAll('.tile').length === 2);
   } else {
+    // スマホの見出しの『現在のタブ ▾』を長押しすると、そのタブのタブメニュー。⋯ はシートの先頭に ⌕ と接続状態を置く
+    const phone = require('./phone.cjs');
+    if (await phone.isPhoneHead(page)) {
+      await longPress(page.locator('.desktop-bar .phone-tab'));
+      await menu.waitFor();
+      assert.equal(await menu.getAttribute('aria-label'), await activeName(), 'long-pressing the phone header tab opens its menu');
+      await page.getByRole('button', { name: 'メニューを閉じる', exact: true }).click();
+      await menu.waitFor({ state: 'detached' });
+      await page.locator('.desktop-bar').getByRole('button', { name: 'タブの操作', exact: true }).click();
+      const first = await page.getByRole('menuitem').evaluateAll(items => items.slice(0, 2).map(el => el.textContent));
+      assert.match(first[0], /^探す・操作/);
+      assert.match(first[1], /^接続状態：/);
+      await page.getByRole('button', { name: 'メニューを閉じる', exact: true }).click();
+      await menu.waitFor({ state: 'detached' });
+      // 以下はタブ列で確かめる（『スマホでタブ列を表示』）
+      await phone.showPhoneTabs(page);
+    }
     // タブの長押し
     await longPress(page.locator('.tile:visible .tab.active'));
     await menu.waitFor();

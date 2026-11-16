@@ -115,8 +115,8 @@ export function Settings({ versions, onOpenShortcuts, onClose }: {
           </div>
         } />
         <Switch label="tmux のステータス行" hint="端末の下端に tmux のステータス行を出します" checked={statusLine} onChange={setStatusLine} />
-        <Switch label="スマホでタブ列を表示" hint="幅の狭い画面でも、見出しの下にタブ列を並べます" checked={phoneTabs} onChange={setPhoneTabs} />
-        <Switch label="横持ちで見出しを隠す" hint="横持ちのスマホで端末を広く使います。上へフォーカスを移すと戻ります" checked={hideHeader} onChange={setHideHeader} />
+        <Switch label="スマホでタブ列を表示" hint="オフのときは見出しを 1 行にまとめ、タブは『現在のタブ ▾』の一覧から選びます。オンにすると、ワークスペースタブとタブ列を並べます" checked={phoneTabs} onChange={setPhoneTabs} />
+        <Switch label="横持ちで見出しを隠す" hint="横持ちのスマホで端末を広く使います。画面の上端をタップするか、上へフォーカスを移すと戻ります" checked={hideHeader} onChange={setHideHeader} />
       </section>
       <section aria-labelledby={`${fontId}-input`}>
         <h3 id={`${fontId}-input`}>入力</h3>

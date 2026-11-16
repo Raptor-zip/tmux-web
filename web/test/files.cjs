@@ -42,7 +42,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
     return route.fulfill({ contentType: 'text/plain', headers: { 'Cache-Control': 'no-store' }, body: 'Synthetic project notes\nNo private data.' });
   });
   const openBrowser = async () => {
-    await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+    await require('./phone.cjs').focusedHead(page).getByRole('button', { name: 'タブの操作', exact: true }).click();
     await page.getByRole('menuitem', { name: /^作業フォルダーを開く/ }).click();
     await page.locator('.file-row').first().waitFor();
   };

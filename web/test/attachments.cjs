@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { pickTab } = require('./phone.cjs');
 
 // Runs against visual-feedback.cjs's isolated App fixture; no real files are uploaded.
 module.exports = async function checkAttachments(page, terminalInputs, transports) {
@@ -32,7 +33,7 @@ module.exports = async function checkAttachments(page, terminalInputs, transport
     await route.fulfill({ json: { path: '/tmp/delayed.txt' } });
   });
   await requestStarted;
-  await page.locator('.tile:visible [data-tab-id=tab-local-5]').click();
+  await pickTab(page, 'tab-local-5');
   release();
   await waitFinished();
   // Each tab keeps its own connection, so the finished upload lands in the tab it started from.
@@ -47,7 +48,7 @@ module.exports = async function checkAttachments(page, terminalInputs, transport
     const row = document.querySelector('.input-bar .input-keys').getBoundingClientRect();
     return [...document.querySelectorAll('.input-bar .key.answer')].every(k => { const r = k.getBoundingClientRect(); return r.left >= row.left - 1 && r.right <= row.right + 1; });
   }, null, { timeout: 3000 });
-  await page.locator('.tile:visible [data-tab-id=tab-local-1]').click();
+  await pickTab(page, 'tab-local-1');
   await draft.fill('別の下書き');
 
   let uploads = 0;

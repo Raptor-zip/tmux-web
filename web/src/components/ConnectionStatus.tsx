@@ -1,8 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { Device } from '../devices';
 import { Icon } from './Icon';
 
 /** 上バーの接続状態。正常なら点だけ、異常なら『切断』『同期待ち』『認証が必要』を文字で出す */
+/** 正常のときの言い方。スマホの ⋯ とタブ一覧の項目に使う */
+export const connectionSummary = (label: string | null, partial: boolean) => label ?? (partial ? '一部のデバイスが未接続' : '接続済み');
+
 export function connectionLabel({ connected, unauthorized, hasState, syncOk }: {
   connected: boolean; unauthorized: boolean; hasState: boolean; syncOk: boolean;
 }): string | null {
@@ -26,14 +29,16 @@ interface Props {
   onManageDevices(): void;
   /** 『表示と接続』を開く */
   onOpenSettings(): void;
+  /** ポップオーバーの開閉。スマホでは点を見出しに置かないので、⋯ とタブ一覧から開く（Desktops.tsx が持つ） */
+  open: boolean;
+  onOpenChange(open: boolean): void;
 }
 
 /**
  * 接続状態のチップとポップオーバー。
  * ポップオーバー：デバイスごとの状態 / 再接続 / 接続先を開く / デバイス接続を管理… / 表示と接続… / バージョン。
  */
-export function ConnectionStatus({ label, devices, syncError, authUrl, version, onReconnect, onManageDevices, onOpenSettings }: Props) {
-  const [open, setOpen] = useState(false);
+export function ConnectionStatus({ label, devices, syncError, authUrl, version, onReconnect, onManageDevices, onOpenSettings, open, onOpenChange: setOpen }: Props) {
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const id = useId();
@@ -47,7 +52,7 @@ export function ConnectionStatus({ label, devices, syncError, authUrl, version, 
     };
     window.addEventListener('pointerdown', away, true);
     return () => window.removeEventListener('pointerdown', away, true);
-  }, [open]);
+  }, [open, setOpen]);
   const close = () => { setOpen(false); button.current?.focus(); };
   const name = label ?? '接続状態';
   return <div className="conn-status-wrap"
@@ -55,7 +60,7 @@ export function ConnectionStatus({ label, devices, syncError, authUrl, version, 
     <button ref={button} className={`bar-chip conn-status ${label ? 'bad' : remoteDown ? 'partial' : 'ok'}`}
       aria-label={label ? undefined : name} title={name}
       aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
-      onClick={() => setOpen(v => !v)}>
+      onClick={() => setOpen(!open)}>
       <span className="conn-dot" aria-hidden="true" />
       {label && <span className="bar-chip-text">{label}</span>}
     </button>

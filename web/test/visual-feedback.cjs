@@ -6,6 +6,7 @@ const fs=require('node:fs');
 const http=require('node:http');
 const express=require('express');
 const assert=require('node:assert/strict');
+const phone=require('./phone.cjs');
 const phase=process.argv[2]||'after';
 // SCREEN_TAB_CHECK 用の最小 RFB 3.8 サーバ（認証なし・320x200 を 1 枚だけ送る）。
 // noVNC は WebSocket の実体を検査するので、Playwright の routeWebSocket ではなく本物のソケットで受ける。
@@ -173,16 +174,17 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await inputToggle.click();
    console.log('terminal controls wait for tmux readiness and preserve the draft');
   }
-  const togglePanel=async()=>{await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'配置',exact:true}).click();await page.getByRole('menuitem',{name:/^(パネルを最大化|並びに戻す)/}).click();};
+  const togglePanel=async()=>{await phone.focusedHead(page).getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'配置',exact:true}).click();await page.getByRole('menuitem',{name:/^(パネルを最大化|並びに戻す)/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs, terminalTransports);
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
-  if(scene.action==='switcher')await page.locator('.desktop-bar .bar-palette').click();
+  // ⌕ は上バーの右端。スマホ縦では見出しに無く、タブ一覧シートの『すべての端末を探す』から開く
+  if(scene.action==='switcher')await phone.openPalette(page);
   if(checkSwitcher) await checkSwitcher();
   if(scene.action==='focus')await page.keyboard.press('Alt+Enter');
-  if(scene.action==='devices'){await page.locator('.desktop-bar .conn-status').click();await page.getByRole('dialog',{name:'接続状態',exact:true}).getByRole('button',{name:'デバイス接続を管理…',exact:true}).click();}
+  if(scene.action==='devices'){await phone.openConnection(page);await page.getByRole('dialog',{name:'接続状態',exact:true}).getByRole('button',{name:'デバイス接続を管理…',exact:true}).click();}
   if(scene.action==='project'){await page.locator('.sidebar-more > summary').click();await page.getByRole('button',{name:'プロジェクトを作る',exact:true}).click();}
-  if(scene.action==='desktop'){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await page.locator('.tile.focused').getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
-  if(scene.action==='files'){await page.locator('.tile.focused').getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^作業フォルダーを開く/}).click();}
+  if(scene.action==='desktop'){if(phase==='before'){await page.locator('.tile.focused').getByRole('button',{name:'パネルの操作',exact:true}).click();}else{await phone.focusedHead(page).getByRole('button',{name:'新規メニュー',exact:true}).click();await page.getByRole('menuitem',{name:'リモートデスクトップ',exact:true}).click();}await page.getByRole('menuitem',{name:phase==='before'?'デバイスの画面を見る':'ダイアログで開く',exact:true}).click();}
+  if(scene.action==='files'){await phone.focusedHead(page).getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:/^作業フォルダーを開く/}).click();}
   if(checkFiles) await checkFiles();
   if(scene.name.startsWith('remote-') && scene.action==='desktop'){
    // 上バーのモニタアイコンは無くなった。リモートデスクトップは新規メニューの『リモートデスクトップ ▸』→『ダイアログで開く』から開く（上の desktop の操作）
@@ -251,20 +253,66 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   }
   if(process.env.DESKTOP_TRANSFER_CHECK) await require('./desktop-transfer.cjs')(page, errors, () => {workspaceState={type:'workspace',initialized:false,revision:0,values:{}};});
   console.log(scene.name,JSON.stringify(metrics));
+  if(phase==='after' && (scene.name==='mobile-panels' || scene.name==='mobile-landscape') && await page.evaluate(([w,h])=>innerWidth===w&&innerHeight===h,[scene.width,scene.height])){
+   // スマホは見出し 1 行と入力行 1 行だけ。縦は合計 88px 以下（44+44）、横は 76px 以下（36+40）
+   const frame=await page.evaluate(()=>({head:document.querySelector('.desktop-bar').getBoundingClientRect().height,input:document.querySelector('.input-bar .input-row')?.getBoundingClientRect().height??0,strips:[...document.querySelectorAll('.tabstrip')].filter(el=>el.getClientRects().length).length}));
+   assert.ok(frame.input>0,'the input row is shown on phones');
+   assert.equal(frame.strips,0,'the tile tab strip folds into the one-line phone header');
+   assert.ok(frame.head+frame.input<=(scene.name==='mobile-panels'?88:76),scene.name+' chrome height '+JSON.stringify(frame));
+   const bar=page.locator('.desktop-bar');
+   for(const name of ['一覧','新しい端末','タブの操作'])assert.equal(await bar.getByRole('button',{name,exact:true}).count(),1,'the phone header keeps '+name);
+   assert.match(await bar.locator('.phone-tab').textContent(),/atlas-web.*1\/5/,'the header shows the current tab and n/m');
+   assert.equal(await bar.locator('.desktop-tab:visible').count(),0,'workspace tabs move into the tab sheet');
+   assert.equal(await bar.locator('.bar-palette:visible').count(),scene.name==='mobile-landscape'?1:0,'⌕ stays in the header only in landscape');
+   assert.equal(await bar.locator('.bar-chip.needs:visible').count(),1,'waiting and approvals fold into 要対応 N');
+   if(scene.name==='mobile-landscape'){
+    // 『横持ちで見出しを隠す』：隠れた見出しは、上端のタップか、フォーカスが見出しへ移ると戻る
+    const settings=page.getByRole('dialog',{name:'表示と接続',exact:true});
+    const setHide=async on=>{await phone.openConnection(page);await page.getByRole('button',{name:'表示と接続…',exact:true}).click();await settings.waitFor();const toggle=settings.getByRole('switch',{name:/横持ちで見出しを隠す/});if(await toggle.getAttribute('aria-checked')!==String(on))await toggle.click();await page.keyboard.press('Escape');await settings.waitFor({state:'detached'});};
+    const headBottom=()=>bar.evaluate(el=>el.getBoundingClientRect().bottom);
+    await setHide(true);
+    await page.locator('.tile:visible .terminal-host').first().click({position:{x:120,y:120}});
+    await page.waitForFunction(()=>document.querySelector('.desktop-bar').getBoundingClientRect().bottom<=1);
+    await page.screenshot({path:join(out,'mobile-landscape-hidden-header.png'),animations:'disabled'});
+    await page.mouse.click(300,4);
+    await page.waitForFunction(()=>document.querySelector('.desktop-bar').getBoundingClientRect().top>=0);
+    assert.ok(await headBottom()>30,'tapping the top edge brings the header back');
+    await page.locator('.tile:visible .terminal-host').first().click({position:{x:120,y:120}});
+    await page.waitForFunction(()=>document.querySelector('.desktop-bar').getBoundingClientRect().bottom<=1);
+    await bar.getByRole('button',{name:'一覧',exact:true}).focus();
+    await page.waitForFunction(()=>document.querySelector('.desktop-bar').getBoundingClientRect().top>=0);
+    await setHide(false);
+   }
+  }
   if(phase==='after' && scene.name==='mobile-panels'){
    // ATTACHMENT_CHECK opens a second tab in the same panel, and a visited tab keeps its connection.
    assert.equal(activeTerminals,process.env.ATTACHMENT_CHECK?2:1,'only the visible mobile panel attaches');
    const layout=await page.evaluate(()=>localStorage.getItem('tw.layout'));
    assert.equal(await page.locator('.tile:visible .tab-count').count(),0,'the tab count badge is gone');
-   await page.locator('.tile:visible').getByRole('button',{name:'他 3 パネル',exact:true}).click();
-   const palette=page.getByRole('dialog',{name:'探す・操作',exact:true});
-   assert.equal(await palette.getByRole('button',{name:'タブ',exact:true}).getAttribute('aria-pressed'),'true','the other-panels chip opens the palette on its tab scope');
-   await palette.getByRole('combobox',{name:'探す・操作'}).fill('DGX Spark');
-   await page.keyboard.press('Alt+Enter');
+   if(await phone.isPhoneHead(page)){
+   // 見出しの『現在のタブ ▾ n/m』でタブ一覧シート：⌕・接続状態・ワークスペース・パネル別のタブ
+   await page.locator('.desktop-bar .phone-tab').click();
+   const sheet=page.getByRole('dialog',{name:'タブ一覧',exact:true});
+   await sheet.waitFor();
+   assert.equal(await sheet.getByRole('button',{name:'すべての端末を探す',exact:true}).count(),1);
+   assert.match(await sheet.getByRole('button',{name:/^接続状態：/}).getAttribute('aria-label'),/接続/);
+   assert.equal(await sheet.getByRole('group',{name:'ワークスペース',exact:true}).getByRole('button',{name:'新しいワークスペース',exact:true}).count(),1);
+   assert.equal(await sheet.locator('.tsheet-panel').count(),4,'one section per panel');
+   assert.match(await sheet.locator('.tsheet-panel').first().locator('.tsheet-label').textContent(),/^パネル「atlas-web」 · 入力先$/);
+   assert.equal(await sheet.locator('.tsheet-tab[aria-current=true]').getAttribute('data-sheet-tab'),'tab-local-1');
    await page.screenshot({path:join(out,'panel-overview.png'),animations:'disabled'});
-   assert.equal(await palette.locator('.sw-tab').count(),1,'tab search narrows to the DGX Spark tab');
-   await palette.locator('.sw-tab').click();
+   await sheet.locator('[data-sheet-tab=tab-spark-1]').click();
+   await sheet.waitFor({state:'detached'});
    await page.waitForTimeout(100);
+   assert.match(await page.locator('.desktop-bar .phone-tab').textContent(),/4\/5/,'n/m follows the picked tab');
+   }else{
+    // TERMINAL_WAKE_CHECK は画面の幅を変える。スマホの見出しでなければ、見出しのチップからパレットの『タブ』で選ぶ
+    await page.locator('.tile:visible').getByRole('button',{name:'他 3 パネル',exact:true}).click();
+    const palette=page.getByRole('dialog',{name:'探す・操作',exact:true});
+    await palette.getByRole('combobox',{name:'探す・操作'}).fill('DGX Spark');
+    await palette.locator('.sw-tab').click();
+    await page.waitForTimeout(100);
+   }
    assert.equal(await page.locator('.tile:visible [role=tab][aria-selected=true]').getAttribute('data-tab-id'),'tab-spark-1');
    assert.equal(await page.locator('.tile:visible').count(),1);
    await page.setViewportSize({width:1920,height:1080});await page.waitForTimeout(150);
@@ -276,6 +324,14 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    assert.equal(activeTerminals,splitTerminals(),'only visible split panels retain websocket connections '+JSON.stringify(terminalTransports.map(t=>({window:t.window,remote:t.remote,closes:t.closeEvents||0}))));
    await page.setViewportSize({width:900,height:1024});await page.waitForTimeout(150);
    for(const target of await page.locator('.editorbar-actions .icon-btn:visible, .tile:visible .tab-close:visible, .tile:visible .strip-btn:visible, .workspace-sidebar-button').all()){ const box=await target.boundingBox();assert.ok(box.width>=44 && box.height>=44,'tablet touch target '+JSON.stringify(box)); }
+   // タブレットの狭い 1 パネル表示では、見出しのチップ『他 3 パネル』がパレットの『タブ』を開く
+   await page.locator('.tile:visible').getByRole('button',{name:'他 3 パネル',exact:true}).click();
+   const palette=page.getByRole('dialog',{name:'探す・操作',exact:true});
+   assert.equal(await palette.getByRole('button',{name:'タブ',exact:true}).getAttribute('aria-pressed'),'true','the other-panels chip opens the palette on its tab scope');
+   await palette.getByRole('combobox',{name:'探す・操作'}).fill('DGX Spark');
+   await page.keyboard.press('Alt+Enter');
+   assert.equal(await palette.locator('.sw-tab').count(),1,'tab search narrows to the DGX Spark tab');
+   await page.keyboard.press('Escape');await palette.waitFor({state:'detached'});
    for(const list of await page.locator('.tile:visible .tablist').all()) assert.ok(await list.evaluate(el=>el.querySelector('.tab.active').getBoundingClientRect().left>=el.getBoundingClientRect().left-1),'selected tab keeps its leading label visible after resize');
    assert.equal(await page.evaluate(()=>localStorage.getItem('tw.layout')),layout,'responsive presentation preserves saved split tree');
   }

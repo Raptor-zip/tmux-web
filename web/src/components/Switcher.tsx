@@ -33,6 +33,12 @@ export interface PaletteTab {
   active: boolean;
   /** 検索に使う語 */
   search: string;
+  /** 状態（入力待ち・実行中など）。スマホのタブ一覧で状態の形に使う */
+  kind?: string;
+  /** リモートデスクトップのタブ */
+  screen?: boolean;
+  /** ローカル以外のデバイス（タブ一覧ではデバイス名を添える） */
+  remote?: boolean;
 }
 
 export type PaletteScope = 'terminal' | 'tab' | 'command';

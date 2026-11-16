@@ -25,7 +25,9 @@ import { SplitView, tabPayload, type DragPayload, type DropTarget } from './comp
 import { Switcher, type PaletteScope, type PaletteTabGroup, type SwitchItem } from './components/Switcher';
 import { Shortcuts } from './components/Shortcuts';
 import { TextCopy } from './components/TextCopy';
-import { ContextMenu, type MenuEntry } from './components/ContextMenu';
+import { ContextMenu, SEP, type MenuEntry } from './components/ContextMenu';
+import { TabSheet } from './components/TabSheet';
+import { useLongPress } from './hooks/useLongPress';
 import type { TerminalStatus } from './components/Terminal';
 import { isTerminalHandle, type TabHandle } from './components/TerminalTabs';
 import {
@@ -122,11 +124,29 @@ export interface BarSlots {
   status: HTMLElement | null;
   /** 右端：⌕ 探す・操作 */
   trailing: HTMLElement | null;
+  /** スマホの見出し：現在のタブ ▾ n/m（≡ の右） */
+  phone?: HTMLElement | null;
+  /** スマホの見出しの右端：＋▾ と ⋯ */
+  phoneEnd?: HTMLElement | null;
 }
 
-export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab, barSlots, onOpenSettings, workspace }: {
+/** スマホの見出し 1 行とタブ一覧シートに要るもの（Desktops.tsx から。表示中のワークスペースだけ） */
+export interface PhoneHead {
+  workspaces: { id: string; name: string }[];
+  activeWorkspace: string;
+  selectWorkspace(id: string): void;
+  openWorkspaceMenu(id: string, x: number, y: number): void;
+  /** 接続状態の要約 */
+  connection: string;
+  connectionBad: boolean;
+  openConnection(): void;
+}
+
+export default function App({ workspaceId, workspaceName, active, connection, desktopLayouts, onDesktopDrag, desktopTargets, onMoveDesktopTab, barSlots, onOpenSettings, workspace, phone }: {
   workspaceId: string; workspaceName: string; active: boolean; connection: ReturnType<typeof useTmuxState>;
   barSlots?: BarSlots;
+  /** スマホの見出し 1 行（タブ列を出さない設定のとき） */
+  phone?: PhoneHead;
   /** 『表示と接続』を開く（Desktops.tsx が持つ。設定は全ワークスペースで共通） */
   onOpenSettings?(): void;
   /** 表示中のワークスペースの操作（名前を変更・追加・並べ替え・削除）。パレットの『操作』に出す */
@@ -1354,7 +1374,10 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
   /** Alt+Shift+T とパレットから：入力先のパネルの ▾ の下に新規メニューを開く */
   const openNewMenuAtStrip = () => {
-    const button = document.querySelector<HTMLElement>('.tile.focused .new-more') ?? document.querySelector<HTMLElement>('.tile:not([hidden]) .new-more');
+    // スマホの見出しでは、タイル見出しの ▾ は隠れていて見出しの ▾ を使う
+    const visible = (el: HTMLElement | null) => el && el.getClientRects().length ? el : null;
+    const button = visible(document.querySelector<HTMLElement>('.desktop-bar .phone-new .new-more'))
+      ?? document.querySelector<HTMLElement>('.tile.focused .new-more') ?? document.querySelector<HTMLElement>('.tile:not([hidden]) .new-more');
     const r = button?.getBoundingClientRect();
     openNewMenu(r ? { x: r.left, y: r.bottom } : { x: window.innerWidth / 2 - 120, y: 80 }, focusedIdRef.current);
   };
@@ -1384,15 +1407,16 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     const describe = (tab: TabRef) => {
       const device = devices.find(d => d.id === tabDevice(tab));
       const deviceText = `${device?.name || '接続先を確認中'}${device && !device.connected ? ' · 未接続' : ''}`;
+      const remote = !!device && !device.local;
       if (isScreenTab(tab)) {
-        return { title: 'リモートデスクトップ', task: device?.name || '画面', device: deviceText,
+        return { title: 'リモートデスクトップ', task: device?.name || '画面', device: deviceText, screen: true, remote: false,
           search: ['リモートデスクトップ', 'デスクトップ', '画面', device?.name].join(' ') };
       }
       const win = tab.windowId ? windows.find(w => w.id === tab.windowId) : windows.find(w => w.sessionId === tab.sessionId && w.active);
       const view = win ? views.get(win.id) : undefined;
       const title = view?.project || tab.sessionName || '端末';
       const task = view?.primary || tab.windowName || '端末';
-      return { title, task, device: deviceText, search: [view?.project, view?.primary, tab.sessionName, device?.name].join(' ') };
+      return { title, task, device: deviceText, kind: view?.status.kind ?? 'idle', remote, search: [view?.project, view?.primary, tab.sessionName, device?.name].join(' ') };
     };
     return leaves.map(leaf => {
       const tabsInLeaf = leaf.tabs.map(tab => ({ id: tab.id, active: tab.id === leaf.activeId, ...describe(tab) }));
@@ -1420,7 +1444,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
    * ペインに効く操作（コピー・ファイル・コマンド・tmux）は、入力先ではなくメニューを開いたタブのペインに効く。
    * 選択と貼り付けは、そのタブがパネルの前面にあるときだけ使える（裏のタブには端末が描かれていない）。
    */
-  const openTabMenu = (tabId: string, anchor: { x: number; y: number }, panel?: PanelContext) => {
+  const openTabMenu = (tabId: string, anchor: { x: number; y: number }, panel?: PanelContext, lead: MenuEntry[] = []) => {
     const tree = layoutRef.current;
     const found = tree ? findTab(tree, tabId) : null;
     const tab = tabContext(tabId);
@@ -1476,8 +1500,30 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     const title = isScreenTab(ref)
       ? devices.find(d => d.id === ref.deviceId)?.name ?? 'リモートデスクトップ'
       : (win && views.get(win.id)?.project) || ref.sessionName || '端末';
-    setMenu({ x: anchor.x, y: anchor.y, items, title });
+    setMenu({ x: anchor.x, y: anchor.y, items: [...lead, ...items], title });
   };
+
+  // ---------------------------------------------------------------- スマホの見出し 1 行
+  // ≡ ／ 現在のタブ ▾ n/m ／ 要対応 N（切断中は ✕ 切断）／ ＋▾ ／ ⋯。タブ列の代わりにタブ一覧シートを開く
+  const [tabSheetOpen, setTabSheetOpen] = useState(false);
+  useEffect(() => { if (!phone) setTabSheetOpen(false); }, [phone]);
+  const headLeaf = focusedLeaf ?? leaves[0] ?? null;
+  const headTab = headLeaf ? activeTab(headLeaf) : null;
+  const headInfo = headTab ? paletteTabGroups.find(g => g.leafId === headLeaf?.id)?.tabs.find(t => t.id === headTab.id) : undefined;
+  const headIndex = headTab ? tabs.findIndex(t => t.tab.id === headTab.id) : -1;
+  const attentionCount = waitingIds.length + (approval.pending ? 1 : 0);
+  /** 見出しの ⋯ のシートの先頭：見出しに置かない ⌕ と接続状態 */
+  const phoneLead = (): MenuEntry[] => phone ? [
+    { label: '探す・操作', hint: altKeys ? 'Alt+P' : undefined, run: () => { setPaletteWaiting(false); setPalette('terminal'); } },
+    { label: `接続状態：${phone.connection}`, run: phone.openConnection },
+    SEP,
+  ] : [];
+  const openHeadMenu = (x: number, y: number) => {
+    if (headTab) openTabMenu(headTab.id, { x, y }, undefined, phoneLead());
+    else setMenu({ x, y, items: phoneLead().filter(Boolean), title: 'メニュー' });
+  };
+  const headTabPress = useLongPress<null>((_, { x, y }) => openHeadMenu(x, y));
+  const headPlusPress = useLongPress<null>((_, { x, y }) => openNewMenu({ x, y }, headLeaf?.id ?? null));
 
   return (
     <div className={`app ${sidebarOpen ? '' : 'sidebar-hidden'}`} style={{ '--sidebar-w': `${Math.min(600, Math.max(200, Number(sidebarWidth) || 260))}px` } as React.CSSProperties}>
@@ -1491,11 +1537,41 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             <Icon name="diamond" /><span className="bar-chip-text">入力待ち</span> {waitingIds.length}
           </button>}
         </span>
+        {/* スマホの見出しでは、入力待ちと承認待ちを『要対応 N』にまとめる */}
+        {barSlots.phone && attentionCount > 0 && <button className="bar-chip needs" title={`要対応 ${attentionCount}（入力待ち ${waitingIds.length}${approval.pending ? '・承認待ち 1' : ''}）`}
+          onClick={() => { if (approval.pending && !waitingIds.length) setApprovalOpen(true); else { setPaletteWaiting(true); setPalette('terminal'); } }}>
+          <Icon name={approval.pending ? 'warning' : 'diamond'} /><span className="bar-chip-text">要対応</span> {attentionCount}
+        </button>}
         {approval.pending && <button className="bar-chip approval" title={`承認待ち：${approval.pending.cmd}`}
           onClick={() => setApprovalOpen(true)}>
           <Icon name="warning" /><span className="bar-chip-text">承認待ち</span> 1
         </button>}
       </>, barSlots.status)}
+      {active && barSlots?.phone && createPortal(
+        <button className="bar-btn phone-tab" aria-haspopup="dialog" aria-expanded={tabSheetOpen}
+          aria-label={headTab ? `タブ一覧（${headInfo?.title ?? '端末'}、${headIndex + 1}/${tabs.length}）` : 'タブ一覧'}
+          title="タブ一覧（長押し・右クリックでタブの操作）"
+          {...headTabPress.bind(null)}
+          onContextMenu={e => { e.preventDefault(); headTabPress.cancel(); const r = e.currentTarget.getBoundingClientRect(); openHeadMenu(e.clientX || r.left, e.clientY || r.bottom); }}
+          onKeyDown={e => { if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); openHeadMenu(r.left, r.bottom); } }}
+          onClick={() => setTabSheetOpen(true)}>
+          {headInfo?.screen ? <span className="tab-kind" aria-hidden="true"><Icon name="screen" /></span> : <span className={`state-dot ${headInfo?.kind ?? 'idle'}`} aria-hidden="true" />}
+          <span className="phone-tab-title">{headTab ? headInfo?.title ?? '端末' : 'タブなし'}</span>
+          <Icon name="chevron-down" />
+          {headTab && <span className="phone-tab-count">{headIndex + 1}/{tabs.length}</span>}
+        </button>, barSlots.phone)}
+      {active && barSlots?.phoneEnd && createPortal(<>
+        <div className="split-new phone-new" role="group" aria-label="新しく開く">
+          <button className="bar-btn new-main" title="新しい端末 (Alt+T)" aria-label="新しい端末"
+            {...headPlusPress.bind(null)}
+            onContextMenu={e => e.preventDefault()}
+            onClick={() => newTerminal(headLeaf?.id ?? null)}><Icon name="plus" /></button>
+          <button className="bar-btn new-more" title="新規メニュー (Alt+Shift+T)" aria-label="新規メニュー" aria-haspopup="menu"
+            onClick={e => { const r = e.currentTarget.getBoundingClientRect(); openNewMenu({ x: r.left, y: r.bottom }, headLeaf?.id ?? null); }}><Icon name="chevron-down" /></button>
+        </div>
+        <button className="bar-btn phone-more" title="タブの操作" aria-label="タブの操作" aria-haspopup="menu"
+          onClick={e => { const r = e.currentTarget.getBoundingClientRect(); openHeadMenu(r.right, r.bottom); }}><Icon name="more" /></button>
+      </>, barSlots.phoneEnd)}
       {active && barSlots?.trailing && createPortal(
         <button className="bar-btn bar-palette" aria-label="探す・操作" title="探す・操作 (Alt+P)"
           onClick={() => { setPaletteWaiting(false); setPalette('terminal'); }}>
@@ -1673,6 +1749,21 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           onClose={() => { setPalette(null); setPaletteWaiting(false); }}
         />
       )}
+      {tabSheetOpen && phone && <TabSheet
+        groups={paletteTabGroups}
+        workspaces={phone.workspaces}
+        activeWorkspace={phone.activeWorkspace}
+        connection={phone.connection}
+        connectionBad={phone.connectionBad}
+        onSearch={() => { setTabSheetOpen(false); setPaletteWaiting(false); setPalette('terminal'); }}
+        onConnection={() => { setTabSheetOpen(false); phone.openConnection(); }}
+        onSelectWorkspace={id => { setTabSheetOpen(false); phone.selectWorkspace(id); }}
+        onNewWorkspace={() => { setTabSheetOpen(false); workspace?.create(); }}
+        onWorkspaceMenu={(id, x, y) => { setTabSheetOpen(false); phone.openWorkspaceMenu(id, x, y); }}
+        onPickTab={(leafId, tabId) => { setTabSheetOpen(false); setFocusedId(leafId); activate(tabId); }}
+        onTabMenu={(tabId, x, y) => { setTabSheetOpen(false); openTabMenu(tabId, { x, y }); }}
+        onClose={() => setTabSheetOpen(false)}
+      />}
       {shortcutsOpen && <Shortcuts altKeys={altKeys} onClose={() => setShortcutsOpen(false)} />}
 
 

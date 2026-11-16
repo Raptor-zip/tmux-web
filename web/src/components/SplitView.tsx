@@ -15,6 +15,7 @@ import {
   type TabRef,
 } from '../layout';
 import { TabStrip } from './TabStrip';
+import { matches, PHONE_QUERY } from '../phone';
 import type { TerminalStatus } from './Terminal';
 import { TerminalTabs, type TabHandle } from './TerminalTabs';
 import type { Session, TmuxWindow } from '../types';
@@ -174,8 +175,9 @@ export function SplitView({
   const tiles = useMemo(() => leafRects(tree), [tree]);
   const bars = useMemo(() => dividers(tree), [tree]);
   const closableTile = tiles.length > 1;
-  const autoFocus = size.width > 0 && (window.innerWidth <= 760 || tiles.some(t => size.width * t.rect.width / 100 < 280 || size.height * t.rect.height / 100 < 160));
-  const single = closableTile && (focusMode || (!resizing && autoFocus && (!forceSplit || window.innerWidth <= 760)));
+  const phone = matches(PHONE_QUERY);
+  const autoFocus = size.width > 0 && (phone || tiles.some(t => size.width * t.rect.width / 100 < 280 || size.height * t.rect.height / 100 < 160));
+  const single = closableTile && (focusMode || (!resizing && autoFocus && (!forceSplit || phone)));
   useEffect(() => { onSingleChange?.(single); }, [single, onSingleChange]);
   const selectedId = tiles.some(t => t.leaf.id === focusedId) ? focusedId : tiles[0]?.leaf.id;
 

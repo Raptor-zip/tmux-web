@@ -5,7 +5,8 @@ module.exports = async function checkTerminalSelection(page, { terminalTransport
   const attach = page.locator('.input-bar .input-enter');
   const draft = page.getByRole('textbox', { name: '下書き', exact: true });
   const insert = page.getByRole('button', { name: '挿入のみ', exact: true });
-  const tab = number => page.locator(`[data-tab-id="tab-local-${number}"][role=tab]`);
+  // スマホの見出しでは、タブはタブ一覧シートから選ぶ
+  const tab = number => ({ click: () => require('./phone.cjs').pickTab(page, `tab-local-${number}`) });
   const waitFor = async (predicate, attempts = 150) => {
     for (let i = 0; i < attempts; i++) { if (predicate()) return; await page.waitForTimeout(20); }
     assert.fail('selection acknowledgement fixture did not receive its expected request');

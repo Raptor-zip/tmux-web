@@ -46,12 +46,12 @@ module.exports = async (page, { scene, terminalInputs, requests }) => {
 
   // Turn them off from 表示と接続 (connection chip → 表示と接続…)
   const openMenu = async (submenu) => {
-    await page.locator('.tile.focused').getByRole('button', { name: 'タブの操作', exact: true }).click();
+    await require('./phone.cjs').focusedHead(page).getByRole('button', { name: 'タブの操作', exact: true }).click();
     await page.getByRole('menuitem', { name: submenu, exact: true }).click();
   };
   const settings = page.getByRole('dialog', { name: '表示と接続', exact: true });
   const setAltKeys = async (on) => {
-    await page.locator('.conn-status').click();
+    await require('./phone.cjs').openConnection(page);
     await page.getByRole('button', { name: '表示と接続…', exact: true }).click();
     await settings.waitFor();
     const toggle = settings.getByRole('switch', { name: 'Alt ショートカットを使う' });

@@ -12,7 +12,18 @@ module.exports = async function prepareSwitcher(page, { state, scene }) {
     const check = (condition, message) => { if (!condition) failures.push(message); };
     const dialog = page.getByRole('dialog', { name: '探す・操作', exact: true });
     const input = dialog.locator('.sw-input');
-    const trigger = page.locator('.desktop-bar .bar-palette');
+    // スマホ縦では ⌕ が見出しに無いので、タブ一覧シートの『すべての端末を探す』から開く
+    const direct = page.locator('.desktop-bar .bar-palette:visible');
+    const opener = async () => (await direct.count()) ? direct : page.locator('.desktop-bar .phone-tab');
+    const trigger = {
+      click: async () => {
+        if (await direct.count()) return direct.click();
+        await page.locator('.desktop-bar .phone-tab').click();
+        await page.getByRole('dialog', { name: 'タブ一覧', exact: true }).getByRole('button', { name: 'すべての端末を探す', exact: true }).click();
+      },
+      // 開いた操作へフォーカスが戻る。シート経由ではシートを開いた『現在のタブ ▾』へ戻る
+      evaluate: async fn => (await opener()).evaluate(fn),
+    };
     const dismiss = () => dialog.getByRole('button', { name: '探す・操作を閉じる', exact: true });
     const open = async () => { await trigger.click(); await dialog.waitFor(); };
     await dialog.waitFor();

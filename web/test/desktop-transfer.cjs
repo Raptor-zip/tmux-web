@@ -12,6 +12,10 @@ module.exports = async (page, errors, resetWorkspace) => {
   });
   resetWorkspace?.();
   await page.reload();
+  // タブをワークスペースタブへ掴んで移す操作は、タブ列とワークスペースタブを並べた表示で確かめる。
+  // スマホの見出し 1 行では、タブメニューの『配置 ▸ ワークスペース「…」へ移す』を使う
+  await page.locator('.xterm').first().waitFor();
+  await require('./phone.cjs').showPhoneTabs(page);
   const visibleTab = () => page.locator('.desktop-panel:visible .tab').first();
   const desktop = id => page.locator(`[data-desktop-id="${id}"]`);
   const begin = async id => {
@@ -56,6 +60,10 @@ module.exports = async (page, errors, resetWorkspace) => {
   result = await saved();
   assert.deepEqual(result.destination.tabs.map(t => t.windowId), ['@2']);
   await page.reload();
+  // タブをワークスペースタブへ掴んで移す操作は、タブ列とワークスペースタブを並べた表示で確かめる。
+  // スマホの見出し 1 行では、タブメニューの『配置 ▸ ワークスペース「…」へ移す』を使う
+  await page.locator('.xterm').first().waitFor();
+  await require('./phone.cjs').showPhoneTabs(page);
   await visibleTab().waitFor();
   assert.deepEqual(await saved(), result);
   // The existing tab-reordering path still works after a transfer.
