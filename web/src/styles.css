@@ -832,6 +832,11 @@ input {
   flex: none;
   color: #9fd4e4;
 }
+/* パレット（Switcher）の『表示中 / 選択中』バッジ */
+.badge.open {
+  background: var(--accent-dim);
+  color: #cdf5ff;
+}
 
 
 .rename-input {

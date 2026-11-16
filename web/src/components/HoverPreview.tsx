@@ -24,12 +24,6 @@ function trimTail(text: string): string {
   return lines.slice(Math.max(0, lines.length - MAX_LINES)).join('\n');
 }
 
-/**
- * サイドバーの行にホバーしたときに出す、ペインの中身のプレビュー。
- *
- * ウィンドウを開かずに「いまそのペインに何が出ているか」を確かめるためのもので、
- * 操作はできない。ANSI エスケープは落として素のテキストだけを出す。
- */
 /** ペインの末尾を一定間隔で取り直す。paneId が null のあいだは何もしない */
 function useCapture(paneId: string | null, delay: number) {
   const [text, setText] = useState<string | null>(null);

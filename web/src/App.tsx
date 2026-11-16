@@ -995,7 +995,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         if (!from || !to) return;
         confirmThen(
           `「${from.name}」を「${to.name}」にまとめますか？`,
-          `${from.windows} 個のウィンドウが「${to.name}」へ移り、「${from.name}」は無くなります。` +
+          `${from.windows} 個の端末が「${to.name}」へ移り、「${from.name}」は無くなります。` +
             'プロセスは動いたままです。',
           () => doAction('mergeSession', { source: from.id, target: to.id }),
           { confirmLabel: 'まとめる', danger: false },

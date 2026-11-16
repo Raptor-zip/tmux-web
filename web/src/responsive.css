@@ -114,7 +114,7 @@
 .tile-body > .terminal-host { z-index:0; }
 
 /* Flat status indicators, without neon glow or pulsing. */
-.busy, .dot, .tab-caret, .state-dot, .overview .ov i, .tab .state-dot { box-shadow:none; animation:none; }
+.busy, .dot, .tab-caret, .state-dot, .tab .state-dot { box-shadow:none; animation:none; }
 .btn.primary { background:var(--accent-dim); border-color:var(--border-strong); color:var(--fg); }
 .btn.primary:hover { background:var(--bg-3); border-color:var(--accent); }
 .ctxmenu { background:var(--bg-1); }
@@ -122,7 +122,7 @@
 .desktop-bar { background:var(--bg-1); }
 .tab.active .tab-name, .desktop-tab.on { color:var(--fg); }
 .state-dot.server, .tally.server i { background:var(--purple); }
-.overview .ov.working, .state-text.working, .chip.working { color:var(--accent); }
+.state-text.working, .chip.working { color:var(--accent); }
 .state-text.server, .chip.server { color:var(--purple); }
 .chip.run { color:var(--yellow); }
 
