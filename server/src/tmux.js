@@ -100,8 +100,13 @@ function splitTitle(raw) {
   };
 }
 
-/** Claude は入力欄を表示したまま dynamic workflow を実行する。
- * 過去の実行ログではなく、最後の入力欄より下にある現在の進捗だけを見る。
+/**
+ * 端末タイトルにスピナーが出ていない Claude が、実は作業中かどうかを画面から見る。
+ * 過去の実行ログではなく、最後の入力欄より下（足元の行）だけを見る。
+ * - 応答中・ツール実行中は足元に「esc to interrupt」が出る。
+ *   Claude Code 2.1 系はツールの実行中にタイトルを ✳ のまま止めるので、タイトルだけでは入力待ちに見えてしまう。
+ * - 入力欄を表示したまま dynamic workflow を実行しているときは、その進捗（◯ 名前 ▰▱ n/m）が出る。
+ * 許可の確認（Esc to cancel）や、終わった応答（✻ … · done）は作業中にしない。
  */
 export function hasRunningWorkflow(screen) {
   const lines = screen.split('\n');
@@ -111,6 +116,7 @@ export function hasRunningWorkflow(screen) {
   }
   if (separator < 0) return false;
   return lines.slice(separator + 1).some(line =>
+    /\besc to interrupt\b/i.test(line) ||
     /^\s*[◯○]\s+.+[▰▱]+\s+\d+\s*\/\s*\d+/u.test(line));
 }
 

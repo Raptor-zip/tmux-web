@@ -53,3 +53,16 @@ test('Claude background workflow progress below the input prompt is busy', async
   assert.equal(hasRunningWorkflow(`${prompt}\n`), false);
   assert.equal(hasRunningWorkflow(progress), false);
 });
+
+test('Claude running a tool with an idle title is busy until the turn ends', async () => {
+  const { hasRunningWorkflow } = await import('../src/tmux.js');
+  const rule = '─'.repeat(40);
+  // ツールの実行中：タイトルは ✳ のまま、足元に esc to interrupt
+  const working = `● Running tests\n✽ Symbioting… (14m 52s · ↓ 19.3k tokens)\n${rule} ultracode ─\n❯ \n${rule}\n  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt`;
+  assert.equal(hasRunningWorkflow(working), true);
+  // 応答が終わった
+  const done = `✻ Cogitated for 1m 15s · done 23:42\n${rule}\n❯ 次の依頼\n${rule}\n  ⏵⏵ auto mode on (shift+tab to cycle)`;
+  assert.equal(hasRunningWorkflow(done), false);
+  // 過去のログに文字列が残っていても、入力欄より上なら数えない
+  assert.equal(hasRunningWorkflow(`esc to interrupt\n${done}`), false);
+});
