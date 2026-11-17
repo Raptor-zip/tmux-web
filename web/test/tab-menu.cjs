@@ -115,7 +115,12 @@ module.exports = async function checkTabMenu(page, { scene, out, touch }) {
       assert.equal(await menu.getAttribute('aria-label'), await activeName(), 'long-pressing the phone header tab opens its menu');
       await page.getByRole('button', { name: 'メニューを閉じる', exact: true }).click();
       await menu.waitFor({ state: 'detached' });
-      await page.locator('.desktop-bar').getByRole('button', { name: 'タブの操作', exact: true }).click();
+      // 指で押す（マウスのクリックだとシートではなく押した場所に出る）
+      // 直前の長押しのあと、互換イベントを止めている間（400ms）は待つ
+      await page.waitForTimeout(600);
+      await page.locator('.desktop-bar').getByRole('button', { name: 'タブの操作', exact: true }).tap();
+      await menu.waitFor();
+      assert.ok(await menu.evaluate(el => el.classList.contains('ctx-sheet')), 'a tap on the phone ⋯ opens a sheet');
       const first = await page.getByRole('menuitem').evaluateAll(items => items.slice(0, 2).map(el => el.textContent));
       assert.match(first[0], /^探す・操作/);
       assert.match(first[1], /^接続状態：/);
@@ -145,6 +150,22 @@ module.exports = async function checkTabMenu(page, { scene, out, touch }) {
     await menu.waitFor();
     assert.equal(await menu.getAttribute('aria-label'), await activeName(), 'long-pressing the terminal opens the tab menu');
     await page.screenshot({ path: join(out, 'tab-menu-terminal-sheet.png'), animations: 'disabled' });
+    assert.ok(await menu.evaluate(el => el.classList.contains('ctx-sheet')), 'a long press opens the menu as a sheet');
+    await closeMenu();
+
+    // タッチパネルのある画面でも、マウスの右クリックなら押した場所に出す（シートにしない）
+    const host = await page.locator('.tile:visible .terminal-host').first().boundingBox();
+    const click = { x: Math.round(host.x + 40), y: Math.round(host.y + 40) };
+    await page.mouse.click(click.x, click.y, { button: 'right' });
+    await menu.waitFor();
+    const box = await menu.boundingBox();
+    assert.ok(!await menu.evaluate(el => el.classList.contains('ctx-sheet')), 'a mouse right-click on a touch screen is not a sheet');
+    assert.ok(Math.abs(box.x - click.x) <= 4 || box.x + box.width >= page.viewportSize().width - 8, `the menu opens at the pointer, not the bottom-left (menu at ${box.x},${box.y}, click at ${click.x},${click.y})`);
+    assert.ok(Math.abs(box.y - click.y) <= 4 || box.y + box.height >= page.viewportSize().height - 8, 'the menu opens at the pointer row');
+    await closeMenu();
+
+    await longPress(page.locator('.tile:visible .terminal-host').first());
+    await menu.waitFor();
     // テキストを選んでコピー…
     await item('テキストを選んでコピー…').click();
     const sheet = page.getByRole('dialog', { name: 'テキストを選んでコピー', exact: true });

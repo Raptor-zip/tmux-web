@@ -49,9 +49,22 @@ interface Props {
   onClose(): void;
 }
 
-/** タッチではメニューを下端のシートで出す（responsive.css と同じ条件） */
-const SHEET_QUERY = '(any-pointer:coarse)';
-const isSheet = () => typeof window !== 'undefined' && !!window.matchMedia?.(SHEET_QUERY).matches;
+/**
+ * タッチで開いたメニューだけ下端のシートで出す（見た目は .ctxmenu.ctx-sheet）。
+ * 判定は「端末にタッチパネルがあるか」(any-pointer) ではなく「いま何で操作したか」で行う。
+ * any-pointer だと、タッチパネル付きのノート PC でマウスの右クリックまでシートになり、
+ * 押した場所ではなく左下に出てしまう。
+ */
+let lastPointerType: string | null = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointerdown', e => { lastPointerType = e.pointerType; }, { capture: true, passive: true });
+}
+const isSheet = () => {
+  if (typeof window === 'undefined') return false;
+  if (lastPointerType) return lastPointerType === 'touch';
+  // まだ何も押していない（キーボードで開いた）ときは、主な入力で決める
+  return !!window.matchMedia?.('(pointer:coarse)').matches;
+};
 
 const focusable = (root: HTMLElement | null) =>
   [...(root?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled):not([data-side])') ?? [])].filter(b => b.getClientRects().length > 0);
@@ -280,7 +293,7 @@ export function ContextMenu({ x, y, items, title, onClose }: Props) {
       <div
         role="menu" aria-label={heading ?? '操作メニュー'}
         onKeyDown={e => onMenuKey(e, inSheetSub ? subEntries : items, inSheetSub ? 'sub' : 'top')}
-        className="ctxmenu"
+        className={sheet ? 'ctxmenu ctx-sheet' : 'ctxmenu'}
         ref={ref}
         style={{ left: pos.x, top: pos.y }}
         onPointerDown={(e) => e.stopPropagation()}

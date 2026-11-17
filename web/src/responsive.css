@@ -169,12 +169,14 @@
   .tab { min-width:220px; max-width:300px; }
   .tabstrip,.desktop-tabs { min-height:48px; }
   .strip-tools .strip-btn { min-width:44px; min-height:44px; }
-  .ctxmenu { left:8px !important; top:auto !important; bottom:calc(8px + var(--safe-bottom)); width:calc(100vw - 16px); max-width:560px; max-height:calc(var(--app-height,100dvh) - 24px - var(--safe-top) - var(--safe-bottom)); padding:6px; overscroll-behavior:contain; }
-  .ctxmenu button { min-height:48px; padding:10px 12px; }
-  /* シートの見出し行。右上の × で閉じる（以前は先頭の『閉じる』項目だった） */
-  .ctxmenu .ctx-title { position:sticky; top:-6px; margin:-6px -6px 4px; padding:0 0 0 14px; min-height:48px; background:var(--bg-1); border-bottom:1px solid var(--border); z-index:1; font-size:13px; }
-  .ctxmenu .ctx-title .touch-menu-close { display:grid; place-items:center; flex:none; width:48px; min-height:48px; padding:0; font-size:20px; color:var(--fg-dim); }
 }
+/* タッチで開いたメニューは下端のシート（ContextMenu.tsx が .ctx-sheet を付ける）。
+   タッチパネル付きの PC でもマウスで開いたときは押した場所に出す。 */
+.ctxmenu.ctx-sheet { left:8px !important; top:auto !important; bottom:calc(8px + var(--safe-bottom)); width:calc(100vw - 16px); max-width:560px; max-height:calc(var(--app-height,100dvh) - 24px - var(--safe-top) - var(--safe-bottom)); padding:6px; overscroll-behavior:contain; }
+.ctxmenu.ctx-sheet button { min-height:48px; padding:10px 12px; }
+/* シートの見出し行。右上の × で閉じる（以前は先頭の『閉じる』項目だった） */
+.ctxmenu.ctx-sheet .ctx-title { position:sticky; top:-6px; margin:-6px -6px 4px; padding:0 0 0 14px; min-height:48px; background:var(--bg-1); border-bottom:1px solid var(--border); z-index:1; font-size:13px; }
+.ctxmenu.ctx-sheet .ctx-title .touch-menu-close { display:grid; place-items:center; flex:none; width:48px; min-height:48px; padding:0; font-size:20px; color:var(--fg-dim); }
 
 /* タブ列：状態の点・名前・［区別用の表記］・（別デバイスのときだけ）接続先・閉じる、を 1 行に収める。
    細かい説明（実行中のコマンド・場所）は title に回し、幅を取らない。
