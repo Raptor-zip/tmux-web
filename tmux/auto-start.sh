@@ -28,7 +28,19 @@ _tmux_web_auto_start() {
   fi
   # 既存セッションへの attach は別のタブと表示を共有してしまうため使わない。
   # 接続失敗時は元のシェルを残し、正常に detach / exit したときだけ端末を閉じる。
-  if TMUX= TMUX_PANE= "${TMUX_WEB_TMUX_BIN:-tmux}" "$@" new-session -c "$PWD"; then
+  if [ -n "${BASH_VERSION:-}" ] && ! shopt -q login_shell; then
+    # 通常の Bash から開く端末は、個別の起動コマンドがなければ通常の Bash で開く。
+    # start-server を先に置くと、初回も設定を読み込んだ状態で起動コマンドを判定できる。
+    # グローバル設定を読み、既存セッションの設定には左右されないようにする。
+    set -- "$@" start-server \; if-shell \
+      'shell=$(tmux -S #{q:socket_path} show-options -gv default-shell) &&
+       command=$(tmux -S #{q:socket_path} show-options -gv default-command) &&
+       case "$shell" in */bash) [ -z "$command" ];; *) exit 1;; esac' \
+      'new-session "exec \"\$SHELL\""' 'new-session'
+  else
+    set -- "$@" new-session -c "$PWD"
+  fi
+  if TMUX= TMUX_PANE= "${TMUX_WEB_TMUX_BIN:-tmux}" "$@"; then
     exit
   fi
 }
