@@ -33,7 +33,8 @@ cmd=""
 for a in "$@"; do
 	case "$a" in
 	*[!A-Za-z0-9._/=:@,+-]* | "")
-		quoted="'$(printf '%s' "$a" | sed "s/'/'\\\\''/g")'"
+		quoted=$(printf '%s.' "$a" | sed "s/'/'\\\\''/g")
+		quoted="'${quoted%.}'"
 		;;
 	*)
 		quoted="$a"
@@ -74,4 +75,4 @@ SUDO_ASKPASS="$ASKPASS" \
 	SUDO_GUI_CWD="$PWD" \
 	SUDO_GUI_DETAIL="$detail" \
 	SUDO_GUI_ATTEMPT_FILE="$ATTEMPT_FILE" \
-	sudo -A -- "$@"
+	sudo -A -k -- "$@"

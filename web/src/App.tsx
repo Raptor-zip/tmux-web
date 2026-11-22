@@ -237,7 +237,9 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   /** 過去の会話を再開（Claude / Codex）のモーダル */
   const [resumeOpen, setResumeOpen] = useState(false);
   const approval = useApproval(active);
-  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [approvalId, setApprovalId] = useState<string | null>(null);
+  const approvalOpen = approvalId !== null && approvalId === approval.pending?.id;
+  const openApproval = () => setApprovalId(approval.pending?.id ?? null);
   const [remotePane, setRemotePane] = useState<string | null>(null);
   const [screenOpen, setScreenOpen] = useState<string | null>(null);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
@@ -293,7 +295,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     if (!active || !pending || announcedApprovalId === pending.id) return;
     announcedApprovalId = pending.id;
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, text: `sudo の承認待ち：${pending.cmd}`, kind: 'warn', urgent: true, action: { label: '内容を確認', run: () => setApprovalOpen(true) } }]);
+    setToasts((t) => [...t, { id, text: `sudo の承認待ち：${pending.cmd}`, kind: 'warn', urgent: true, action: { label: '内容を確認', run: () => setApprovalId(pending.id) } }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 8000);
   }, [active, approval.pending]);
 
@@ -1346,7 +1348,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       appInstalled: install.installed,
       onInstallApp: () => void requestInstall(),
       approvalPending: !!approval.pending,
-      onOpenApproval: () => setApprovalOpen(true),
+      onOpenApproval: openApproval,
       onPaste: pasteClipboard,
   };
 
@@ -1643,12 +1645,12 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           </button>}
           {/* スマホの見出しでは、入力待ちと承認待ちを『要対応 N』にまとめる（入力待ちのチップは隠れるので、ここで読み上げる） */}
           {barSlots.phone && attentionCount > 0 && <button className="bar-chip needs" title={`要対応 ${attentionCount}（入力待ち ${waitingIds.length}${approval.pending ? '・承認待ち 1' : ''}）`}
-            onClick={() => { if (approval.pending && !waitingIds.length) setApprovalOpen(true); else { setPaletteWaiting(true); setPalette('terminal'); } }}>
+            onClick={() => { if (approval.pending && !waitingIds.length) openApproval(); else { setPaletteWaiting(true); setPalette('terminal'); } }}>
             <Icon name={approval.pending ? 'warning' : 'diamond'} /><span className="bar-chip-text">要対応</span> {attentionCount}
           </button>}
         </span>
         {approval.pending && <button className="bar-chip approval" title={`承認待ち：${approval.pending.cmd}`}
-          onClick={() => setApprovalOpen(true)}>
+          onClick={openApproval}>
           <Icon name="warning" /><span className="bar-chip-text">承認待ち</span> 1
         </button>}
       </>, barSlots.status)}
@@ -1843,7 +1845,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
 
       {resumeOpen && <ResumeConversation deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} onClose={() => setResumeOpen(false)} onStarted={projectStarted} />}
       {projectMode && <ProjectStart deviceId={activeDevice.id} deviceName={activeDevice.name} home={home} initialMode={projectMode} onClose={() => setProjectMode(null)} onStarted={projectStarted} />}
-      {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure} onClose={() => setApprovalOpen(false)} onDone={() => { setApprovalOpen(false); approval.refresh(); }} />}
+      {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure}
+        onClose={() => setApprovalId(null)} onDone={() => { setApprovalId(id => id === approvalId ? null : id); approval.refresh(); }} />}
       {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}
       {screenOpen && <ScreenViewer devices={devices} deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)}
         onOpenAsTab={(deviceId) => { setScreenOpen(null); openScreen(deviceId, focusedIdRef.current); }} />}
@@ -1857,7 +1860,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
           waitingOnly={paletteWaiting}
           onPick={openWindow}
           onPickTab={(leafId, tabId) => { setFocusedId(leafId); activate(tabId); }}
-          onApproval={() => setApprovalOpen(true)}
+          onApproval={openApproval}
           onShortcuts={() => setShortcutsOpen(true)}
           onClose={() => { setPalette(null); setPaletteWaiting(false); }}
         />

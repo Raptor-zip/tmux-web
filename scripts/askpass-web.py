@@ -12,7 +12,7 @@ sudo が呼ぶ  →  tmux-webに「いま何に sudo が要るか」を登録  �
   - 失敗・取り消しのときは標準出力に一切書かずに終了する
     （空文字を出すと「間違ったパスワード」として扱われてしまうため）。
 
-呼び出し元（sudo-web.sh）が渡す環境変数は gui-sudo-askpass スキルと同じ:
+呼び出し元（sudo-web.sh または sudo-gui.sh --web）が渡す環境変数:
   SUDO_GUI_CMD / SUDO_GUI_CWD / SUDO_GUI_DETAIL / SUDO_GUI_ATTEMPT_FILE
 """
 
@@ -20,10 +20,30 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
-BASE = os.environ.get("TMUX_WEB_URL", "http://127.0.0.1:7654")
+BASE = os.environ.get("TMUX_WEB_URL", "http://127.0.0.1:7654").rstrip("/")
 TIMEOUT = 180  # tmux-web側の期限(150秒)より少しだけ長く待つ
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+# sudo のパスワードはこの PC の tmux-web からだけ受け取る。
+OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+
+
+def valid_base() -> bool:
+    try:
+        url = urllib.parse.urlsplit(BASE)
+        return (url.scheme == "http" and url.hostname in {"127.0.0.1", "::1", "localhost"}
+                and url.username is None and url.port != 0
+                and not (url.path or url.query or url.fragment))
+    except ValueError:
+        return False
 
 
 def note(msg: str) -> None:
@@ -61,11 +81,14 @@ def post_json(path: str, payload: dict) -> dict:
         headers={"content-type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=15) as res:
+    with OPENER.open(req, timeout=15) as res:
         return json.loads(res.read().decode("utf-8"))
 
 
 def main() -> int:
+    if not valid_base():
+        note("TMUX_WEB_URL にこのPCのループバックURLとポートを指定してください（例: http://127.0.0.1:7654）。")
+        return 1
     attempt = bump_attempt()
 
     try:
@@ -78,9 +101,16 @@ def main() -> int:
                 "attempt": attempt,
             },
         )
-    except urllib.error.URLError as e:
-        note(f"tmux-webに繋がりません（{BASE}）: {e}")
-        note("systemctl --user status tmux-web を確認してください。")
+        query = urllib.parse.urlencode({"id": created["id"], "claim": created["claim"]})
+    except urllib.error.HTTPError as e:
+        messages = {
+            400: "コマンドまたは作業フォルダーを承認画面に表示できません。",
+            409: "別の sudo 要求が承認待ちです。処理が終わってから再実行してください。",
+        }
+        note(messages.get(e.code, f"tmux-web が sudo 要求を受け付けませんでした（HTTP {e.code}）。"))
+        return 1
+    except (OSError, ValueError, KeyError, TypeError):
+        note(f"tmux-webに接続できません（{BASE}）。systemctl --user status tmux-web を確認してください。")
         return 1
 
     note("")
@@ -90,22 +120,21 @@ def main() -> int:
         note(f"  （{attempt} 回目。前回のパスワードは違っていました）")
     note("")
 
-    url = f"{BASE}/api/approvals/wait?id={created['id']}&claim={created['claim']}"
     try:
-        with urllib.request.urlopen(url, timeout=TIMEOUT) as res:
+        with OPENER.open(f"{BASE}/api/approvals/wait?{query}", timeout=TIMEOUT) as res:
             if res.status != 200:
                 note("入力されませんでした。")
                 return 1
-            secret = res.read()
+            secret = res.read(12289)
     except urllib.error.HTTPError:
         note("取り消されたか、期限切れです。")
         return 1
-    except urllib.error.URLError as e:
-        note(f"待っている間にtmux-webとの通信が切れました: {e}")
+    except OSError:
+        note("待っている間にtmux-webとの通信が切れました。")
         return 1
 
-    if not secret:
-        note("空の応答でした。")
+    if not secret or len(secret) > 12288 or any(ch in secret for ch in (b"\x00", b"\r", b"\n")):
+        note("パスワードを受け取れませんでした。")
         return 1
 
     # ここだけが標準出力への書き込み。sudo がこのパイプを直接読む。
