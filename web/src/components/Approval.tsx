@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { answerApproval, cancelApproval, fetchApproval, type Approval } from '../api';
+import { approvalNotificationPermission, syncApprovalNotification } from '../approval-notifications';
 import { Modal } from './Modal';
 
 export function useApproval(active = true) {
@@ -12,9 +13,13 @@ export function useApproval(active = true) {
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       try {
-        if (!document.hidden) {
+        if (!document.hidden || approvalNotificationPermission() === 'granted') {
           const data = await fetchApproval(controller.signal);
-          if (!controller.signal.aborted) { setPending(data.pending); setSecure(data.secure); }
+          if (!controller.signal.aborted) {
+            setPending(data.pending);
+            setSecure(data.secure);
+            void syncApprovalNotification(data.pending);
+          }
         }
       } catch { /* existing request remains visible until expiry or reconnection */ }
       if (!controller.signal.aborted) timer = setTimeout(poll, 2500);
@@ -22,7 +27,8 @@ export function useApproval(active = true) {
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [revision, active]);
-  return { pending, secure, refresh: () => setRevision(v => v + 1) };
+  const refresh = useCallback(() => setRevision(v => v + 1), []);
+  return { pending, secure, refresh };
 }
 
 export function ApprovalDialog({ pending, secure, onClose, onDone }: { pending: Approval; secure: boolean; onClose(): void; onDone(): void }) {

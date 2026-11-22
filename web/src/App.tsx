@@ -5,6 +5,7 @@ import { DeviceStart } from './components/DeviceStart';
 import { deviceOf } from './devices';
 import { ProjectStart, ResumeConversation } from './components/ProjectStart';
 import { ApprovalDialog, useApproval } from './components/Approval';
+import { isApprovalId } from './approval-notifications';
 import { RemoteControl } from './components/RemoteControl';
 import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
@@ -116,6 +117,16 @@ function usePersisted<T>(key: string, initial: T, revive?: (raw: unknown) => T) 
 
 /** 承認待ちのトーストを出した依頼。ワークスペースを切り替えても同じ依頼で二度読み上げない */
 let announcedApprovalId: string | null = null;
+
+const startupApprovalId = (() => {
+  const url = new URL(location.href);
+  const id = url.searchParams.get('sudo-approval');
+  if (id !== null) {
+    url.searchParams.delete('sudo-approval');
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  }
+  return isApprovalId(id) ? id : null;
+})();
 
 /** 上バーの差し込み口（Desktops.tsx）。表示中のワークスペースだけが受け取る */
 export interface BarSlots {
@@ -237,9 +248,20 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   /** 過去の会話を再開（Claude / Codex）のモーダル */
   const [resumeOpen, setResumeOpen] = useState(false);
   const approval = useApproval(active);
-  const [approvalId, setApprovalId] = useState<string | null>(null);
+  const [approvalId, setApprovalId] = useState(startupApprovalId);
   const approvalOpen = approvalId !== null && approvalId === approval.pending?.id;
   const openApproval = () => setApprovalId(approval.pending?.id ?? null);
+  const refreshApproval = approval.refresh;
+  useEffect(() => {
+    if (!active || !('serviceWorker' in navigator)) return;
+    const open = (event: MessageEvent) => {
+      if (event.data?.type !== 'open-sudo-approval' || !isApprovalId(event.data.id)) return;
+      setApprovalId(event.data.id);
+      refreshApproval();
+    };
+    navigator.serviceWorker.addEventListener('message', open);
+    return () => navigator.serviceWorker.removeEventListener('message', open);
+  }, [active, refreshApproval]);
   const [remotePane, setRemotePane] = useState<string | null>(null);
   const [screenOpen, setScreenOpen] = useState<string | null>(null);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);

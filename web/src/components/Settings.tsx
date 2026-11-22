@@ -3,6 +3,7 @@ import { Modal } from './Modal';
 import { Dialog, type DialogSpec } from './Dialog';
 import { Icon } from './Icon';
 import { requestInstall, useInstallState } from '../pwa';
+import { approvalNotificationPermission } from '../approval-notifications';
 import {
   FONT_SIZE, LINE_HEIGHT, useAltKeys, useConnectionMode, useFontSize, useInputBar, useLandscapeHideHeader,
   useLineHeight, usePhoneTabs, useStatusLine, type InputBarMode,
@@ -83,6 +84,19 @@ export function Settings({ versions, onOpenShortcuts, onClose }: {
   const [mode, setMode] = useConnectionMode();
   const [altKeys, setAltKeys] = useAltKeys();
   const install = useInstallState();
+  const [notificationPermission, setNotificationPermission] = useState(approvalNotificationPermission);
+  const [requestingNotification, setRequestingNotification] = useState(false);
+  async function allowNotifications() {
+    setRequestingNotification(true);
+    try {
+      await Notification.requestPermission();
+    } catch {
+      // ブラウザが許可ダイアログを出せない場合は、現在の権限を表示する。
+    } finally {
+      setNotificationPermission(approvalNotificationPermission());
+      setRequestingNotification(false);
+    }
+  }
   const [confirm, setConfirm] = useState<DialogSpec | null>(null);
   const fontId = useId();
   const lineId = useId();
@@ -144,6 +158,13 @@ export function Settings({ versions, onOpenShortcuts, onClose }: {
           hint={install.installed ? 'アプリとして開いています' : '専用ウィンドウで開き、アプリ一覧やDockから起動できます'}
           control={!install.installed && <button type="button" className="btn"
             disabled={install.busy} onClick={() => void requestInstall()}><Icon name="download" />アプリとして追加</button>} />
+        {notificationPermission !== 'unsupported' && <Row id={`${fontId}-sudo-notifications`} label="sudo の OS 通知"
+          hint={notificationPermission === 'denied' ? '通知がブロックされています。ブラウザやOSの通知設定で許可できます。'
+            : 'アプリの起動中に sudo の承認が必要になると通知します。'}
+          control={notificationPermission === 'default'
+            ? <button type="button" className="btn" disabled={requestingNotification}
+              onClick={() => void allowNotifications()}>通知を許可</button>
+            : <output className="settings-value">{notificationPermission === 'granted' ? '許可済み' : 'ブロック中'}</output>} />}
         <Row id={`${fontId}-version`} label="バージョン" control={
           <ul className="settings-versions">
             {versions.length === 0 && <li>不明</li>}

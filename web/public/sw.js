@@ -1,6 +1,24 @@
 // ネットワーク認証を毎回通す。私的な端末出力・API・ファイルをCache Storageへ保存しない。
 self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+
+self.addEventListener('notificationclick', event => {
+  if (event.notification.tag !== 'sudo-approval') return;
+  event.notification.close();
+  const id = event.notification.data?.id;
+  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{22}$/.test(id)) return;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window' });
+    const app = windows.find(client => new URL(client.url).pathname === '/');
+    const focused = await app?.focus().catch(() => null);
+    if (focused) {
+      focused.postMessage({ type: 'open-sudo-approval', id });
+      return;
+    }
+    await self.clients.openWindow(`/?sudo-approval=${id}`);
+  })());
+});
+
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || event.request.mode !== 'navigate' || url.origin !== self.location.origin || url.pathname !== '/') return;
