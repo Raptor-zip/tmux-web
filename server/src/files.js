@@ -4,7 +4,7 @@ import express from 'express';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { promises as fsp } from 'node:fs';
-import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 const HIDDEN = new Set(['node_modules', '__pycache__']);
 const TYPES = {
@@ -19,6 +19,13 @@ const TYPES = {
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const inside = (root, file) => file === root || file.startsWith(root + path.sep);
 const hidden = (name) => name.startsWith('.') || HIDDEN.has(name);
+const validName = (name) => typeof name === 'string' && name.length > 0
+  && !/[/\\\x00-\x1f\x7f]/.test(name) && !hidden(name);
+const syncName = (name) => {
+  if (Buffer.byteLength(name) > 255) throw fail(400, '同期する項目の名前が長すぎます');
+  return name;
+};
+const conflict = () => fail(409, '送信先に同名の別の種類の項目があります');
 
 // Leave room for temporary prefixes and collision suffixes; never split UTF-8.
 function fitName(name, maxBytes, suffix = '') {
@@ -110,22 +117,84 @@ export function installFiles(app, getPane, { secret = randomBytes(32), now = Dat
     } catch (error) { handleError(res, error); }
   });
 
+  const destination = async ({ pane, root: expectedRoot, path: relative = '', name }) => {
+    const root = await rootFor(pane);
+    if (expectedRoot !== root) throw fail(409, '作業フォルダーが変わりました。一覧を開き直してください');
+    const directory = await resolveFile(root, relative);
+    if (!validName(name)) throw fail(400, '通常のファイル名またはフォルダー名を指定してください');
+    if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, '送信先はフォルダーを選んでください');
+    return directory;
+  };
+
+  app.post('/api/files/folder', async (req, res) => {
+    try {
+      const directory = await destination(req.body || {});
+      const { name } = req.body;
+      const merge = req.body.merge === true;
+      for (let index = 1; ; index++) {
+        const saved = merge ? syncName(name) : fitName(name, 240, index === 1 ? '' : `-${index}`);
+        const target = path.join(directory, saved);
+        try { await fsp.mkdir(target); }
+        catch (error) {
+          if (error.code !== 'EEXIST') throw error;
+          if (!merge) continue;
+          if (!(await fsp.lstat(target)).isDirectory()) throw conflict();
+        }
+        res.json({ name: saved });
+        return;
+      }
+    } catch (error) { handleError(res, error); }
+  });
+
+  async function existingRegularFile(file) {
+    const stat = await fsp.lstat(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    if (stat && !stat.isFile()) throw conflict();
+    return stat;
+  }
+
+  app.post('/api/files/check', async (req, res) => {
+    let handle;
+    try {
+      const directory = await destination(req.body || {});
+      const { name, size, sha256 } = req.body;
+      if (!Number.isSafeInteger(size) || size < 0 || typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) throw fail(400, 'ファイルの照合情報が無効です');
+      const file = path.join(directory, syncName(name));
+      if ((await existingRegularFile(file))?.size !== size) return res.json({ unchanged: false });
+      handle = await fsp.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.size !== size) return res.json({ unchanged: false });
+      const hash = createHash('sha256');
+      if (size) for await (const chunk of handle.createReadStream({ start: 0, end: size - 1, autoClose: false })) hash.update(chunk);
+      res.json({ unchanged: hash.digest('hex') === sha256 });
+    } catch (error) { handleError(res, error); }
+    finally { await handle?.close().catch(() => {}); }
+  });
+
   app.post('/api/files/upload', express.raw({ type: 'application/octet-stream', limit: '50mb' }), async (req, res) => {
     try {
-      const root = await rootFor(req.query.pane);
-      if (req.query.root !== root) throw fail(409, '作業フォルダーが変わりました。一覧を開き直してください');
-      const directory = await resolveFile(root, req.query.path || '');
-      const name = req.query.name;
-      if (typeof name !== 'string' || !name || /[/\\\x00-\x1f\x7f]/.test(name) || hidden(name)) throw fail(400, '通常のファイル名を指定してください');
+      const directory = await destination(req.query);
+      const { name, sync } = req.query;
       if (!Buffer.isBuffer(req.body)) throw fail(400, 'ファイルがありません');
-      if (!(await fsp.stat(directory)).isDirectory()) throw fail(400, 'アップロード先はフォルダーを選んでください');
-      let index = 1;
-      while (true) {
+      if (sync === '1') {
+        const saved = syncName(name);
+        const target = path.join(directory, saved);
+        const existing = await existingRegularFile(target);
+        // Publish complete contents in one rename, leaving the previous version intact on write failure.
+        const temporary = path.join(directory, `.tmux-web-upload-${randomBytes(16).toString('hex')}`);
+        try {
+          await fsp.writeFile(temporary, req.body, { flag: 'wx', mode: existing ? existing.mode & 0o777 : 0o666 });
+          if (existing) await fsp.chmod(temporary, existing.mode & 0o777);
+          await fsp.rename(temporary, target);
+        } finally { await fsp.rm(temporary, { force: true }); }
+        res.json({ name: saved });
+        return;
+      }
+      for (let index = 1; ; index++) {
         const saved = fitName(name, 240, index === 1 ? '' : `-${index}`);
         try {
           await fsp.writeFile(path.join(directory, saved), req.body, { flag: 'wx' });
           res.json({ name: saved }); return;
-        } catch (error) { if (error.code !== 'EEXIST') throw error; index++; }
+        } catch (error) { if (error.code !== 'EEXIST') throw error; }
       }
     } catch (error) { handleError(res, error); }
   });

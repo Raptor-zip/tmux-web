@@ -7,11 +7,20 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
   let root = initialRoot, ticket = 0, failedImage = false, removeImage = false;
   let holdUpload = false, releaseUpload, holdArchive = false, releaseArchive;
   const ticketPaths = new Map();
-  const saved = [], uploads = [];
+  const saved = [], uploads = [], folders = [], checks = [];
   const entry = (name, directory = false, prefix = '') => ({ name, path: prefix + name, directory, size: directory || name === 'empty.txt' ? 0 : name === 'large.txt' ? 300000 : 120, modified: 1792597800000, mime: directory ? '' : name.endsWith('.png') ? 'image/png' : 'text/plain' });
-  await page.route(/\/api\/files(?:\/(?:open|upload|archive))?(?:\?|$)/, async route => {
+  await page.route(/\/api\/files(?:\/(?:open|upload|archive|folder|check))?(?:\?|$)/, async route => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/open')) { const id = `preview-${++ticket}`; ticketPaths.set(id, route.request().postDataJSON().path); return route.fulfill({ json: { url: `/files/content?ticket=${id}` } }); }
+    if (url.pathname.endsWith('/folder')) {
+      const body = route.request().postDataJSON();
+      folders.push(body);
+      return route.fulfill({ json: { name: body.merge ? body.name : body.name + '-2' } });
+    }
+    if (url.pathname.endsWith('/check')) {
+      checks.push(route.request().postDataJSON());
+      return route.fulfill({ json: { unchanged: true } });
+    }
     if (url.pathname.endsWith('/upload')) {
       const name = url.searchParams.get('name'), directory = url.searchParams.get('path');
       uploads.push({ name, directory });
@@ -57,7 +66,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
   return async () => {
     await row('assets').click(); await row('nested').click();
     holdUpload = true;
-    await dialog.locator('input[type=file]').setInputFiles([file('upload-first.txt'), file('upload-second.txt')]);
+    await dialog.locator('input[aria-label="アップロードするファイル"]').setInputFiles([file('upload-first.txt'), file('upload-second.txt')]);
     await waitUpload();
     await dialog.getByRole('status').filter({ hasText: 'upload-first.txt' }).waitFor();
     await page.screenshot({ path: join(out, `${scene.name}-upload.png`), animations: 'disabled' });
@@ -69,7 +78,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
       holdUpload = false; releaseUpload();
       assert.equal(uploads.length, 1, 'cancel never starts the next file');
       await row('upload-first.txt').waitFor();
-      await dialog.locator('input[type=file]').setInputFiles([file('partial-ok.txt'), file('partial-fail.txt')]);
+      await dialog.locator('input[aria-label="アップロードするファイル"]').setInputFiles([file('partial-ok.txt'), file('partial-fail.txt')]);
       await dialog.getByRole('status').filter({ hasText: '1件を保存済み' }).waitFor();
       await row('partial-ok.txt').waitFor();
       assert.ok(uploads.every(item => item.directory === 'assets/nested'), 'all uploads retain the selected destination');
@@ -88,7 +97,7 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
       assert.ok(ticket > previous, 'preview retry issues a new signed URL');
       if (scene.width > 760) {
         const stableTicket = ticket;
-        await dialog.locator('input[type=file]').setInputFiles(file('background.txt'));
+        await dialog.locator('input[aria-label="アップロードするファイル"]').setInputFiles(file('background.txt'));
         await row('background.txt').waitFor();
         await dialog.locator('.file-preview img').waitFor();
         assert.equal(ticket, stableTicket, 'background list updates preserve an unchanged preview');
@@ -152,6 +161,33 @@ module.exports = async function prepareFiles(page, { scene, phase, out }) {
     }
     root = initialRoot;
     await openBrowser();
+    if (phase === 'after') {
+      const dropFolder = () => dialog.locator('.file-list-pane').evaluate(node => {
+        const file = new File(['fixture'], 'example.txt');
+        const entry = { name: file.name, isFile: true, file: resolve => resolve(file) };
+        const directory = (name, children) => ({
+          name, isFile: false, isDirectory: true,
+          createReader: () => { const batches = [children, []]; return { readEntries: resolve => resolve(batches.shift()) }; },
+        });
+        const event = new Event('drop', { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'dataTransfer', { value: {
+          types: ['Files'],
+          items: [{ kind: 'file', webkitGetAsEntry: () => directory('folder', [directory('empty', []), entry]) }],
+        } });
+        node.dispatchEvent(event);
+      });
+      await dropFolder();
+      await dialog.getByRole('status').filter({ hasText: 'フォルダー2件を処理しました' }).waitFor();
+      assert.deepEqual(folders.map(({ name, path }) => [name, path]), [['folder', ''], ['empty', 'folder-2']]);
+      assert.deepEqual(uploads.at(-1), { name: 'example.txt', directory: 'folder-2' });
+      await dialog.getByRole('combobox', { name: '送信方法' }).selectOption('sync');
+      await dialog.locator('.file-list[aria-busy=false]').waitFor();
+      const beforeSync = uploads.length;
+      await dropFolder();
+      await dialog.getByRole('status').filter({ hasText: '同じ内容 1件' }).waitFor();
+      assert.equal(checks[0].path, 'folder');
+      assert.equal(uploads.length, beforeSync, 'unchanged content is not uploaded');
+    }
     console.log(scene.name + ' file navigation, preview and transfer checks passed');
   };
 };

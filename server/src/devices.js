@@ -9,7 +9,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { createWebSocketForwarder } from './ws-flow.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
-const allowedApi = /^\/api\/(?:state|action|capture|keys|paste-(?:file|image)|files(?:\/(?:open|upload|archive))?|projects\/(?:recent|start)|claude\/remote-control|desktop\/(?:ping|status|clipboard)|screen\/(?:status|stream))$/;
+const allowedApi = /^\/api\/(?:state|action|capture|keys|paste-(?:file|image)|files(?:\/(?:open|upload|archive|folder|check))?|projects\/(?:recent|start)|claude\/remote-control|desktop\/(?:ping|status|clipboard)|screen\/(?:status|stream))$/;
 
 export function validateDevice(input) {
   if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 80) throw fail(400, 'デバイス名を入力してください');
@@ -100,6 +100,9 @@ export function createDevices({ file = process.env.TMUX_WEB_DEVICES_FILE || path
         for (const key of ['content-type', 'range', 'accept']) if (req.headers[key]) headers[key] = req.headers[key];
         const body = !['GET', 'HEAD'].includes(req.method) && req.body && req.is('application/json') ? JSON.stringify(req.body) : null;
         if (body) headers['content-length'] = Buffer.byteLength(body);
+        else if (relative === '/api/files/upload' && req.headers['content-length']) {
+          headers['content-length'] = req.headers['content-length']; // Preserve explicit zero-byte uploads.
+        }
         const upstream = (url.protocol === 'https:' ? https : http).request(url, { method: req.method, headers }, incoming => {
           if ([401, 403].includes(incoming.statusCode)) { incoming.resume(); res.status(502).json({ error: '接続先のTailscale認証を確認してください。接続先も最新版に更新し、配信元PCのTailscaleアカウントを許可してください。' }); return; }
           res.status(incoming.statusCode);

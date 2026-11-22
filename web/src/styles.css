@@ -1558,7 +1558,7 @@ input:focus-visible,
 .file-breadcrumbs { display: flex; gap: 4px; overflow-x: auto; padding: 8px; flex: none; }
 .file-breadcrumbs .btn { flex: none; }
 .file-controls { display: flex; gap: 6px; padding: 8px; flex: none; }
-.file-controls input, .file-controls select { color: var(--fg); background: var(--bg-2); border: 1px solid var(--border); border-radius: 0; padding: 6px; min-width: 0; }
+.file-controls input, .file-controls select, .file-transfer-actions select { color: var(--fg); background: var(--bg-2); border: 1px solid var(--border); border-radius: 0; padding: 6px; min-width: 0; }
 .file-controls input { width: 100%; }
 .file-controls select { flex: none; }
 .file-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
@@ -1594,7 +1594,7 @@ input:focus-visible,
   .file-browser.has-preview .file-list-pane { display: none; }
   .file-browser.has-preview .file-preview { display: flex; }
   .file-back { display: inline-flex; }
-  .file-browser .btn, .file-controls select, .file-controls input { min-height: 44px; }
+  .file-browser .btn, .file-controls select, .file-controls input, .file-transfer-actions select { min-height: 44px; }
   .file-controls input { font-size: 16px; }
 }
 

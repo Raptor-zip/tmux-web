@@ -227,13 +227,29 @@ export const startProject = async (options: StartProjectOptions, device = 'local
   return { ...result, sessionId: scoped(device, result.sessionId), windowId: scoped(device, result.windowId), paneId: scoped(device, result.paneId) };
 };
 export const remoteControl = (pane: string, connect = true) => request<{ url?: string; pending?: boolean }>(devicePath(deviceOf(pane), '/api/claude/remote-control'), { method: 'POST', body: JSON.stringify({ pane: unscoped(pane), connect }) });
-export async function uploadFile(pane: string, path: string, root: string, file: File, signal?: AbortSignal) {
-  const res = await fetch(devicePath(deviceOf(pane), `/api/files/upload?${new URLSearchParams({ pane: unscoped(pane), path, root, name: file.name })}`), {
+export async function uploadFile(pane: string, path: string, root: string, file: File, signal?: AbortSignal, sync = false) {
+  const query = new URLSearchParams({ pane: unscoped(pane), path, root, name: file.name });
+  if (sync) query.set('sync', '1');
+  const res = await fetch(devicePath(deviceOf(pane), `/api/files/upload?${query}`), {
     method: 'POST', body: file, signal, headers: { 'Content-Type': 'application/octet-stream' },
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(res.status === 413 ? '1ファイルは50MBまでです。' : body.error || 'アップロードできませんでした');
   return body as { name: string };
+}
+export function createTransferFolder(pane: string, path: string, root: string, name: string, merge: boolean, signal: AbortSignal) {
+  return request<{ name: string }>(devicePath(deviceOf(pane), '/api/files/folder'), {
+    method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root, name, merge }), signal,
+  });
+}
+export async function isSameFile(pane: string, path: string, root: string, file: File, signal: AbortSignal) {
+  if (!globalThis.crypto?.subtle) return false;
+  const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  const sha256 = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
+  const result = await request<{ unchanged: boolean }>(devicePath(deviceOf(pane), '/api/files/check'), {
+    method: 'POST', body: JSON.stringify({ pane: unscoped(pane), path, root, name: file.name, size: file.size, sha256 }), signal,
+  });
+  return result.unchanged;
 }
 export const archiveFiles = async (pane: string, path: string, root: string, signal?: AbortSignal) => {
   const device = deviceOf(pane);

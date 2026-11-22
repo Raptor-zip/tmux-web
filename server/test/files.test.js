@@ -202,3 +202,32 @@ test('a dot-prefixed project root still archives manual assets and excludes hidd
   const content = execFileSync('tar', ['-xOzf', '-', '.project/public/manual-logo.svg'], { input: bytes, encoding: 'utf8' });
   assert.equal(content, '<svg>fixture asset</svg>');
 });
+
+test('folder transfers keep their tree and manual sync preserves unrelated files', async t => {
+  const { root, api } = await fixture(t);
+  const post = (action, data) => api('/api/files/' + action, { method: 'POST', body: JSON.stringify({ pane: '%1', root, ...data }) });
+  const mkdir = (name, path = '', merge = false) => post('folder', { path, name, merge });
+  const upload = (name, body, path) => api('/api/files/upload?' + new URLSearchParams({ pane: '%1', root, path, name, sync: '1' }), {
+    method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body,
+  });
+  assert.deepEqual(await (await mkdir('資料')).json(), { name: '資料' });
+  assert.deepEqual(await (await mkdir('資料')).json(), { name: '資料-2' });
+  assert.deepEqual(await (await mkdir('資料', '', true)).json(), { name: '資料' });
+  assert.equal((await mkdir('空', '資料')).status, 200);
+  assert.equal((await mkdir('../escape')).status, 400);
+  assert.equal((await mkdir('empty.txt', '', true)).status, 409);
+  assert.equal((await mkdir('outside-link.txt', '', true)).status, 409);
+  assert.equal((await upload('outside-link.txt', 'blocked', '')).status, 409);
+  assert.equal((await upload('notes.txt', 'first', '資料')).status, 200);
+  await fs.chmod(path.join(root, '資料', 'notes.txt'), 0o750);
+  const { createHash } = await import('node:crypto');
+  const check = data => post('check', {
+    path: '資料', name: 'notes.txt', size: Buffer.byteLength(data), sha256: createHash('sha256').update(data).digest('hex'),
+  });
+  assert.deepEqual(await (await check('first')).json(), { unchanged: true });
+  assert.deepEqual(await (await check('other')).json(), { unchanged: false });
+  assert.equal((await upload('notes.txt', 'other', '資料')).status, 200);
+  assert.equal(await fs.readFile(path.join(root, '資料', 'notes.txt'), 'utf8'), 'other');
+  assert.equal((await fs.stat(path.join(root, '資料', 'notes.txt'))).mode & 0o777, 0o750);
+  assert.deepEqual(await fs.readdir(path.join(root, '資料')), ['notes.txt', '空']);
+});

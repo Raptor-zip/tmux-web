@@ -1,6 +1,7 @@
 import { Icon } from './Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchFiles, openFile, uploadFile, archiveFiles, type FileEntry, type FileListing } from '../api';
+import { fetchFiles, openFile, uploadFile, archiveFiles, createTransferFolder, isSameFile, type FileEntry, type FileListing } from '../api';
+import { readDrop, readFolderSelection, type TransferEntry } from '../file-transfer';
 import { readTextPreview } from '../file-preview';
 
 function TextPreview({ url, onError }: { url: string; onError(error: Error): void }) {
@@ -32,6 +33,8 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
   const [archiving, setArchiving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
+  const [sync, setSync] = useState(false);
   const uploadController = useRef<AbortController | null>(null);
   const previewController = useRef<AbortController | null>(null);
   const archiveController = useRef<AbortController | null>(null);
@@ -138,31 +141,60 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
       if (!controller.signal.aborted && id === requestId.current) setPreviewError((err as Error).message);
     }
   };
-  const upload = async (files: File[]) => {
-    if (!listing || loading || uploadLock.current || archiveLock.current || !files.length) return;
+  const upload = async (read: (signal: AbortSignal) => TransferEntry[] | Promise<TransferEntry[]>) => {
+    if (!listing || loading || uploadLock.current || archiveLock.current) return;
     uploadLock.current = true;
     const controller = new AbortController(); uploadController.current = controller;
+    const { signal } = controller;
     setNotice(''); setError('');
-    let done = 0;
+    setTransfer({ done: 0, total: 0, name: '送信する項目を読み込み中…' });
+    let done = 0, skipped = 0, folders = 0;
+    const count = (entries: TransferEntry[]): number => entries.reduce((total, entry) => total + 1 + count(entry.children ?? []), 0);
     try {
-      for (const file of files) {
-        if (controller.signal.aborted) throw new DOMException('Upload canceled', 'AbortError');
-        setTransfer({ done, total: files.length, name: file.name });
-        if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name} は50MBを超えています。`);
-        await uploadFile(paneId, directory, listing.root, file, controller.signal);
-        done++;
+      const entries = await read(signal);
+      signal.throwIfAborted();
+      if (!entries.length) {
+        setNotice('送信できる項目がありません。');
+        return;
       }
-      if (mounted.current) setNotice(`${done}件のファイルをアップロードしました。同名のファイルは連番で保存します。`);
+      const total = count(entries);
+      const send = async (batch: TransferEntry[], destination: string) => {
+        for (const entry of batch) {
+          signal.throwIfAborted();
+          setTransfer({ done: done + skipped + folders, total, name: entry.name });
+          if (entry.children) {
+            const { name } = await createTransferFolder(paneId, destination, listing.root, entry.name, sync, signal);
+            folders++;
+            await send(entry.children, [destination, name].filter(Boolean).join('/'));
+          } else if (entry.file) {
+            if (entry.file.size > 50 * 1024 * 1024) throw new Error(`${entry.name} は50MBを超えています。`);
+            if (sync && await isSameFile(paneId, destination, listing.root, entry.file, signal)) {
+              skipped++;
+            } else {
+              await uploadFile(paneId, destination, listing.root, entry.file, signal, sync);
+              done++;
+            }
+          }
+        }
+      };
+      await send(entries, directory);
+      if (mounted.current) {
+        const folderNotice = folders ? ` フォルダー${folders}件を処理しました。` : '';
+        setNotice(sync
+          ? `同期しました。更新・追加 ${done}件、同じ内容 ${skipped}件。${folderNotice}`
+          : `${done}件のファイルをアップロードしました。${folderNotice} 同名の項目は連番で保存します。`);
+      }
     } catch (error) {
-      if (mounted.current) setNotice(controller.signal.aborted
-        ? `${done}件の保存を確認しました。送信を中止しました。通信中だったファイルは一覧で確認してください。`
-        : `${done}件を保存済み。${(error as Error).message}`);
-    }
-    finally {
+      const saved = folders ? `（フォルダー${folders}件を処理済み）` : '';
+      if (mounted.current) setNotice(signal.aborted
+        ? `${done}件の保存を確認しました${saved}。送信を中止しました。通信中だった項目は一覧で確認してください。`
+        : `${done}件を保存済み${saved}。${(error as Error).message}`);
+    } finally {
       uploadLock.current = false;
       if (uploadController.current === controller) uploadController.current = null;
       if (mounted.current) { setTransfer(null); setRevision(v => v + 1); }
       if (input.current) input.current.value = '';
+      if (folderInput.current) folderInput.current.value = '';
     }
   };
   const downloadFolder = async () => {
@@ -208,7 +240,7 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
           <section className={`file-list-pane ${dragOver ? 'file-drop-active' : ''}`} aria-label="ファイル一覧"
             onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); if (!busy) setDragOver(true); } }}
             onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
-            onDrop={e => { e.preventDefault(); setDragOver(false); if ([...e.dataTransfer.items].some(item => item.webkitGetAsEntry?.()?.isDirectory)) setNotice('フォルダーの中のファイルを選んでアップロードしてください。'); else void upload([...e.dataTransfer.files]); }}>
+            onDrop={e => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.types.includes('Files')) void upload(signal => readDrop(e.dataTransfer, signal)); }}>
             <nav className="file-breadcrumbs" aria-label="フォルダー">
               <button className="btn" disabled={busy || loading} onClick={() => navigate('')}>作業フォルダー</button>
               {directory.split('/').filter(Boolean).map((part, i, parts) => (
@@ -216,11 +248,20 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
               ))}
             </nav>
             <div className="file-transfer-actions">
-              <input ref={input} type="file" multiple hidden aria-label="アップロードするファイル" onChange={e => void upload([...(e.target.files || [])])} />
+              <input ref={input} type="file" multiple hidden aria-label="アップロードするファイル" onChange={e => void upload(() => [...(e.target.files || [])].map(file => ({ name: file.name, file })))} />
               <button className="btn" disabled={!listing || loading || busy} onClick={() => input.current?.click()}><Icon name="upload" />アップロード</button>
+              <input ref={folderInput} type="file" hidden aria-label="アップロードするフォルダー"
+                onChange={e => void upload(() => readFolderSelection([...(e.target.files || [])]))} />
+              <button className="btn" disabled={!listing || loading || busy} onClick={() => {
+                folderInput.current?.setAttribute('webkitdirectory', '');
+                folderInput.current?.click();
+              }}>フォルダーを送信</button>
+              <select aria-label="送信方法" value={sync ? 'sync' : 'copy'} disabled={busy} onChange={e => setSync(e.target.value === 'sync')}>
+                <option value="copy">コピー</option><option value="sync">同期（同名ファイルを更新）</option>
+              </select>
               <button className="btn" disabled={!listing || loading || busy} onClick={() => void downloadFolder()}><Icon name="download" />{archiving ? '準備中…' : 'フォルダーを保存'}</button>
             </div>
-            {transfer && <div className="file-transfer-status" role="status"><span>{transfer.done + 1} / {transfer.total}：{transfer.name}</span><progress aria-label="アップロードの進み具合" max={transfer.total} value={transfer.done} /><button className="btn" onClick={() => uploadController.current?.abort()}>送信を中止</button></div>}
+            {transfer && <div className="file-transfer-status" role="status"><span>{transfer.total > 0 && `${transfer.done + 1} / ${transfer.total}：`}{transfer.name}</span><progress aria-label="アップロードの進み具合" max={transfer.total || 1} value={transfer.total ? transfer.done : undefined} /><button className="btn" onClick={() => uploadController.current?.abort()}>送信を中止</button></div>}
             {notice && <p className="file-transfer-status" role="status">{notice}</p>}
             <div className="file-controls">
               <input ref={filterInput} aria-label="ファイル名で絞り込む" placeholder="ファイル名で絞り込む" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -244,7 +285,7 @@ export function FileBrowser({ paneId, deviceName, onClose }: { paneId: string; d
                 </button>
               ))}
             </div>
-            <p className="file-note">ファイルをドロップして追加できます（1件50MBまで）。隠しファイル・node_modules は表示と一括保存の対象外です。</p>
+            <p className="file-note">{deviceName} のこのフォルダーに、ファイルやフォルダーをドロップして送信できます（1ファイル50MBまで）。同期は送信元からの一方向で、送信先の項目は削除しません。</p>
           </section>
           <section className="file-preview" aria-label="プレビュー">
             {selected ? <>
