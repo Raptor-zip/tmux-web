@@ -141,6 +141,8 @@ export interface BarSlots {
   phone?: HTMLElement | null;
   /** スマホの見出しの右端：＋▾ と ⋯ */
   phoneEnd?: HTMLElement | null;
+  /** スマホ縦画面の下部にある主要操作 */
+  dock?: HTMLElement | null;
 }
 
 /** スマホの見出し 1 行とタブ一覧シートに要るもの（Desktops.tsx から。表示中のワークスペースだけ） */
@@ -1704,13 +1706,31 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         <button className="bar-btn phone-more" title="タブの操作" aria-label="タブの操作" aria-haspopup="menu"
           onClick={e => { const r = e.currentTarget.getBoundingClientRect(); openHeadMenu(r.right, r.bottom); }}><Icon name="more" /></button>
       </>, barSlots.phoneEnd)}
+      {active && barSlots?.dock && createPortal(<>
+        <button className="dock-action" aria-label="タブ一覧を開く" aria-haspopup="dialog" onClick={() => setTabSheetOpen(true)}>
+          <Icon name="grid" /><span>タブ</span>
+        </button>
+        <button className="dock-action" aria-haspopup="dialog" onClick={() => { setPaletteWaiting(false); setPalette('terminal'); }}>
+          <Icon name="search" /><span>探す</span>
+        </button>
+        <button className="dock-action" aria-haspopup="dialog" onClick={() => setActivityOpen(true)}>
+          <Icon name="history" /><span>稼働表</span>
+        </button>
+        <button className="dock-action" aria-haspopup="dialog" onClick={onOpenSettings}>
+          <Icon name="settings" /><span>設定</span>
+        </button>
+      </>, barSlots.dock)}
       {active && barSlots?.trailing && createPortal(<>
         <button className="bar-btn bar-activity" aria-label="稼働表" title="Claude / Codex 稼働表"
           onClick={() => setActivityOpen(true)}><Icon name="history" /><span className="bar-btn-text">稼働表</span></button>
         <button className="bar-btn bar-palette" aria-label="探す・操作" title="探す・操作 (Alt+P)"
           onClick={() => { setPaletteWaiting(false); setPalette('terminal'); }}>
           <Icon name="search" /><span className="bar-btn-text">探す・操作</span><kbd className="bar-kbd">Alt+P</kbd>
-        </button></>, barSlots.trailing)}
+        </button>
+        <button className="bar-btn bar-settings" aria-label="表示と接続を開く" title="表示と接続" onClick={onOpenSettings}>
+          <Icon name="settings" />
+        </button>
+      </>, barSlots.trailing)}
 
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="一覧を閉じる"
         onClick={() => setSidebarOpen(false)} />}

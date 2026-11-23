@@ -38,7 +38,7 @@ export default function Desktops() {
     <p>{connection.unauthorized ? 'Tailscale認証を確認してください。' : 'ワークスペースの配置を同期しています…'}</p>
     <p>{sync.error}</p>
     {connection.unauthorized && connection.authUrl && <a href={connection.authUrl}>接続先を開く</a>}
-    <button onClick={() => workspaceStore.reconnect()}>再接続</button>
+    <button className="btn" onClick={() => workspaceStore.reconnect()}>再接続</button>
   </div>;
   return <SyncedDesktops connection={connection} />;
 }
@@ -56,6 +56,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
   /** スマホの見出し：現在のタブ ▾ n/m と、右端の ＋▾ ⋯。スマホの見出しのときだけ置く */
   const [phoneSlot, setPhoneSlot] = useState<HTMLElement | null>(null);
   const [phoneEndSlot, setPhoneEndSlot] = useState<HTMLElement | null>(null);
+  const [dockSlot, setDockSlot] = useState<HTMLElement | null>(null);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const phone = useMedia(PHONE_QUERY);
   const landscape = useMedia(PHONE_LANDSCAPE_QUERY) && phone;
@@ -281,7 +282,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
       {state.items.map(desktop => <section id={`desktop-panel-${desktop.id}`} key={desktop.id} className="desktop-panel" role="tabpanel"
         aria-labelledby={`desktop-tab-${desktop.id}`} hidden={desktop.id !== state.activeId}>
         {(visited.has(desktop.id) || desktop.id === state.activeId) && <App workspaceId={desktop.id} workspaceName={desktop.name} active={desktop.id === state.activeId} connection={connection} desktopLayouts={desktopLayouts.current} onDesktopDrag={startDesktopDrag} desktopTargets={state.items} onMoveDesktopTab={moveDesktopTab}
-          barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot, phone: phoneHead ? phoneSlot : null, phoneEnd: phoneHead ? phoneEndSlot : null } : undefined}
+          barSlots={desktop.id === state.activeId ? { leading: leadSlot, status: statusSlot, trailing: trailSlot, phone: phoneHead ? phoneSlot : null, phoneEnd: phoneHead ? phoneEndSlot : null, dock: phoneHead && !landscape ? dockSlot : null } : undefined}
           phone={desktop.id === state.activeId && phoneHead ? {
             workspaces: state.items, activeWorkspace: state.activeId, selectWorkspace: select,
             openWorkspaceMenu: (id, x, y) => setTabMenu({ id, x, y }),
@@ -293,6 +294,7 @@ function SyncedDesktops({ connection }: { connection: ReturnType<typeof useTmuxS
           onOpenSettings={() => setSettingsOpen(true)} />}
       </section>)}
     </div>
+    {phoneHead && !landscape && <nav className="phone-dock" aria-label="主要操作" ref={setDockSlot} />}
     {tabMenu && <ContextMenu x={tabMenu.x} y={tabMenu.y} title={state.items.find(item => item.id === tabMenu.id)?.name} onClose={() => setTabMenu(null)} items={buildMenu(DESKTOP_MENU, { desktop: workspaceContext(tabMenu.id) })} />}
     {devicesOpen && <Devices devices={connection.devices} onChanged={connection.reloadDevices} onClose={() => setDevicesOpen(false)} />}
     {settingsOpen && <Settings

@@ -100,7 +100,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  const results=[];
  try{
  for(const scene of scenes.filter(scene=>!process.env.SCREENS || process.env.SCREENS.split(',').includes(scene.name))){
-  const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',locale:'ja-JP',serviceWorkers:'block'});
+  const context=await browser.newContext({viewport:{width:scene.width,height:scene.height},deviceScaleFactor:1,hasTouch:!!scene.touch,reducedMotion:'reduce',colorScheme:process.env.TEST_COLOR_SCHEME||'light',locale:'ja-JP',serviceWorkers:'block'});
   await context.addInitScript(({tree,sidebar,now,keepStorage,direct})=>{Date.now=()=>now;if(direct)localStorage.setItem('tw.mode','"direct"');if(keepStorage && sessionStorage.getItem('desktop-transfer-initialized'))return;sessionStorage.setItem('desktop-transfer-initialized','1');localStorage.setItem('tw.layout',JSON.stringify(tree));localStorage.setItem('tw.sidebar',JSON.stringify(!!sidebar));localStorage.setItem('tw.serverPid','"local:501|spark:502"');localStorage.setItem('tw.focusedLeaf',JSON.stringify('panel-local-1'));},{tree:scene.tree,sidebar:scene.sidebar,now,keepStorage:!!process.env.DESKTOP_TRANSFER_CHECK,direct:!!process.env.TERMINAL_DIRECT_CHECK});
   if(process.env.TERMINAL_RENDERER)await context.addInitScript(renderer=>localStorage.setItem('tw.renderer',JSON.stringify(renderer)),process.env.TERMINAL_RENDERER);
   const page=await context.newPage();if(process.env.CONNECTION_CHECK||process.env.NO_SCREENSHOTS)page.screenshot=async()=>{};const errors=[],apiRequests=[];let terminalConnections=0;let activeTerminals=0;let releaseTerminalReady;const terminalInputs=[];const terminalTransports=[],terminalSelections=[];screenTransports=[];let workspaceState={type:'workspace',initialized:false,revision:0,values:{}};const transferTasks=[],transfers=[];page.on('pageerror',e=>errors.push(e.message));
@@ -189,18 +189,35 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const togglePanel=async()=>{await phone.focusedHead(page).getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'配置',exact:true}).click();await page.getByRole('menuitem',{name:/^(パネルを最大化|並びに戻す)/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs, terminalTransports);
   if(process.env.ACTIVITY_CHECK){
-   if(scene.touch){
+   const compact=await page.locator('.desktop-shell').evaluate(shell=>shell.classList.contains('phone'));
+   const dock=page.getByRole('navigation',{name:'主要操作'});
+   if(await dock.isVisible()){
+    for(const control of await dock.getByRole('button').all()){
+     const rect=await control.boundingBox();
+     assert.ok(rect.width>=44 && rect.height>=44,'dock hit targets');
+    }
+    await dock.getByRole('button',{name:'設定'}).click();
+    await page.getByRole('dialog',{name:'表示と接続'}).getByRole('button',{name:'閉じる'}).click();
+    await dock.getByRole('button',{name:'タブ一覧を開く'}).click();
+    await page.getByRole('dialog',{name:'タブ一覧'}).getByRole('button',{name:'タブ一覧を閉じる'}).click();
+    await dock.getByRole('button',{name:'探す'}).click();
+    await page.getByRole('dialog',{name:'探す・操作'}).getByRole('button',{name:'探す・操作を閉じる'}).click();
+    await dock.getByRole('button',{name:'稼働表'}).click();
+   }else if(compact){
     await phone.focusedHead(page).getByRole('button',{name:'タブの操作',exact:true}).click();
     await page.getByRole('menuitem',{name:'Claude / Codex 稼働表'}).click();
    }else await page.getByRole('button',{name:'稼働表',exact:true}).click();
    const activity=page.getByRole('dialog',{name:'Claude / Codex 稼働表'});
+   const row=(agent,project,device='')=>activity.getByRole('button',{name:new RegExp(compact
+     ? project+' .*'+agent+'.*'+device : agent+' '+project+'.*'+device)});
    await activity.getByText('合計 2.0 h',{exact:true}).waitFor();
-   await activity.getByRole('button',{name:/Claude atlas-web/}).click();
-   await activity.getByRole('status').filter({hasText:'atlas-web'}).waitFor();
+   await row('Claude','atlas-web').click();
+   await activity.getByRole('status').filter({hasText:compact?'01:00:00':'atlas-web'}).waitFor();
    await activity.getByRole('combobox',{name:'エージェント'}).selectOption('codex');
    await activity.getByText('合計 1.0 h',{exact:true}).waitFor();
    await activity.getByRole('button',{name:'週',exact:true}).click();
-   await activity.locator('.activity-day').nth(6).waitFor({state:'attached'});
+   if(compact) await activity.getByRole('list',{name:'日別の作業時間'}).getByRole('button').nth(6).waitFor();
+   else await activity.locator('.activity-day').nth(6).waitFor({state:'attached'});
    await activity.getByRole('button',{name:'前の期間'}).click();
    const deviceFilter=activity.getByRole('combobox',{name:'デバイス'});
    await deviceFilter.selectOption({label:'すべて'});
@@ -209,11 +226,14 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
     await activity.getByText(/DGX Spark.*tmux-web を更新/).waitFor();
    }else{
     await activity.getByText('合計 2.0 h',{exact:true}).waitFor();
-    await activity.getByRole('button',{name:/Codex remote-work.*DGX Spark/}).click();
-    await activity.getByRole('status').filter({hasText:'DGX Spark'}).waitFor();
-    await activity.getByRole('button',{name:/Codex tmux-web.*ThinkPad/}).waitFor();
+    await page.screenshot({path:join(out,scene.name+'-activity.png')});
+    if(compact) await activity.getByRole('list',{name:'日別の作業時間'}).getByRole('button').first().click();
+    await row('Codex','remote-work','DGX Spark').click();
+    if(compact) assert.equal(await row('Codex','remote-work','DGX Spark').getAttribute('aria-expanded'),'true');
+    else await activity.getByRole('status').filter({hasText:'DGX Spark'}).waitFor();
+    await row('Codex','tmux-web','ThinkPad').waitFor();
     await deviceFilter.selectOption('spark');
-    await activity.getByRole('button',{name:/Codex remote-work/}).waitFor();
+    await row('Codex','remote-work').waitFor();
     await activity.getByText('合計 1.0 h',{exact:true}).waitFor();
    }
    assert.ok(apiRequests.some(request=>request.path==='/api/devices/spark/proxy/api/agents/activity'));
@@ -306,11 +326,12 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(process.env.DESKTOP_TRANSFER_CHECK) await require('./desktop-transfer.cjs')(page, errors, () => {workspaceState={type:'workspace',initialized:false,revision:0,values:{}};});
   console.log(scene.name,JSON.stringify(metrics));
   if(phase==='after' && (scene.name==='mobile-panels' || scene.name==='mobile-landscape') && await page.evaluate(([w,h])=>innerWidth===w&&innerHeight===h,[scene.width,scene.height])){
-   // スマホは見出し 1 行と入力行 1 行だけ。縦は合計 88px 以下（44+44）、横は 76px 以下（36+40）
+   // スマホの見出しと入力は各1行。縦画面だけに下部ナビゲーションがある。
    const frame=await page.evaluate(()=>({head:document.querySelector('.desktop-bar').getBoundingClientRect().height,input:document.querySelector('.input-bar .input-row')?.getBoundingClientRect().height??0,strips:[...document.querySelectorAll('.tabstrip')].filter(el=>el.getClientRects().length).length}));
    assert.ok(frame.input>0,'the input row is shown on phones');
    assert.equal(frame.strips,0,'the tile tab strip folds into the one-line phone header');
-   assert.ok(frame.head+frame.input<=(scene.name==='mobile-panels'?88:76),scene.name+' chrome height '+JSON.stringify(frame));
+   assert.equal(await page.getByRole('navigation',{name:'主要操作'}).isVisible(),scene.name==='mobile-panels','bottom navigation is portrait only');
+   assert.ok(frame.head+frame.input<=(scene.name==='mobile-panels'?96:88),scene.name+' chrome height '+JSON.stringify(frame));
    const bar=page.locator('.desktop-bar');
    for(const name of ['一覧','新しい端末','タブの操作'])assert.equal(await bar.getByRole('button',{name,exact:true}).count(),1,'the phone header keeps '+name);
    assert.match(await bar.locator('.phone-tab').textContent(),/atlas-web.*1\/5/,'the header shows the current tab and n/m');
@@ -445,9 +466,11 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
     return {id:tile.querySelector('[data-strip-leaf]').getAttribute('data-strip-leaf'),x:body.x,y:body.y,w:body.width,h:body.height,headerWidth:header.width,canvasWidth:canvas?.width,canvasHeight:canvas?.height};
    }));
    const before=await geometry();
+   const accent=()=>page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+   const systemAccent=await accent();
    await page.locator('.tile').nth(2).getByRole('tab').first().click();await page.waitForTimeout(150);
    assert.deepEqual(await geometry(),before,'changing focused panel preserves content and canvas geometry');
-   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()),'#7aa2f7','device selection preserves Tokyo Night accent');
+   assert.equal(await accent(),systemAccent,'device selection preserves the system appearance');
    if(process.env.CONNECTION_CHECK){
     assert.equal(activeTerminals,4);
     await page.getByRole('button',{name:'新しいワークスペース',exact:true}).click();

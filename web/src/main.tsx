@@ -4,6 +4,7 @@ import Desktops from './Desktops';
 import '@fontsource-variable/noto-sans-jp';
 import './styles.css';
 import './responsive.css';
+import './materials.css';
 import { registerAppWorker, watchInstall } from './pwa';
 
 registerAppWorker();

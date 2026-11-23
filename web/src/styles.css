@@ -1,20 +1,4 @@
-/* VS Code の Dark+ に合わせた色。役割ごとの名前は元のまま使い回している */
 :root {
-  --bg: #1e1e1e; /* エディタ本体 */
-  --bg-1: #252526; /* サイドバー */
-  --bg-2: #333333; /* アクティビティバー・タブの非選択 */
-  --bg-3: #2a2d2e; /* ホバー */
-  --bg-selected: #37373d; /* 選択行 */
-  --border: #2b2b2b;
-  --border-strong: #454545;
-  --fg: #cccccc;
-  --fg-dim: #9d9d9d;
-  --fg-faint: #6e7681;
-  --accent: #0097fb; /* フォーカス枠・リンク */
-  --accent-dim: #04395e; /* 選択の下地 */
-  --green: #89d185;
-  --red: #f14c4c;
-  --yellow: #cca700;
   --radius: 0;
   --sidebar-w: 260px;
   --activity-w: 48px;
@@ -23,8 +7,7 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --mono: 'JetBrains Mono', 'Fira Code', 'Noto Sans Mono CJK JP', ui-monospace, monospace;
-  --sans: 'Noto Sans JP Variable', 'Noto Sans', 'Noto Sans JP', sans-serif;
-  color-scheme: dark;
+  --term-bg: #000;
 }
 
 * {
@@ -116,7 +99,7 @@ input {
 }
 .ctxmenu button:hover:not(:disabled) {
   background: var(--accent);
-  color: #fff;
+  color: var(--fg);
 }
 .ctxmenu button:disabled {
   color: var(--fg-faint);
@@ -127,7 +110,7 @@ input {
   font-size: 12px;
 }
 .ctxmenu button:hover:not(:disabled) .ctx-key {
-  color: #e6e6e6;
+  color: var(--fg);
 }
 .ctxmenu hr {
   border: 0;
@@ -332,7 +315,7 @@ input {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #cdf5ff;
+  color: var(--accent);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
@@ -452,7 +435,7 @@ input {
   background: var(--accent-dim);
 }
 .window-row.active .name {
-  color: #fff;
+  color: var(--fg);
 }
 
 .twisty {
@@ -560,7 +543,7 @@ input {
   line-height: 1.3;
 }
 .window-row.active .sub-rest {
-  color: #9fd4e4;
+  color: var(--accent);
 }
 
 /* グループ末尾の「未使用 N 枚」。押すと畳んでいた行を出す */
@@ -653,7 +636,7 @@ input {
   box-shadow: none;
 }
 .state-dot.server {
-  background: #c586c0;
+  background: var(--purple);
   box-shadow: none;
 }
 .state-dot.run {
@@ -675,7 +658,7 @@ input {
   color: var(--green);
 }
 .state-text.server {
-  color: #c586c0;
+  color: var(--purple);
 }
 .state-text.run {
   color: var(--yellow);
@@ -713,7 +696,7 @@ input {
 }
 .chip.working {
   background: rgba(0, 151, 251, 0.18);
-  color: #7fc6ff;
+  color: var(--accent);
 }
 .chip.waiting {
   background: rgba(137, 209, 133, 0.16);
@@ -721,11 +704,11 @@ input {
 }
 .chip.server {
   background: rgba(197, 134, 192, 0.18);
-  color: #dcb3d8;
+  color: var(--purple);
 }
 .chip.run {
   background: rgba(204, 167, 0, 0.16);
-  color: #e3c14a;
+  color: var(--yellow);
 }
 
 /* 見出しの状態集計。色つきの点＋件数 */
@@ -747,7 +730,7 @@ input {
   background: var(--green);
 }
 .tally.server i {
-  background: #c586c0;
+  background: var(--purple);
 }
 .tally.run i {
   background: var(--yellow);
@@ -790,12 +773,12 @@ input {
 /* いまタブで開いている端末（下段の「タブで開いている」）。もう一度選んでも増えず、そのタブに移るだけ */
 .sub-open {
   flex: none;
-  color: #9fd4e4;
+  color: var(--accent);
 }
 /* パレット（Switcher）の『表示中 / 選択中』バッジ */
 .badge.open {
   background: var(--accent-dim);
-  color: #cdf5ff;
+  color: var(--accent);
 }
 
 .rename-input {
@@ -821,7 +804,7 @@ input {
 }
 .icon-btn:hover:not(:disabled) {
   background: var(--bg-3);
-  color: #fff;
+  color: var(--fg);
 }
 .icon-btn:disabled {
   color: var(--fg-faint);
@@ -1124,7 +1107,7 @@ input {
 /* 前面のタブ。本体と地続きの背景にして、フォーカス中のタイルだけ上に色の線を引く */
 .tab.active {
   background: var(--bg);
-  color: #fff;
+  color: var(--fg);
 }
 .tabstrip.focused .tab.active {
   border-top-color: var(--accent);
@@ -1146,7 +1129,7 @@ input {
   color: var(--fg);
 }
 .tab.active .tab-name {
-  color: #fff;
+  color: var(--fg);
 }
 .tab.st-idle:not(.active) .tab-name {
   color: var(--fg-dim);
@@ -1208,7 +1191,7 @@ input {
 }
 .strip-btn:hover {
   background: var(--bg-3);
-  color: #fff;
+  color: var(--fg);
 }
 .strip-btn.danger:hover {
   background: rgba(241, 76, 76, 0.2);
@@ -1304,7 +1287,7 @@ input {
   color: var(--fg-dim);
 }
 .sw-row.on .sw-title {
-  color: #fff;
+  color: var(--fg);
 }
 .sw-sub {
   display: flex;
@@ -1397,7 +1380,7 @@ input:focus-visible,
 .btn.primary {
   background: #0e639c;
   border-color: #0e639c;
-  color: #fff;
+  color: var(--fg);
 }
 .btn.primary:hover {
   background: #1177bb;
@@ -1951,17 +1934,10 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 }
 
 .activity-modal { width: min(1190px, calc(100vw - 24px)); }
-.activity-toolbar, .activity-summary, .activity-foot { padding: 10px 16px; }
-.activity-toolbar, .activity-nav, .activity-filters, .activity-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.activity-toolbar { justify-content: space-between; }
+.activity-summary { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; }
 .activity-toolbar .btn, .activity-toolbar select { min-height: 36px; }
-.activity-toolbar select { background: var(--bg-2); color: var(--fg); border: 1px solid var(--border); padding: 4px 8px; max-width: 150px; }
-.activity-toolbar button[aria-pressed="true"] { background: var(--bg-3); border-color: var(--accent); }
-.activity-summary { border-top: 1px solid var(--border); gap: 8px 16px; font-size: 13px; }
 .activity-summary [role="status"] { overflow-wrap: anywhere; }
 .activity-key::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; background: var(--agent-color); }
-.activity-modal .claude { --agent-color: #f29f76; }
-.activity-modal .codex { --agent-color: #77cddb; }
 .activity-scroll { overflow: auto; max-height: 65dvh; border-block: 1px solid var(--border-strong); }
 .activity-grid { display: grid; grid-template-columns: repeat(var(--activity-days), minmax(128px, 1fr)); }
 .activity-day + .activity-day { border-left: 1px solid var(--border-strong); }
@@ -1971,7 +1947,6 @@ button:focus-visible, select:focus-visible, .tab:focus-visible { outline: 2px so
 .activity-turn { position: absolute; display: flex; align-items: flex-start; text-align: left; background: color-mix(in srgb, var(--agent-color) 22%, var(--bg-2)); color: var(--fg); border: 1px solid var(--bg-1); border-left: 3px solid var(--agent-color); padding: 0 3px; cursor: pointer; overflow: hidden; }
 .activity-turn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 13px; }
 .activity-turn[aria-pressed="true"], .activity-turn:focus-visible { outline: 2px solid var(--fg); outline-offset: -2px; }
-.activity-message { padding: 20px 16px; margin: 0; border-top: 1px solid var(--border); }
 .activity-foot { margin: 0; font-size: 12px; color: var(--fg-dim); }
 .activity-now { position: absolute; left: -6px; right: 0; border-top: 2px solid var(--accent); z-index: 1; pointer-events: none; }
 .activity-now::before { content: ""; position: absolute; left: -2px; top: -4px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
