@@ -203,7 +203,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await activity.locator('.activity-day').nth(6).waitFor({state:'attached'});
    await activity.getByRole('button',{name:'前の期間'}).click();
    const deviceFilter=activity.getByRole('combobox',{name:'デバイス'});
-   await deviceFilter.selectOption('all');
+   await deviceFilter.selectOption({label:'すべて'});
    if(process.env.ACTIVITY_LEGACY){
     await activity.getByText('合計 1.0 h',{exact:true}).waitFor();
     await activity.getByText(/DGX Spark.*tmux-web を更新/).waitFor();

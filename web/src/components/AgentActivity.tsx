@@ -22,6 +22,7 @@ type ActivityData = {
   hasResults: boolean;
 };
 const agents = ['claude', 'codex'] as const;
+const ALL_DEVICES = '*';
 
 export function AgentActivity({ devices, initialDevice, onClose }: { devices: Device[]; initialDevice: string; onClose(): void }) {
   const [device, setDevice] = useState(initialDevice);
@@ -39,7 +40,7 @@ export function AgentActivity({ devices, initialDevice, onClose }: { devices: De
   const today = offsetDay(now);
   const from = period === 1 ? date : offsetDay(date, -new Date(date).getDay());
   const to = offsetDay(from, period);
-  const allDevices = device === 'all';
+  const allDevices = device === ALL_DEVICES;
   const deviceId = allDevices || devices.some(item => item.id === device) ? device : 'local';
   const targetIds = allDevices ? devices.map(item => item.id).sort().join(',') : deviceId;
   const deviceName = (id: string) => devices.find(item => item.id === id)?.name ?? id;
@@ -90,7 +91,7 @@ export function AgentActivity({ devices, initialDevice, onClose }: { devices: De
           <button className="btn" aria-pressed={period === 1} onClick={() => { setPeriod(1); setSelected(null); }}>日</button>
         </div>
         <select aria-label="デバイス" value={deviceId} onChange={e => { setDevice(e.target.value); setSelected(null); }}>
-          <option value="all">すべて</option>
+          <option value={ALL_DEVICES}>すべて</option>
           {devices.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
         <select aria-label="エージェント" value={filter} onChange={e => { setFilter(e.target.value as typeof filter); setSelected(null); }}>
