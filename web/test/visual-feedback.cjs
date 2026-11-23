@@ -118,7 +118,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    if(path==='/api/devices')body={devices:[{id:'local',name:'ThinkPad',local:true},{id:'spark',name:'DGX Spark',local:false,url:'https://spark.example.ts.net:8443'}]};
    else if(path==='/api/agents/activity'){
     const from=Number(url.searchParams.get('from'));
-    body={turns:remote?[{agent:'codex',project:'remote-work',start:from+3600000,end:from+7200000}]:[
+    body={metric: remote && process.env.ACTIVITY_LEGACY ? undefined : 'progress-v1',turns:remote?[{agent:'codex',project:'remote-work',start:from+3600000,end:from+7200000}]:[
      {agent:'claude',project:'atlas-web',start:from+3600000,end:from+7200000},
      {agent:'codex',project:'tmux-web',start:from+5400000,end:from+9000000},
     ]};
@@ -202,8 +202,20 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await activity.getByRole('button',{name:'週',exact:true}).click();
    await activity.locator('.activity-day').nth(6).waitFor({state:'attached'});
    await activity.getByRole('button',{name:'前の期間'}).click();
-   await activity.getByRole('combobox',{name:'デバイス'}).selectOption('spark');
-   await activity.getByRole('button',{name:/Codex remote-work/}).waitFor();
+   const deviceFilter=activity.getByRole('combobox',{name:'デバイス'});
+   await deviceFilter.selectOption('all');
+   if(process.env.ACTIVITY_LEGACY){
+    await activity.getByText('合計 1.0 h',{exact:true}).waitFor();
+    await activity.getByText(/DGX Spark.*tmux-web を更新/).waitFor();
+   }else{
+    await activity.getByText('合計 2.0 h',{exact:true}).waitFor();
+    await activity.getByRole('button',{name:/Codex remote-work.*DGX Spark/}).click();
+    await activity.getByRole('status').filter({hasText:'DGX Spark'}).waitFor();
+    await activity.getByRole('button',{name:/Codex tmux-web.*ThinkPad/}).waitFor();
+    await deviceFilter.selectOption('spark');
+    await activity.getByRole('button',{name:/Codex remote-work/}).waitFor();
+    await activity.getByText('合計 1.0 h',{exact:true}).waitFor();
+   }
    assert.ok(apiRequests.some(request=>request.path==='/api/devices/spark/proxy/api/agents/activity'));
    await page.keyboard.press('Escape');
    await activity.waitFor({state:'hidden'});

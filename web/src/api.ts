@@ -281,8 +281,10 @@ export async function uploadAttachment(scopedId: string, file: File) {
   return (body as { path: string }).path;
 }
 
-export function fetchAgentActivity(device: string, from: number, to: number, signal: AbortSignal) {
-  return request<{ turns: import('./agent-activity').AgentTurn[] }>(
+export async function fetchAgentActivity(device: string, from: number, to: number, signal: AbortSignal) {
+  const data = await request<{ metric?: string; turns: import('./agent-activity').AgentTurn[] }>(
     devicePath(device, `/api/agents/activity?from=${from}&to=${to}`), { signal },
   );
+  if (data.metric !== 'progress-v1') throw new Error('接続先の tmux-web を更新してください。');
+  return data.turns;
 }

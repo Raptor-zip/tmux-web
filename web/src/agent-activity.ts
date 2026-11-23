@@ -15,8 +15,8 @@ export function offsetDay(date: number, offset = 0) {
   return day.getTime();
 }
 
-export function activityDay(turns: AgentTurn[], from: number, to: number) {
-  const blocks: { turn: AgentTurn; lane: number; top: number; height: number }[] = [];
+export function activityDay<T extends AgentTurn>(turns: T[], from: number, to: number) {
+  const blocks: { turn: T; lane: number; top: number; height: number }[] = [];
   const laneEnds: number[] = [];
   let duration = 0;
   for (const turn of turns) {
