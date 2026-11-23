@@ -280,3 +280,9 @@ export async function uploadAttachment(scopedId: string, file: File) {
   if (!res.ok) throw new Error(res.status === 413 ? '1ファイルは50MBまでです。' : body.error || '添付できませんでした');
   return (body as { path: string }).path;
 }
+
+export function fetchAgentActivity(device: string, from: number, to: number, signal: AbortSignal) {
+  return request<{ turns: import('./agent-activity').AgentTurn[] }>(
+    devicePath(device, `/api/agents/activity?from=${from}&to=${to}`), { signal },
+  );
+}

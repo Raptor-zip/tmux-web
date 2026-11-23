@@ -18,6 +18,7 @@ import { createDesktop, readDesktopClipboard, writeDesktopClipboard } from './de
 import { assertLoopbackHost, createTailscaleAuth } from './auth.js';
 import { createDevices } from './devices.js';
 import { installDevice } from './device.js';
+import { installAgentActivity } from './agent-activity.js';
 import { installFiles } from './files.js';
 import { installWorkspaces } from './workspaces.js';
 import { createApprovals } from './approvals.js';
@@ -62,6 +63,7 @@ app.use('/files', auth.middleware);
 
 const devices = createDevices();
 devices.install(app);
+installAgentActivity(app);
 
 app.get('/api/state', async (_req, res) => {
   try {

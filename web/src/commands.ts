@@ -53,6 +53,7 @@ export interface AppContext {
   onOpenSwitcher(): void;
   /** ショートカット一覧を開く */
   onOpenShortcuts(): void;
+  onOpenActivity?(): void;
   /** 『表示と接続』を開く */
   onOpenSettings?(): void;
   /** アプリとして開いている（追加済み）。『アプリとして追加』を出さない */
@@ -433,6 +434,11 @@ export const COMMANDS: Command[] = [
     id: 'navigate.shortcuts', scope: 'app', group: 'navigate', label: 'ショートカット一覧', hint: 'Alt+/',
     aliases: ['キーボード', 'ヘルプ'],
     run: c => c.onOpenShortcuts(),
+  }),
+  define({
+    id: 'navigate.activity', scope: 'app', group: 'navigate', label: 'Claude / Codex 稼働表',
+    aliases: ['稼働履歴', 'カレンダー', 'activity'],
+    when: c => !!c.onOpenActivity, run: c => c.onOpenActivity?.(),
   }),
   define({
     id: 'navigate.approval', scope: 'app', group: 'navigate', label: '承認待ちを確認', aliases: ['sudo', '承認'],

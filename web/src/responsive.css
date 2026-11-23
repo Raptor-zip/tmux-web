@@ -383,6 +383,7 @@
 .desktop-shell.phone-head .bar-chip.approval,
 .desktop-shell.phone-head .conn-status.ok,
 .desktop-shell.phone-head .bar-palette,
+.desktop-shell.phone-head .bar-activity,
 .desktop-shell.phone-head .tile .tabstrip { display:none; }
 .desktop-shell.phone-head .bar-sidebar { width:44px; min-width:44px; }
 .phone-tab { flex:1 1 auto; min-width:96px; justify-content:flex-start; gap:6px; padding:0 8px; color:var(--fg); font-size:14px; overflow:hidden; }

@@ -116,6 +116,13 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    const url=new URL(route.request().url()),remote=url.pathname.includes('/devices/spark/proxy/'),path=remote?url.pathname.split('/proxy')[1]:url.pathname;apiRequests.push({method:route.request().method(),path:url.pathname,body:route.request().postData()});
    let body={};let status=200;
    if(path==='/api/devices')body={devices:[{id:'local',name:'ThinkPad',local:true},{id:'spark',name:'DGX Spark',local:false,url:'https://spark.example.ts.net:8443'}]};
+   else if(path==='/api/agents/activity'){
+    const from=Number(url.searchParams.get('from'));
+    body={turns:remote?[{agent:'codex',project:'remote-work',start:from+3600000,end:from+7200000}]:[
+     {agent:'claude',project:'atlas-web',start:from+3600000,end:from+7200000},
+     {agent:'codex',project:'tmux-web',start:from+5400000,end:from+9000000},
+    ]};
+   }
    else if(path==='/api/state'){body=state(remote?'spark':'local');if(remote&&scene.offline){body={error:'デバイスに接続できません'};status=502;}}
    else if(path==='/api/approvals')body={pending:null,secure:true};
    else if(path==='/api/projects/recent')body={projects:[]};
@@ -181,6 +188,27 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   }
   const togglePanel=async()=>{await phone.focusedHead(page).getByRole('button',{name:'タブの操作',exact:true}).click();await page.getByRole('menuitem',{name:'配置',exact:true}).click();await page.getByRole('menuitem',{name:/^(パネルを最大化|並びに戻す)/}).click();};
   if(process.env.ATTACHMENT_CHECK && scene.name==='mobile-panels') await require('./attachments.cjs')(page, terminalInputs, terminalTransports);
+  if(process.env.ACTIVITY_CHECK){
+   if(scene.touch){
+    await phone.focusedHead(page).getByRole('button',{name:'タブの操作',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Claude / Codex 稼働表'}).click();
+   }else await page.getByRole('button',{name:'稼働表',exact:true}).click();
+   const activity=page.getByRole('dialog',{name:'Claude / Codex 稼働表'});
+   await activity.getByText('合計 2.0 h',{exact:true}).waitFor();
+   await activity.getByRole('button',{name:/Claude atlas-web/}).click();
+   await activity.getByRole('status').filter({hasText:'atlas-web'}).waitFor();
+   await activity.getByRole('combobox',{name:'エージェント'}).selectOption('codex');
+   await activity.getByText('合計 1.0 h',{exact:true}).waitFor();
+   await activity.getByRole('button',{name:'週',exact:true}).click();
+   await activity.locator('.activity-day').nth(6).waitFor({state:'attached'});
+   await activity.getByRole('button',{name:'前の期間'}).click();
+   await activity.getByRole('combobox',{name:'デバイス'}).selectOption('spark');
+   await activity.getByRole('button',{name:/Codex remote-work/}).waitFor();
+   assert.ok(apiRequests.some(request=>request.path==='/api/devices/spark/proxy/api/agents/activity'));
+   await page.keyboard.press('Escape');
+   await activity.waitFor({state:'hidden'});
+   console.log(scene.name+' agent activity checks passed');
+  }
   const checkFiles=process.env.FILES_CHECK && scene.action==='files' ? await require('./files.cjs')(page,{scene,phase,out}) : null;
   // ⌕ は上バーの右端。スマホ縦では見出しに無く、タブ一覧シートの『すべての端末を探す』から開く
   if(scene.action==='switcher')await phone.openPalette(page);

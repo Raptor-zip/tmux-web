@@ -10,6 +10,7 @@ import { RemoteControl } from './components/RemoteControl';
 import { ScreenViewer } from './components/ScreenViewer';
 import { Icon } from './components/Icon';
 import { createPortal } from 'react-dom';
+import { AgentActivity } from './components/AgentActivity';
 import { FileBrowser } from './components/FileBrowser';
 import { InputBar, ScreenInputBar } from './components/InputBar';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -264,6 +265,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   }, [active, refreshApproval]);
   const [remotePane, setRemotePane] = useState<string | null>(null);
   const [screenOpen, setScreenOpen] = useState<string | null>(null);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [filesPaneId, setFilesPaneId] = useState<string | null>(null);
   const [launchingAgent, setLaunchingAgent] = useState<'claude' | 'codex' | null>(null);
   const launchInFlight = useRef(false);
@@ -1242,7 +1244,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     const onKey = (e: KeyboardEvent) => {
       // 設定でオフにしたときは何も奪わず、xterm に任せる（Alt+B などがそのまま ESC b として届く）
       if (!altKeys) return;
-      if (!active || projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || !e.altKey || e.ctrlKey || e.metaKey) return;
+      if (!active || projectMode || approvalOpen || remotePane || screenOpen || filesPaneId || activityOpen || !e.altKey || e.ctrlKey || e.metaKey) return;
       const key = e.key.toLowerCase();
       const digit = e.code.startsWith('Digit')
         ? Number(e.code.slice(5))
@@ -1312,7 +1314,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [altKeys, active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, tabOrder, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
+  }, [altKeys, active, projectMode, approvalOpen, remotePane, screenOpen, filesPaneId, activityOpen, tabOrder, focusedTab, activate, stepTab, newTerminal, closeTabById, setSidebarOpen]);
 
   /** あるペインに効く操作。入力先のペインのほか、メニューを開いたタブのペインにも使う */
   const paneActions = (pane: Pane | null) => ({
@@ -1366,6 +1368,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       canOpenTerminal: !!focusedDevice && sessions.some(s => deviceOf(s.id) === focusedDevice),
       onOpenSwitcher: () => setPalette('terminal'),
       onOpenShortcuts: () => setShortcutsOpen(true),
+      onOpenActivity: () => setActivityOpen(true),
       onOpenSettings: () => onOpenSettings?.(),
       appInstalled: install.installed,
       onInstallApp: () => void requestInstall(),
@@ -1645,6 +1648,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const phoneLead = (): MenuEntry[] => phone ? [
     { label: '探す・操作', hint: altKeys ? 'Alt+P' : undefined, run: () => { setPaletteWaiting(false); setPalette('terminal'); } },
     { label: `接続状態：${phone.connection}`, run: phone.openConnection },
+    { label: 'Claude / Codex 稼働表', run: () => setActivityOpen(true) },
     SEP,
   ] : [];
   const openHeadMenu = (x: number, y: number) => {
@@ -1700,11 +1704,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
         <button className="bar-btn phone-more" title="タブの操作" aria-label="タブの操作" aria-haspopup="menu"
           onClick={e => { const r = e.currentTarget.getBoundingClientRect(); openHeadMenu(r.right, r.bottom); }}><Icon name="more" /></button>
       </>, barSlots.phoneEnd)}
-      {active && barSlots?.trailing && createPortal(
+      {active && barSlots?.trailing && createPortal(<>
+        <button className="bar-btn bar-activity" aria-label="稼働表" title="Claude / Codex 稼働表"
+          onClick={() => setActivityOpen(true)}><Icon name="history" /><span className="bar-btn-text">稼働表</span></button>
         <button className="bar-btn bar-palette" aria-label="探す・操作" title="探す・操作 (Alt+P)"
           onClick={() => { setPaletteWaiting(false); setPalette('terminal'); }}>
           <Icon name="search" /><span className="bar-btn-text">探す・操作</span><kbd className="bar-kbd">Alt+P</kbd>
-        </button>, barSlots.trailing)}
+        </button></>, barSlots.trailing)}
 
       {sidebarOpen && <button className="sidebar-backdrop" aria-label="一覧を閉じる"
         onClick={() => setSidebarOpen(false)} />}
@@ -1856,6 +1862,8 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       </main>
 
       {devicesOpen && <Devices devices={devices} onChanged={reloadDevices} onClose={() => setDevicesOpen(false)} />}
+
+      {activityOpen && <AgentActivity devices={devices} initialDevice={activeDevice.id} onClose={() => setActivityOpen(false)} />}
 
       {filesPaneId && <FileBrowser key={filesPaneId} deviceName={devices.find(d=>d.id===deviceOf(filesPaneId))?.name || activeDevice.name} paneId={filesPaneId} onClose={() => setFilesPaneId(null)} />}
 
