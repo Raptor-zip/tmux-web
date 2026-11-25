@@ -71,6 +71,7 @@ const scenes=[
  {name:'laptop-four',width:1280,height:800,tree:four()},
  {name:'split-resize',width:1280,height:800,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:{type:'split',id:'split2',dir:'column',ratio:.5,a:leaf(2),b:leaf(3)}}},
  {name:'split-thirds',width:1280,height:800,tree:{type:'split',id:'split1',dir:'row',ratio:.45,a:leaf(1),b:{type:'split',id:'split2',dir:'row',ratio:.48,a:leaf(2),b:leaf(3)}}},
+ {name:'split-quarters',width:1280,height:1080,tree:{type:'split',id:'split1',dir:'column',ratio:.31,a:leaf(1),b:{type:'split',id:'split2',dir:'column',ratio:.32,a:leaf(2),b:{type:'split',id:'split3',dir:'column',ratio:.48,a:leaf(3),b:leaf(4)}}}},
  {name:'tablet-two',width:900,height:1024,touch:true,sidebar:true,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:leaf(1,'spark')}},
  {name:'mobile-panels',width:390,height:844,touch:true,tree:four()},
  {name:'mobile-landscape',width:740,height:390,touch:true,tree:four()},
@@ -532,20 +533,25 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    await page.mouse.up();
    await page.waitForFunction(height=>Math.abs(document.querySelectorAll('.tile')[1].getBoundingClientRect().height-height)<1,upper.height);
   }
-  if(phase==='after' && scene.name==='split-thirds'){
+  if(phase==='after' && ['split-thirds','split-quarters'].includes(scene.name)){
+   const vertical=scene.name==='split-quarters';
+   const selector=vertical?'.divider-column':'.divider-row';
+   const fractions=vertical?[1/4,1/2,3/4]:[1/3,2/3];
    const workspace=await page.locator('.splitview').boundingBox();
-   for(const [index, fraction] of [1/3,2/3].entries()){
-    const divider=await page.locator('.divider-row').nth(index).boundingBox();
-    const x=workspace.x+workspace.width*fraction;
+   for(const [index, fraction] of fractions.entries()){
+    const divider=await page.locator(selector).nth(index).boundingBox();
+    const x=divider.x+divider.width/2;
     const y=divider.y+divider.height/2;
-    await page.mouse.move(divider.x+divider.width/2,y);
+    const target=vertical?workspace.y+workspace.height*fraction:workspace.x+workspace.width*fraction;
+    await page.mouse.move(x,y);
     await page.mouse.down();
-    await page.mouse.move(x+8,y,{steps:5});
+    await page.mouse.move(vertical?x:target+8,vertical?target+8:y,{steps:5});
     await page.mouse.up();
-    await page.waitForFunction(({index,x})=>{
-     const box=document.querySelectorAll('.divider-row')[index].getBoundingClientRect();
-     return Math.abs(box.x+box.width/2-x)<1;
-    },{index,x});
+    await page.waitForFunction(({index,selector,target,vertical})=>{
+     const box=document.querySelectorAll(selector)[index].getBoundingClientRect();
+     const center=vertical?box.y+box.height/2:box.x+box.width/2;
+     return Math.abs(center-target)<1;
+    },{index,selector,target,vertical});
    }
   }
   if(phase==='after' && scene.name==='laptop-four'){

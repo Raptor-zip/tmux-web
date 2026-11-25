@@ -472,13 +472,13 @@ export function dividers(
   const sameAxisCount = (child: LayoutNode): number =>
     child.type === 'split' && child.dir === dir ? sameAxisCount(child.a) + sameAxisCount(child.b) : 1;
   const run = group?.dir === dir ? group : { dir, rect, count: sameAxisCount(node), start: 0 };
-  const boundary = run.count === 3 ? run.start + sameAxisCount(node.a) : 0;
+  const boundary = run.start + sameAxisCount(node.a);
   const snapRatios = [0.5];
-  if (boundary) {
-    // 同じ方向に並んだ3区画の等分位置を、ドラッグする分割の親に対する比率に変換する。
+  if (run.count > 2) {
+    // 同じ方向に並んだ区画の等分位置を、ドラッグする分割の親に対する比率に変換する。
     const position = dir === 'row'
-      ? (run.rect.left + run.rect.width * boundary / 3 - rect.left) / rect.width
-      : (run.rect.top + run.rect.height * boundary / 3 - rect.top) / rect.height;
+      ? (run.rect.left + run.rect.width * boundary / run.count - rect.left) / rect.width
+      : (run.rect.top + run.rect.height * boundary / run.count - rect.top) / rect.height;
     if (position >= 0.1 && position <= 0.9) snapRatios.push(position);
   }
   const [ra, rb] = splitRect(rect, node.dir, node.ratio);
