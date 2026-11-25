@@ -389,7 +389,7 @@ export function SplitView({
       {!single && bars.map((d) => (
         <div
           key={d.id}
-          className={`divider ${d.dir}`}
+          className={`divider divider-${d.dir}`}
           style={
             d.dir === 'row'
               ? { left: `${d.rect.left}%`, top: `${d.rect.top}%`, height: `${d.rect.height}%` }

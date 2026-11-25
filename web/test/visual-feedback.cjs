@@ -69,6 +69,7 @@ const scenes=[
  {name:"project-desktop",width:1280,height:800,sidebar:true,tree:leaf(1),action:"project"},
  {name:'desktop-four',width:1920,height:1080,tree:four()},
  {name:'laptop-four',width:1280,height:800,tree:four()},
+ {name:'split-resize',width:1280,height:800,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:{type:'split',id:'split2',dir:'column',ratio:.5,a:leaf(2),b:leaf(3)}}},
  {name:'tablet-two',width:900,height:1024,touch:true,sidebar:true,tree:{type:'split',id:'split1',dir:'row',ratio:.5,a:leaf(1),b:leaf(1,'spark')}},
  {name:'mobile-panels',width:390,height:844,touch:true,tree:four()},
  {name:'mobile-landscape',width:740,height:390,touch:true,tree:four()},
@@ -499,8 +500,32 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    }
 
   }
+  if(phase==='after' && scene.name==='split-resize'){
+   const first=page.locator('.tile').nth(0);
+   const second=page.locator('.tile').nth(1);
+   const left=await first.boundingBox();
+   const x=left.x+left.width;
+   const y=left.y+left.height/3;
+   const hitClass=(x,y)=>page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.className,{x,y});
+   assert.match(await hitClass(x+3,y),/\bdivider-row\b/);
+   await page.mouse.move(x+3,y);
+   await page.mouse.down();
+   await page.mouse.move(x+90,y,{steps:5});
+   await page.mouse.up();
+   await page.waitForFunction(width=>document.querySelector('.tile').getBoundingClientRect().width>width+80,left.width);
+
+   const upper=await second.boundingBox();
+   const nestedX=upper.x+upper.width/2;
+   const nestedY=upper.y+upper.height;
+   assert.match(await hitClass(nestedX,nestedY+3),/\bdivider-column\b/);
+   await page.mouse.move(nestedX,nestedY+3);
+   await page.mouse.down();
+   await page.mouse.move(nestedX,nestedY-70,{steps:5});
+   await page.mouse.up();
+   await page.waitForFunction(height=>document.querySelectorAll('.tile')[1].getBoundingClientRect().height<height-60,upper.height);
+  }
   if(phase==='after' && scene.name==='laptop-four'){
-   const divider=page.locator('.divider.row').first();const box=await divider.boundingBox();
+   const divider=page.locator('.divider-row').first();const box=await divider.boundingBox();
    await page.mouse.move(box.x+box.width/2,box.y+100);await page.mouse.down();await page.mouse.move(180,box.y+100);await page.mouse.up();await page.waitForTimeout(100);
    assert.equal(await page.locator('.tile:visible').count(),1,'narrow panel activates focus');
    await togglePanel();assert.equal(await page.locator('.tile:visible').count(),4,'can recover split without resizing viewport');

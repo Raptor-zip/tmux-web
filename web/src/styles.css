@@ -194,12 +194,12 @@ input {
   z-index: 5;
   background: transparent;
 }
-.divider.row {
+.divider-row {
   width: 9px;
   margin-left: -4.5px;
   cursor: col-resize;
 }
-.divider.column {
+.divider-column {
   height: 9px;
   margin-top: -4.5px;
   cursor: row-resize;
