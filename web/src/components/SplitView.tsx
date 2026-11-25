@@ -284,7 +284,7 @@ export function SplitView({
   );
 
   const startDividerDrag = useCallback(
-    (e: React.PointerEvent, split: { id: string; dir: 'row' | 'column'; parent: Rect }) => {
+    (e: React.PointerEvent, split: ReturnType<typeof dividers>[number]) => {
       e.preventDefault();
       const host = hostRef.current;
       if (!host) return;
@@ -300,7 +300,20 @@ export function SplitView({
             : ((ev.clientY - box.top) / box.height) * 100;
         const origin = split.dir === 'row' ? split.parent.left : split.parent.top;
         const size = split.dir === 'row' ? split.parent.width : split.parent.height;
-        if (size > 0) onRatio(split.id, (ratio - origin) / size);
+        if (size <= 0) return;
+        const rawRatio = (ratio - origin) / size;
+        const length = (split.dir === 'row' ? box.width : box.height) * size / 100;
+        // 画面サイズに関係なく、境界から12 CSS px以内で最も近い候補に吸着する。
+        let nextRatio = rawRatio;
+        let nearest = 12;
+        for (const snap of split.snapRatios) {
+          const distance = Math.abs(snap - rawRatio) * length;
+          if (distance <= nearest) {
+            nextRatio = snap;
+            nearest = distance;
+          }
+        }
+        onRatio(split.id, nextRatio);
       };
       const up = (ev: PointerEvent) => {
         if ((e.target as HTMLElement).hasPointerCapture(ev.pointerId)) (e.target as HTMLElement).releasePointerCapture(ev.pointerId);

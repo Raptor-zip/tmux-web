@@ -465,17 +465,31 @@ export function leafRects(
 export function dividers(
   node: LayoutNode,
   rect: Rect = FULL,
-): Array<{ id: string; dir: 'row' | 'column'; rect: Rect; parent: Rect }> {
+  group?: { dir: 'row' | 'column'; rect: Rect; count: number; start: number },
+): Array<{ id: string; dir: 'row' | 'column'; rect: Rect; parent: Rect; snapRatios: number[] }> {
   if (node.type === 'leaf') return [];
+  const { dir } = node;
+  const sameAxisCount = (child: LayoutNode): number =>
+    child.type === 'split' && child.dir === dir ? sameAxisCount(child.a) + sameAxisCount(child.b) : 1;
+  const run = group?.dir === dir ? group : { dir, rect, count: sameAxisCount(node), start: 0 };
+  const boundary = run.count === 3 ? run.start + sameAxisCount(node.a) : 0;
+  const snapRatios = [0.5];
+  if (boundary) {
+    // 同じ方向に並んだ3区画の等分位置を、ドラッグする分割の親に対する比率に変換する。
+    const position = dir === 'row'
+      ? (run.rect.left + run.rect.width * boundary / 3 - rect.left) / rect.width
+      : (run.rect.top + run.rect.height * boundary / 3 - rect.top) / rect.height;
+    if (position >= 0.1 && position <= 0.9) snapRatios.push(position);
+  }
   const [ra, rb] = splitRect(rect, node.dir, node.ratio);
   const line: Rect =
     node.dir === 'row'
       ? { left: ra.left + ra.width, top: rect.top, width: 0, height: rect.height }
       : { left: rect.left, top: ra.top + ra.height, width: rect.width, height: 0 };
   return [
-    { id: node.id, dir: node.dir, rect: line, parent: rect },
-    ...dividers(node.a, ra),
-    ...dividers(node.b, rb),
+    { id: node.id, dir, rect: line, parent: rect, snapRatios },
+    ...dividers(node.a, ra, run),
+    ...dividers(node.b, rb, { ...run, start: boundary }),
   ];
 }
 
