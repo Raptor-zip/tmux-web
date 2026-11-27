@@ -648,7 +648,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     {guideOpen && <Modal title="操作ガイドと接続情報" onClose={() => { setGuideOpen(false); afterModal(); }} className="screen-guide">
       <div className="screen-guide-body">
         <p>{viewOnly ? '見るだけ：マウス・キー操作は送りません。' : '画面をクリックするとマウス・キーボードで操作できます。'}</p>
-        <p>スマホ：タップでクリック、2本指タップで右クリック、2本指ドラッグでスクロール。日本語は「文字入力」から送れます。</p>
+        <p>スマホ：タップでクリック、1本指でドラッグ、2本指タップで右クリック、2本指ドラッグでスクロール。日本語は「文字入力」から送れます。</p>
         {!modal && <p>Alt+数字などアプリのショートカットはアプリ側で使います。タブを隠して{SCREEN_IDLE_MS / 1000}秒経つと切断し、表示すると繋ぎ直します。</p>}
         <p>{settings.lossless ? '可逆圧縮' : `JPEG 品質${settings.quality}`} · 配信{Math.round(Number(settings.scale) * 100)}%（元画面 {sourceSize || '確認中'}） · 更新{settings.interval}ms · 音声なし</p>
         <p>通信往復：{roundTrip === null ? '未計測／応答なし' : `${roundTrip} ms`}。画面の取り込み・圧縮・描画時間は含みません。</p>

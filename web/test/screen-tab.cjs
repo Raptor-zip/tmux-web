@@ -48,6 +48,54 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
   await waitFor(() => (workspace().values['tw.layout'] || '').includes('"kind":"screen"'), 'the screen tab is saved to the synced layout');
   assert.equal(await page.locator('.input-bar:visible').count(), 0, 'terminal input bar is hidden for a screen tab');
 
+  const canvas = await shown.locator('.desktop-viewport canvas').boundingBox();
+  const start = { x: Math.round(canvas.x + canvas.width / 3), y: Math.round(canvas.y + canvas.height / 3) };
+  const end = { x: start.x + 24, y: start.y + 12 };
+  const pointers = open()[0].pointers;
+  const checkDrag = async label => {
+    await waitFor(() => pointers.some((p, i) => i > 0 && p.mask === 0 && pointers[i - 1].mask === 1), label + ' releases the left button');
+    const held = pointers.filter(p => p.mask === 1);
+    assert.ok(held.length >= 2 && held.at(-1).x > held[0].x && held.at(-1).y > held[0].y, label + ' moves while the left button is held');
+  };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 4 });
+  await page.mouse.up();
+  await checkDrag('Mouse drag');
+  const pressedAt = pointers.find(p => p.mask === 1);
+
+  if (page.context().browser().browserType().name() === 'chromium') {
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type, ...touchPoints) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints });
+    pointers.length = 0;
+    await touch('touchStart', start);
+    await touch('touchMove', end);
+    await touch('touchEnd');
+    await checkDrag('Short touch drag');
+    assert.deepEqual(pointers.find(p => p.mask === 1), pressedAt, 'Touch drag presses at the original contact point');
+
+    pointers.length = 0;
+    await touch('touchStart', start);
+    await touch('touchMove', end);
+    await touch('touchCancel');
+    await checkDrag('Cancelled touch drag');
+
+    const second = { x: start.x + 35, y: start.y };
+    pointers.length = 0;
+    await touch('touchStart', start, second);
+    await touch('touchEnd');
+    await waitFor(() => pointers.some((p, i) => p.mask === 0 && pointers[i - 1]?.mask === 4), 'Two-finger tap sends a right click');
+    assert.ok(pointers.every(p => p.mask !== 1));
+
+    pointers.length = 0;
+    await touch('touchStart', start, second);
+    await touch('touchMove', { ...start, y: start.y + 100 }, { ...second, y: second.y + 100 });
+    await waitFor(() => pointers.some(p => p.mask === 8), 'Two-finger drag scrolls');
+    await touch('touchEnd');
+    assert.ok(pointers.every(p => p.mask !== 1));
+    await cdp.detach();
+  }
+
   // 見出しは 1 段：状態・⌨・Esc はタイル見出しに入り、画面の上に 2 段目のツールバーは無い
   assert.equal(await shown.locator('.desktop-compact-head').count(), 0, 'no second toolbar row above the screen');
   assert.equal(await head.getByRole('button', { name: '文字入力', exact: true }).count(), 1);

@@ -12,7 +12,7 @@ const phase=process.argv[2]||'after';
 // noVNC は WebSocket の実体を検査するので、Playwright の routeWebSocket ではなく本物のソケットで受ける。
 let screenTransports=[];
 function fakeRfb(ws){
- const transport={socket:ws,closed:false,keys:[]};screenTransports.push(transport);
+ const transport={socket:ws,closed:false,keys:[],pointers:[]};screenTransports.push(transport);
  ws.on('close',()=>{transport.closed=true;});
  let stage='version',buffer=Buffer.alloc(0);const W=320,H=200;
  ws.send(Buffer.from('RFB 003.008\n'));
@@ -29,7 +29,7 @@ function fakeRfb(ws){
     const head=Buffer.alloc(16);head.writeUInt16BE(1,2);head.writeUInt16BE(W,8);head.writeUInt16BE(H,10);head.writeInt32BE(0,12);
     const pixels=Buffer.alloc(W*H*4);for(let i=0;i<W*H;i++){pixels[i*4]=0x40;pixels[i*4+1]=0x90;pixels[i*4+2]=0x30;}ws.send(Buffer.concat([head,pixels]));continue;}
    if(type===4){if(buffer.length<8)return;transport.keys.push({down:buffer[1],key:buffer.readUInt32BE(4)});buffer=buffer.subarray(8);continue;}
-   if(type===5){if(buffer.length<6)return;buffer=buffer.subarray(6);continue;}
+   if(type===5){if(buffer.length<6)return;transport.pointers.push({mask:buffer[1],x:buffer.readUInt16BE(2),y:buffer.readUInt16BE(4)});buffer=buffer.subarray(6);continue;}
    if(type===6){if(buffer.length<8)return;const n=buffer.readUInt32BE(4);if(buffer.length<8+n)return;buffer=buffer.subarray(8+n);continue;}
    buffer=Buffer.alloc(0);return;
   }

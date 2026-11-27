@@ -13,6 +13,14 @@ declare module '@novnc/novnc' {
     protected _sock: unknown;
     protected _fbDepth: number;
     protected _compressionLevel: number;
+    /** noVNC 1.7.0 のタッチジェスチャー認識器 */
+    protected _gestures: {
+      _state: number;
+      _tracked: { id: number; firstX: number; firstY: number }[];
+      _touchMove(id: number, x: number, y: number): void;
+      _stopLongpressTimeout(): void;
+      _pushEvent(type: 'gesturestart'): void;
+    };
     /** noVNC 内部のキーボード。押したままのキーを離す API が公開されていないため参照する */
     protected _keyboard?: { _allKeysUp?(): void };
     static messages: { clientEncodings(sock: unknown, encodings: number[]): void };
