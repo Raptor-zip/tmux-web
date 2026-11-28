@@ -116,6 +116,7 @@ const workspaceSync = createWorkspaceSync();
 app.get('/api/desktop/ping', (_req, res) => res.set('Cache-Control', 'no-store').json({ ok: true }));
 app.get('/api/desktop/status', async (_req, res) => res.json(await desktop.status()));
 app.get('/api/desktop/clipboard', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   try { res.json({ text: await readDesktopClipboard() }); }
   catch (err) { res.status(503).json({ error: err.message }); }
 });

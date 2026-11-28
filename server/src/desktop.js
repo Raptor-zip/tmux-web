@@ -17,9 +17,8 @@ export function desktopOptions(url) {
 }
 
 export async function probeDesktop() {
-  const display = process.env.TMUX_WEB_DISPLAY || process.env.DISPLAY;
-  if (!display) throw new Error('X11 にログインし、DISPLAY / XAUTHORITY をサービスに引き継いでください。Wayland は未対応です。');
-  const env = { ...process.env, DISPLAY: display };
+  const env = desktopEnvironment();
+  const display = env.DISPLAY;
   try { await exec('x11vnc', ['-version'], { env, timeout: 3000 }); }
   catch { throw new Error('リモート操作には x11vnc が必要です。sudo apt install x11vnc x11-xserver-utils で導入してください。'); }
   let stdout;
@@ -28,6 +27,12 @@ export async function probeDesktop() {
   const match = stdout.match(/current\s+(\d+)\s+x\s+(\d+)/);
   if (!match) throw new Error('デスクトップの解像度を取得できません。');
   return { display, width: Number(match[1]), height: Number(match[2]), env };
+}
+
+function desktopEnvironment() {
+  const display = process.env.TMUX_WEB_DISPLAY || process.env.DISPLAY;
+  if (!display) throw new Error('X11 にログインし、DISPLAY / XAUTHORITY をサービスに引き継いでください。Wayland は未対応です。');
+  return { ...process.env, DISPLAY: display };
 }
 
 /** 認証済み WebSocket と、0700 のディレクトリ内の VNC ソケットを中継する。
@@ -77,6 +82,8 @@ export function createDesktop({ probe = probeDesktop, spawnVnc = spawn } = {}) {
         '-norc', '-display', config.display, '-unixsock', socketPath,
         '-rfbport', '0', '-timeout', '15', '-no6', '-nopw', '-once', '-shared', '-quiet', '-safer',
         '-xkb', '-repeat', '-xrandr', 'resize',
+        // Clipboard text goes through xclip so it keeps its UTF-8 encoding.
+        '-nosel',
         // Avoid the automatic overload sleep (up to 1.5 s), and prioritize
         // input without adding a second batching delay after each screen poll.
         '-nowf', '-noscr', '-nowait_bog', '-input_eagerly',
@@ -139,15 +146,18 @@ export function createDesktop({ probe = probeDesktop, spawnVnc = spawn } = {}) {
 // x11vnc versions differ in Unicode clipboard support. Use the X11 clipboard
 // directly so Japanese text does not pass through legacy Latin-1 ClientCutText.
 export async function readDesktopClipboard() {
-  const { env } = await probeDesktop();
+  const env = { ...desktopEnvironment(), LC_ALL: 'C' };
   try {
-    const { stdout } = await exec('xclip', ['-selection', 'clipboard', '-out'], { env, timeout: 3000, maxBuffer: 1024 * 1024 });
+    const { stdout } = await exec('xclip', ['-selection', 'clipboard', '-out', '-target', 'UTF8_STRING'], { env, timeout: 3000, maxBuffer: 1024 * 1024 });
     return stdout;
-  } catch { throw new Error('クリップボードを読めません。コピー元と xclip のインストールを確認してください。'); }
+  } catch (err) {
+    if (err.code === 1 && /^Error: target (?:UTF8_STRING|STRING) not available$/.test(err.stderr?.trim())) return '';
+    throw new Error('クリップボードを読めません。コピー元と xclip のインストールを確認してください。');
+  }
 }
 
 export async function writeDesktopClipboard(text) {
-  const { env } = await probeDesktop();
+  const env = desktopEnvironment();
   await new Promise((resolve, reject) => {
     const proc = spawn('xclip', ['-selection', 'clipboard', '-in'], { env, stdio: ['pipe', 'ignore', 'ignore'] });
     const timer = setTimeout(() => { proc.kill(); reject(new Error('クリップボードへの書き込みがタイムアウトしました')); }, 3000);

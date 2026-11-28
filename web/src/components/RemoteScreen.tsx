@@ -1,7 +1,8 @@
 import type { Device } from '../devices';
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { fetchDesktopStatus, measureDesktopRoundTrip, readDesktopClipboard, writeDesktopClipboard, wsUrl } from '../api';
+import { fetchDesktopStatus, measureDesktopRoundTrip, readDesktopClipboard, wsUrl } from '../api';
+import { startDesktopClipboardSync } from '../desktop-clipboard-sync';
 import type { ScreenContext } from '../commands';
 import { screenMenuItems } from '../menus';
 import { DESKTOP_SETTINGS_KEY, desktopPresets, loadDesktopSettings, type DesktopSettings } from '../desktop-settings';
@@ -65,6 +66,13 @@ const ESCAPE = 0xff1b;
 const RETURN = 0xff0d;
 const CONTROL = 0xffe3;
 const ALT = 0xffe9;
+
+function sendPaste(rfb: LosslessRFB) {
+  rfb.releaseAllKeys();
+  rfb.sendKey(CONTROL, 'ControlLeft', true);
+  rfb.sendKey(0x76, 'KeyV');
+  rfb.sendKey(CONTROL, 'ControlLeft', false);
+}
 
 /** 文字を 1 文字ずつのキー（keysym）にする。X11 の決まりで Latin-1 以外は 0x01000000 + コードポイント */
 export function keysymFor(ch: string): number {
@@ -166,6 +174,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   const notice = noticeState.text;
   const setNotice = (value: string) => setNoticeState(prev => ({ text: value, n: prev.n + 1 }));
   const [copying, setCopying] = useState(false);
+  const [clipboardPrompt, setClipboardPrompt] = useState(false);
   const copyLock = useRef(false);
   const clipboardText = useRef<HTMLTextAreaElement>(null);
   const textToggle = useRef<HTMLButtonElement>(null);
@@ -178,6 +187,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   const panel = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const client = useRef<LosslessRFB | null>(null);
+  const clipboardSync = useRef<ReturnType<typeof startDesktopClipboardSync> | null>(null);
   const fitRef = useRef(fit); fitRef.current = fit;
   const viewRef = useRef(viewOnly); viewRef.current = viewOnly;
   const closeRef = useRef(onClose); closeRef.current = onClose;
@@ -314,6 +324,44 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     }
     const controller = new AbortController();
     let rfb: LosslessRFB | null = null;
+    const area = viewport.current!;
+    let pasteShortcut: ReturnType<typeof setTimeout> | undefined;
+    const isClipboardActive = () => !controller.signal.aborted && selectedIdRef.current === selectedDeviceId &&
+      ownsScreen(selectedDeviceId, lease) && wantsRef.current && document.visibilityState === 'visible' &&
+      document.hasFocus() && !!panel.current?.contains(document.activeElement);
+    const canSend = () => isClipboardActive() && !viewRef.current && area.contains(document.activeElement);
+    const stopClipboard = () => {
+      clearTimeout(pasteShortcut);
+      area.removeEventListener('keydown', onPasteShortcut, true);
+      area.removeEventListener('paste', onBrowserPaste);
+      area.removeEventListener('focusout', onClipboardFocusOut);
+      clipboardSync.current?.stop();
+      clipboardSync.current = null;
+      setClipboardPrompt(false);
+    };
+    const onPasteShortcut = (event: KeyboardEvent) => {
+      if (!canSend() || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'v') return;
+      // noVNC would consume the shortcut before the browser dispatches a paste event.
+      event.stopPropagation();
+      clearTimeout(pasteShortcut);
+      pasteShortcut = setTimeout(() => {
+        if (canSend() && rfb) sendPaste(rfb);
+      }, 150);
+    };
+    const onBrowserPaste = async (event: ClipboardEvent) => {
+      if (!canSend() || !rfb || !clipboardSync.current) return;
+      clearTimeout(pasteShortcut);
+      event.preventDefault();
+      const value = event.clipboardData?.getData('text/plain');
+      try {
+        if (value && !await clipboardSync.current.send(value, true)) return;
+        if (canSend()) sendPaste(rfb);
+      } catch (err) { if (canSend()) setNotice((err as Error).message); }
+    };
+    const onClipboardFocusOut = (event: FocusEvent) => {
+      // A different screen in this page may update the browser clipboard.
+      if (event.relatedTarget instanceof Node && !area.contains(event.relatedTarget)) clipboardSync.current?.resetLocal();
+    };
     viewport.current?.replaceChildren();
     setConnected(false); setError(''); setSourceSize(''); setMessage('画面を確認中…');
     void fetchDesktopStatus(controller.signal, selectedDeviceId).then(async status => {
@@ -341,25 +389,27 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         // ほかの入力欄で打っている最中なら奪わない
         const active = document.activeElement;
         if (!modal && wantsRef.current && (!active || active === document.body || panel.current?.contains(active))) rfb?.focus();
+        clipboardSync.current = startDesktopClipboardSync(selectedDeviceId, isClipboardActive, canSend, value => {
+          if (!textRef.current) { setText(value); setReceived(null); }
+          else if (value !== textRef.current) setReceived(value);
+          setNotice('接続先のクリップボードを受信しました');
+        }, setClipboardPrompt);
+        area.addEventListener('keydown', onPasteShortcut, true);
+        area.addEventListener('paste', onBrowserPaste);
+        area.addEventListener('focusout', onClipboardFocusOut);
       });
       rfb.addEventListener('disconnect', () => {
         if (controller.signal.aborted) return;
+        stopClipboard();
         setConnected(false); setError('接続が切れました。「再接続」で接続し直してください。');
       });
       rfb.addEventListener('securityfailure', () => {
         if (!controller.signal.aborted) setError('画面への認証に失敗しました。');
       });
-      rfb.addEventListener('clipboard', event => {
-        if (controller.signal.aborted) return;
-        const value = (event as CustomEvent<{ text: string }>).detail.text;
-        // 書きかけの下書きは上書きしない。空なら入れておく
-        if (!textRef.current) { setText(value); setReceived(null); }
-        else if (value !== textRef.current) setReceived(value);
-        setNotice('接続先のクリップボードを受信しました');
-      });
     }).catch(err => { if (!controller.signal.aborted) setError(err.message); });
     return () => {
       controller.abort();
+      stopClipboard();
       // 押したままのキーをリモートに残さない
       rfb?.releaseAllKeys();
       rfb?.disconnect();
@@ -426,15 +476,21 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   /** 接続先のクリップボードに入れて Ctrl+V を送る。submit なら続けて Enter */
   const paste = async (submit = false) => {
     const rfb = client.current;
-    try { await writeDesktopClipboard(text, selectedDeviceId); }
-    catch (err) { setNotice((err as Error).message); return; }
-    if (selectedIdRef.current !== selectedDeviceId || client.current !== rfb || !rfb) return;
-    rfb.sendKey(CONTROL, 'ControlLeft', true);
-    rfb.sendKey(0x76, 'KeyV');
-    rfb.sendKey(CONTROL, 'ControlLeft', false);
+    const sync = clipboardSync.current;
+    if (!rfb || !sync) return;
+    const current = () => selectedIdRef.current === selectedDeviceId && client.current === rfb && !viewRef.current;
+    try { if (!await sync.send(text, false, current)) return; }
+    catch (err) { if (current()) setNotice((err as Error).message); return; }
+    if (!current()) return;
+    sendPaste(rfb);
     if (submit) rfb.sendKey(RETURN, 'Enter');
     setNotice(submit ? '接続先へ貼り付けて Enter を送りました' : '接続先へ貼り付けました');
     rfb.focus();
+  };
+  const allowClipboardSync = async () => {
+    const sync = clipboardSync.current;
+    try { await sync?.requestPermission(); }
+    catch { if (sync === clipboardSync.current) setNotice('ブラウザでクリップボードの読み取りが許可されていません'); }
   };
   /** 貼り付けが効かないアプリ向けに、1 文字ずつキーとして打つ */
   const typeText = () => {
@@ -477,7 +533,10 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         catch { /* Some browsers deny clipboard access or require HTTPS. */ }
       }
       if (!isCurrent()) return;
-      if (written) setNotice('接続先の文字を、この端末のクリップボードにコピーしました');
+      if (written) {
+        clipboardSync.current?.copied(value);
+        setNotice('接続先の文字を、この端末のクリップボードにコピーしました');
+      }
       else {
         // 手でコピーできるよう、取ってきた文字を入力欄に出して選ぶ（自分で頼んだコピーなので下書きを置き換える）
         setText(value); setReceived(null);
@@ -612,6 +671,7 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         <button className="btn" disabled={!connected || viewOnly || !text} onClick={typeText}>キーとして送る</button>
         <button className="btn" disabled={!connected || viewOnly || !text} onClick={() => void paste(true)}>送って Enter</button>
         <button className="btn" disabled={copying} onClick={() => void copy()}>{copying ? 'コピー中…' : '接続先からコピー'}</button>
+        {connected && !viewOnly && clipboardPrompt && <button className="btn" onClick={() => void allowClipboardSync()}>クリップボードの自動送信を許可</button>}
       </div>
     </div>}
     <div className="desktop-stage">

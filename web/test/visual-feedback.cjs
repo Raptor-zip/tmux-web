@@ -95,7 +95,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
  if(process.env.COMPRESSED_STATIC){const {installWeb}=await import('../../server/src/web.js');installWeb(app,process.env.STATIC_ROOT||join(root,'web/dist'));}
  else{app.use(express.static((process.env.STATIC_ROOT||join(root,'web/dist'))));app.get('*',(_q,r)=>r.sendFile(join(process.env.STATIC_ROOT||join(root,'web/dist'),'index.html')));}
  const server=http.createServer(app);await new Promise(r=>server.listen(testPort,'127.0.0.1',r));
- if(process.env.SCREEN_TAB_CHECK){const {WebSocketServer}=require('ws');const wss=new WebSocketServer({noServer:true});
+ const mockDesktop = process.env.SCREEN_TAB_CHECK || process.env.REMOTE_CLIPBOARD_SYNC_CHECK;
+ if(mockDesktop){const {WebSocketServer}=require('ws');const wss=new WebSocketServer({noServer:true});
   server.on('upgrade',(req,socket,head)=>{if(!/\/desktop(\?|$)/.test(req.url)){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>fakeRfb(ws));});}
  const browser=process.env.BROWSER_ENGINE==='webkit'
   ? await webkit.launch({headless:true,...(process.env.WEBKIT_BIN?{executablePath:process.env.WEBKIT_BIN}:{})})
@@ -129,7 +130,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    else if(path==='/api/state'){body=state(remote?'spark':'local');if(remote&&scene.offline){body={error:'デバイスに接続できません'};status=502;}}
    else if(path==='/api/approvals')body={pending:null,secure:true};
    else if(path==='/api/projects/recent')body={projects:[]};
-   else if(path==='/api/desktop/status'&&process.env.SCREEN_TAB_CHECK)body={available:true,width:320,height:200,viewers:screenTransports.filter(t=>!t.closed).length};
+   else if(path==='/api/desktop/status'&&mockDesktop)body={available:true,width:320,height:200,viewers:screenTransports.filter(t=>!t.closed).length};
    else if(path==='/api/desktop/ping')body={ok:true};
    else if(path==='/api/desktop/status')body={available:false,error:'デスクトップに接続できません。デバイスのログイン状態を確認してください。',viewers:0};
    else if(path==='/api/files')body={root:'/home/demo/projects/atlas-web',path:'',items:[{name:'src',path:'src',directory:true,size:0,modified:now,mime:''},{name:'responsive-workspace-review.md',path:'responsive-workspace-review.md',directory:false,size:2840,modified:now,mime:'text/plain'},{name:'package.json',path:'package.json',directory:false,size:960,modified:now,mime:'text/plain'}]};
@@ -139,7 +140,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
    else if(path==='/api/capture'&&process.env.TAB_MENU_CHECK)body={target:url.searchParams.get('target'),text:'$ npm test\ntab-menu-capture: 76 passed\n$ '};
    await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
   });
-  await page.routeWebSocket(url=>/\/ws\//.test(url.pathname)&&!(process.env.SCREEN_TAB_CHECK&&/\/desktop$/.test(url.pathname)),ws=>{
+  await page.routeWebSocket(url=>/\/ws\//.test(url.pathname)&&!(mockDesktop&&/\/desktop$/.test(url.pathname)),ws=>{
    const url=new URL(ws.url()),remote=url.pathname.includes('/devices/spark/');
    if(url.pathname.endsWith('/workspace')){
     const send=extra=>ws.send(JSON.stringify({...workspaceState,...extra}));send();
@@ -165,6 +166,19 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
   const checkSwitcher=process.env.SWITCHER_CHECK && scene.action==='switcher' ? await require('./switcher.cjs')(page,{state,scene}) : null;
   await page.goto(`http://127.0.0.1:${testPort}/`);await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
+  if(mockDesktop) await page.evaluate(() => {
+   // The Playwright wrapper inherits the WebSocket methods that noVNC checks on the prototype.
+   const proto = WebSocket.prototype;
+   for(const name of ['binaryType', 'protocol', 'readyState', 'close', 'send', 'onerror', 'onmessage', 'onopen']) {
+    if(Object.hasOwn(proto, name)) continue;
+    for(let p = Object.getPrototypeOf(proto); p; p = Object.getPrototypeOf(p)) {
+     const descriptor = Object.getOwnPropertyDescriptor(p, name);
+     if(descriptor) { Object.defineProperty(proto, name, descriptor); break; }
+    }
+   }
+  });
+  const checkClipboardSync = process.env.REMOTE_CLIPBOARD_SYNC_CHECK && scene.name==='remote-viewer-desktop'
+   ? await require('./remote-clipboard-sync.cjs')(page, screenTransports) : null;
   if(checkStateConnection) await checkStateConnection();
   if(process.env.TERMINAL_WAKE_CHECK) await require('./terminal-wake.cjs')(page,{terminalTransports,terminalInputs});
   if(process.env.SCREEN_TAB_CHECK && scene.name==='terminal-target') await require('./screen-tab.cjs')(page,{screenTransports,terminalTransports,workspace:()=>workspaceState,out});
@@ -279,6 +293,10 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   if(phase==='after' && process.env.REMOTE_CLIPBOARD_CHECK && scene.name==='remote-viewer-desktop') {
    await require('./remote-clipboard.cjs')(page,{out,screenshot:!process.env.NO_SCREENSHOTS});
    assert.deepEqual(errors,[], 'remote clipboard runtime errors');
+  }
+  if(phase==='after' && checkClipboardSync) {
+   await checkClipboardSync();
+   assert.deepEqual(errors,[], 'clipboard sync runtime errors');
   }
   if(phase==='after' && process.env.DESKTOP_CONTEXT_CHECK && scene.name.startsWith('remote-entry-')) {
    await require('./desktop-context.cjs')(page,{scene,out,screenshots:!process.env.NO_SCREENSHOTS});

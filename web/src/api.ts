@@ -207,11 +207,11 @@ export async function measureDesktopRoundTrip(signal?: AbortSignal, device = 'lo
   return Math.round(performance.now() - start);
 }
 
-export function readDesktopClipboard(device = 'local') {
-  return request<{ text: string }>(devicePath(device, '/api/desktop/clipboard'));
+export function readDesktopClipboard(device = 'local', signal?: AbortSignal) {
+  return request<{ text: string }>(devicePath(device, '/api/desktop/clipboard'), { signal, cache: 'no-store' });
 }
-export function writeDesktopClipboard(text: string, device = 'local') {
-  return request<{ ok: true }>(devicePath(device, '/api/desktop/clipboard'), { method: 'POST', body: JSON.stringify({ text }) });
+export function writeDesktopClipboard(text: string, device = 'local', signal?: AbortSignal) {
+  return request<{ ok: true }>(devicePath(device, '/api/desktop/clipboard'), { method: 'POST', body: JSON.stringify({ text }), signal });
 }
 
 export interface RecentProject { agent?: 'claude' | 'codex'; name: string; cwd: string; sessionId: string; modified: number; summary: string }

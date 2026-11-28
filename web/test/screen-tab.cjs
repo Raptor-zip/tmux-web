@@ -23,19 +23,6 @@ module.exports = async function checkScreenTab(page, { screenTransports, termina
     await page.getByRole('menuitem', { name: 'リモートデスクトップ', exact: true }).click();
   };
 
-  // Playwright の WebSocket 差し替えは send などを親クラスに持つため、noVNC の
-  // 「自分の prototype に必要な口があるか」の検査に落ちる。テストの中だけ口を写しておく
-  await page.evaluate(() => {
-    const proto = WebSocket.prototype;
-    for (const name of ['binaryType', 'protocol', 'readyState', 'close', 'send', 'onerror', 'onmessage', 'onopen']) {
-      if (Object.getOwnPropertyNames(proto).includes(name)) continue;
-      for (let p = Object.getPrototypeOf(proto); p; p = Object.getPrototypeOf(p)) {
-        const descriptor = Object.getOwnPropertyDescriptor(p, name);
-        if (descriptor) { Object.defineProperty(proto, name, descriptor); break; }
-      }
-    }
-  });
-
   // 「＋▾ → リモートデスクトップ ▸」から開く。端末のタブと同じ列にモニタのアイコン付きで並ぶ
   await plusMenu();
   await page.getByRole('menuitem', { name: /^ThinkPad/ }).click();
