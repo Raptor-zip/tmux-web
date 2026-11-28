@@ -165,6 +165,8 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   });
   const checkStateConnection=process.env.STATE_CONNECTION_CHECK && scene.name==='desktop-four' ? await require('./state-connection.cjs')(page,{state,terminals:()=>activeTerminals}) : null;
   const checkSwitcher=process.env.SWITCHER_CHECK && scene.action==='switcher' ? await require('./switcher.cjs')(page,{state,scene}) : null;
+  const checkTerminalClipboard = process.env.TERMINAL_CLIPBOARD_CHECK && scene.name==='terminal-target'
+   ? await require('./terminal-clipboard.cjs')(page) : null;
   await page.goto(`http://127.0.0.1:${testPort}/`);await page.locator('.xterm').first().waitFor();await page.waitForTimeout(2800);
   if(mockDesktop) await page.evaluate(() => {
    // The Playwright wrapper inherits the WebSocket methods that noVNC checks on the prototype.
@@ -180,6 +182,7 @@ const output=(label)=>'\x1b[2J\x1b[H\x1b[?25l\x1b[1;36m'+label+'\x1b[0m\r\n\x1b[
   const checkClipboardSync = process.env.REMOTE_CLIPBOARD_SYNC_CHECK && scene.name==='remote-viewer-desktop'
    ? await require('./remote-clipboard-sync.cjs')(page, screenTransports) : null;
   if(checkStateConnection) await checkStateConnection();
+  if(checkTerminalClipboard) await checkTerminalClipboard();
   if(process.env.TERMINAL_WAKE_CHECK) await require('./terminal-wake.cjs')(page,{terminalTransports,terminalInputs});
   if(process.env.SCREEN_TAB_CHECK && scene.name==='terminal-target') await require('./screen-tab.cjs')(page,{screenTransports,terminalTransports,workspace:()=>workspaceState,out});
   if(process.env.TERMINAL_WEBGL_CHECK) await require('./terminal-webgl.cjs')(page,{terminalTransports,terminalInputs});

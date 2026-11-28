@@ -2,7 +2,7 @@ import type { Device } from '../devices';
 import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchDesktopStatus, measureDesktopRoundTrip, readDesktopClipboard, wsUrl } from '../api';
-import { startDesktopClipboardSync } from '../desktop-clipboard-sync';
+import { clipboardPageFocused, startDesktopClipboardSync } from '../desktop-clipboard-sync';
 import type { ScreenContext } from '../commands';
 import { screenMenuItems } from '../menus';
 import { DESKTOP_SETTINGS_KEY, desktopPresets, loadDesktopSettings, type DesktopSettings } from '../desktop-settings';
@@ -49,6 +49,7 @@ interface Props {
   deviceId: string;
   devices?: Device[];
   deviceName?: string;
+  clipboardEnabled: boolean;
   /** タイルで前面に出ているか（隠れて SCREEN_IDLE_MS 経つと切断する） */
   visible?: boolean;
   /** タイル見出しの差し込み口。状態・見るだけ・⌨・Esc をここに出す（無ければ画面の上に出す） */
@@ -138,7 +139,7 @@ function ScreenQuality({ settings, onApply, onClose }: { settings: DesktopSettin
 }
 
 export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScreen(
-  { variant, deviceId, devices = [], deviceName, visible = true, headSlot, floatHead = false, onClose, onOpenAsTab, onStatus },
+  { variant, deviceId, devices = [], deviceName, visible = true, clipboardEnabled, headSlot, floatHead = false, onClose, onOpenAsTab, onStatus },
   ref,
 ) {
   const modal = variant === 'modal';
@@ -174,7 +175,6 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   const notice = noticeState.text;
   const setNotice = (value: string) => setNoticeState(prev => ({ text: value, n: prev.n + 1 }));
   const [copying, setCopying] = useState(false);
-  const [clipboardPrompt, setClipboardPrompt] = useState(false);
   const copyLock = useRef(false);
   const clipboardText = useRef<HTMLTextAreaElement>(null);
   const textToggle = useRef<HTMLButtonElement>(null);
@@ -188,6 +188,9 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
   const viewport = useRef<HTMLDivElement>(null);
   const client = useRef<LosslessRFB | null>(null);
   const clipboardSync = useRef<ReturnType<typeof startDesktopClipboardSync> | null>(null);
+  const clipboardEnabledRef = useRef(clipboardEnabled);
+  clipboardEnabledRef.current = clipboardEnabled;
+  useLayoutEffect(() => { if (!clipboardEnabled) clipboardSync.current?.reset(); }, [clipboardEnabled]);
   const fitRef = useRef(fit); fitRef.current = fit;
   const viewRef = useRef(viewOnly); viewRef.current = viewOnly;
   const closeRef = useRef(onClose); closeRef.current = onClose;
@@ -327,40 +330,34 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     const area = viewport.current!;
     let pasteShortcut: ReturnType<typeof setTimeout> | undefined;
     const isClipboardActive = () => !controller.signal.aborted && selectedIdRef.current === selectedDeviceId &&
-      ownsScreen(selectedDeviceId, lease) && wantsRef.current && document.visibilityState === 'visible' &&
-      document.hasFocus() && !!panel.current?.contains(document.activeElement);
-    const canSend = () => isClipboardActive() && !viewRef.current && area.contains(document.activeElement);
+      clipboardEnabledRef.current && ownsScreen(selectedDeviceId, lease) && wantsRef.current && clipboardPageFocused();
+    const canSend = () => isClipboardActive() && !viewRef.current;
+    const canPaste = () => canSend() && area.contains(document.activeElement);
     const stopClipboard = () => {
       clearTimeout(pasteShortcut);
       area.removeEventListener('keydown', onPasteShortcut, true);
       area.removeEventListener('paste', onBrowserPaste);
-      area.removeEventListener('focusout', onClipboardFocusOut);
       clipboardSync.current?.stop();
       clipboardSync.current = null;
-      setClipboardPrompt(false);
     };
     const onPasteShortcut = (event: KeyboardEvent) => {
-      if (!canSend() || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'v') return;
+      if (!canPaste() || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'v') return;
       // noVNC would consume the shortcut before the browser dispatches a paste event.
       event.stopPropagation();
       clearTimeout(pasteShortcut);
       pasteShortcut = setTimeout(() => {
-        if (canSend() && rfb) sendPaste(rfb);
+        if (canPaste() && rfb) sendPaste(rfb);
       }, 150);
     };
     const onBrowserPaste = async (event: ClipboardEvent) => {
-      if (!canSend() || !rfb || !clipboardSync.current) return;
+      if (!canPaste() || !rfb || !clipboardSync.current) return;
       clearTimeout(pasteShortcut);
       event.preventDefault();
       const value = event.clipboardData?.getData('text/plain');
       try {
-        if (value && !await clipboardSync.current.send(value, true)) return;
-        if (canSend()) sendPaste(rfb);
-      } catch (err) { if (canSend()) setNotice((err as Error).message); }
-    };
-    const onClipboardFocusOut = (event: FocusEvent) => {
-      // A different screen in this page may update the browser clipboard.
-      if (event.relatedTarget instanceof Node && !area.contains(event.relatedTarget)) clipboardSync.current?.resetLocal();
+        if (value && !await clipboardSync.current.send(value, true, canPaste)) return;
+        if (canPaste()) sendPaste(rfb);
+      } catch (err) { if (canPaste()) setNotice((err as Error).message); }
     };
     viewport.current?.replaceChildren();
     setConnected(false); setError(''); setSourceSize(''); setMessage('画面を確認中…');
@@ -393,10 +390,9 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
           if (!textRef.current) { setText(value); setReceived(null); }
           else if (value !== textRef.current) setReceived(value);
           setNotice('接続先のクリップボードを受信しました');
-        }, setClipboardPrompt);
+        });
         area.addEventListener('keydown', onPasteShortcut, true);
         area.addEventListener('paste', onBrowserPaste);
-        area.addEventListener('focusout', onClipboardFocusOut);
       });
       rfb.addEventListener('disconnect', () => {
         if (controller.signal.aborted) return;
@@ -486,11 +482,6 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
     if (submit) rfb.sendKey(RETURN, 'Enter');
     setNotice(submit ? '接続先へ貼り付けて Enter を送りました' : '接続先へ貼り付けました');
     rfb.focus();
-  };
-  const allowClipboardSync = async () => {
-    const sync = clipboardSync.current;
-    try { await sync?.requestPermission(); }
-    catch { if (sync === clipboardSync.current) setNotice('ブラウザでクリップボードの読み取りが許可されていません'); }
   };
   /** 貼り付けが効かないアプリ向けに、1 文字ずつキーとして打つ */
   const typeText = () => {
@@ -671,7 +662,6 @@ export const RemoteScreen = forwardRef<ScreenHandle, Props>(function RemoteScree
         <button className="btn" disabled={!connected || viewOnly || !text} onClick={typeText}>キーとして送る</button>
         <button className="btn" disabled={!connected || viewOnly || !text} onClick={() => void paste(true)}>送って Enter</button>
         <button className="btn" disabled={copying} onClick={() => void copy()}>{copying ? 'コピー中…' : '接続先からコピー'}</button>
-        {connected && !viewOnly && clipboardPrompt && <button className="btn" onClick={() => void allowClipboardSync()}>クリップボードの自動送信を許可</button>}
       </div>
     </div>}
     <div className="desktop-stage">

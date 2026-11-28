@@ -14,6 +14,7 @@ export function isTerminalHandle(handle: TabHandle | null | undefined): handle i
 interface Props {
   leaf: LeafNode;
   visible: boolean;
+  clipboardEnabled: boolean;
   pendingRemap: boolean;
   deviceName?: string;
   devices: Device[];
@@ -80,6 +81,7 @@ export function TerminalTabs(props: Props) {
       deviceId={tab.deviceId}
       devices={props.devices}
       visible={visible && selected?.id === tab.id}
+      clipboardEnabled={props.clipboardEnabled && selected?.id === tab.id}
       headSlot={selected?.id === tab.id ? props.headSlot : null}
       floatHead={props.floatHead}
       onStatus={reportStatus(tab.id)}

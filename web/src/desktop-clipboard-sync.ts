@@ -1,26 +1,25 @@
 import { readDesktopClipboard, writeDesktopClipboard } from './api';
 
 const POLL_MS = 750;
+let requestedReadPermission = false;
+
+export function clipboardPageFocused() {
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
 
 export function startDesktopClipboardSync(
   device: string,
   active: () => boolean,
-  canSend: () => boolean,
-  receive: (text: string) => void,
-  permissionChanged: (prompt: boolean) => void,
+  canSend: () => boolean = active,
+  receive?: (text: string) => void,
 ) {
   const controller = new AbortController();
   const { signal } = controller;
   const clipboard = navigator.clipboard;
   let readPermission: PermissionStatus | undefined;
-  const reportPermission = () => permissionChanged(readPermission?.state === 'prompt');
-  // Querying permission does not prompt. Explicit paste still works without it.
   void navigator.permissions?.query({ name: 'clipboard-read' as PermissionName })
     .then(status => {
-      if (signal.aborted) return;
       readPermission = status;
-      status.addEventListener('change', reportPermission, { signal });
-      reportPermission();
     }).catch(() => {});
 
   let remote: string | undefined;
@@ -29,6 +28,18 @@ export function startDesktopClipboardSync(
   let writes = Promise.resolve();
   let pending = 0;
   let timer: ReturnType<typeof setTimeout>;
+
+  function requestPermission(event: Event) {
+    if (!event.isTrusted || requestedReadPermission || readPermission?.state !== 'prompt' ||
+        !clipboard?.readText || !active() || !canSend()) return;
+    requestedReadPermission = true;
+    // Ask through the browser on the first interaction with the active device.
+    void clipboard.readText().then(text => {
+      if (!signal.aborted && active() && canSend()) { revision++; local = text; }
+    }).catch(() => {});
+  }
+  window.addEventListener('click', requestPermission, { capture: true, signal });
+  window.addEventListener('keydown', requestPermission, { capture: true, signal });
 
   function send(text: string, fromBrowser: boolean, stillCurrent = canSend) {
     revision++;
@@ -71,7 +82,7 @@ export function startDesktopClipboardSync(
           await clipboard.writeText(remoteText);
           if (current()) local = remoteText;
         } catch {
-          if (current()) receive(remoteText);
+          if (current()) receive?.(remoteText);
         }
       }
     } catch {
@@ -84,12 +95,8 @@ export function startDesktopClipboardSync(
   void poll();
   return {
     send,
-    async requestPermission() {
-      const text = await clipboard.readText();
-      if (!signal.aborted) { revision++; local = text; }
-    },
     copied(text: string) { revision++; local = text; remote = text; },
-    resetLocal() { revision++; local = undefined; },
+    reset() { revision++; local = undefined; remote = undefined; },
     stop() { controller.abort(); clearTimeout(timer); },
   };
 }

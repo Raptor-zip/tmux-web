@@ -8,6 +8,7 @@ import { ApprovalDialog, useApproval } from './components/Approval';
 import { isApprovalId } from './approval-notifications';
 import { RemoteControl } from './components/RemoteControl';
 import { ScreenViewer } from './components/ScreenViewer';
+import { clipboardPageFocused, startDesktopClipboardSync } from './desktop-clipboard-sync';
 import { Icon } from './components/Icon';
 import { createPortal } from 'react-dom';
 import { AgentActivity } from './components/AgentActivity';
@@ -550,6 +551,13 @@ export default function App({ workspaceId, workspaceName, active, connection, de
   const focusedTerminalTab = focusedTab && isTerminalTab(focusedTab) ? focusedTab : null;
   const focusedScreen = !!focusedTab && isScreenTab(focusedTab);
   const focusedDevice = focusedTab ? tabDevice(focusedTab) : null;
+  const terminalClipboardDevice = active && devicesReady && !unauthorized && !screenOpen && focusedTerminalTab
+    ? focusedDevice : null;
+  useLayoutEffect(() => {
+    if (!terminalClipboardDevice || !navigator.clipboard) return;
+    const sync = startDesktopClipboardSync(terminalClipboardDevice, clipboardPageFocused);
+    return sync.stop;
+  }, [terminalClipboardDevice]);
   useEffect(() => {
     if (focusedDevice) setSelectedDevice(focusedDevice);
   }, [focusedTab?.id, focusedDevice]);
@@ -1783,6 +1791,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
             {layout ? (
               <SplitView
                 active={active}
+                clipboardEnabled={active && !screenOpen}
                 stripHidden={!!phone}
                 tree={layout}
                 statuses={termStatuses}
@@ -1898,7 +1907,7 @@ export default function App({ workspaceId, workspaceName, active, connection, de
       {approvalOpen && approval.pending && <ApprovalDialog key={approval.pending.id} pending={approval.pending} secure={approval.secure}
         onClose={() => setApprovalId(null)} onDone={() => { setApprovalId(id => id === approvalId ? null : id); approval.refresh(); }} />}
       {remotePane && <RemoteControl pane={remotePane} onClose={() => setRemotePane(null)} />}
-      {screenOpen && <ScreenViewer devices={devices} deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)}
+      {screenOpen && <ScreenViewer clipboardEnabled={active} devices={devices} deviceId={screenOpen} deviceName={devices.find(d => d.id === screenOpen)?.name} onClose={() => setScreenOpen(null)}
         onOpenAsTab={(deviceId) => { setScreenOpen(null); openScreen(deviceId, focusedIdRef.current); }} />}
       {palette && (
         <Switcher

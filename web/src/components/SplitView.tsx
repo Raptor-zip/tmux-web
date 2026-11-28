@@ -56,6 +56,7 @@ export type DropTarget =
 
 interface Props {
   active: boolean;
+  clipboardEnabled: boolean;
   /** スマホの見出し 1 行のとき（タイル見出しは隠れる）。画面タブの状態は画面の右上に重ねる */
   stripHidden?: boolean;
   devices: Device[];
@@ -127,6 +128,7 @@ function previewRect(rect: Rect, side: Exclude<DropSide, 'center'>): Rect {
 
 export function SplitView({
   active,
+  clipboardEnabled,
   stripHidden = false,
   devices,
   tree,
@@ -377,6 +379,7 @@ export function SplitView({
             <div className="tile-body">
               <TerminalTabs
                 leaf={leaf}
+                clipboardEnabled={clipboardEnabled && focused}
                 visible={active && size.width > 0 && size.height > 0 && (!single || focused)}
                 pendingRemap={pendingRemap}
                 deviceName={device?.name}
